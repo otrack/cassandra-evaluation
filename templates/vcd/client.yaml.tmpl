@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client-%ID%
+  labels:
+    app: "client"
+    id: "%ID%"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: client
+    image: "%IMAGE%"
+    imagePullPolicy: "%PULL_IMAGES%"
+    resources:
+      requests:
+        cpu: 6
+    env:
+    - name: CLUSTER
+      value: "%CLUSTER%"
+    - name: TIMESTAMP
+      value: "undefined"
+    - name: PROTOCOL
+      value: "%PROTOCOL%"
+    - name: NODE_NUMBER
+      value: "%NSITE%"
+    - name: MAX_FAULTS
+      value: "%MAX_FAULTS%"
+    - name: REDIS
+      value: "%MASTER%"
+    - name: ZK
+      value: "%MASTER%"
+    - name: CLIENTS
+      value: "%NCLIENT%"
+    - name: CONFLICTS
+      value: "%CONFLICT%"
+    - name: BATCH_WAIT
+      value: "%BATCH_WAIT%"
+    - name: OPT_DELIVERY
+      value: "%OPT_DELIVERY%"
+    - name: SLEEP
+      value: "42"
+    - name: OPS
+      value: "%NCMD%"
+    - name: OP
+      value: "PUT"
+    - name: PAYLOAD_SIZE
+      value: "100"
