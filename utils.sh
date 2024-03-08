@@ -14,7 +14,7 @@ config() {
 
 log() {
     local message=$@
-    echo "["$(date +%H:%M:%S)"] ${message}"
+    >&2 echo "["$(date +%H:%M:%S)"] ${message}"
 }
 
 # only displayed if verbose in config file

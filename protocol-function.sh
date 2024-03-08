@@ -205,7 +205,7 @@ cassandra_wait_server() {
     info "checking if server ${id} at ${cluster} is ready..."
     while [ ${up} != 1 ]; do
         sleep 1
-        up=$(kubectl --context=${cluster} -lapp=server,id=${id} logs 2>&1 |
+        up=$(kubectl --context=${cluster} -lapp=server,id=${id} logs --tail 10000 2>&1 |
             grep "Starting listening for CQL clients" | 
             wc -l)
     done
@@ -228,13 +228,11 @@ cassandra_execute_cql() {
         exit -1
     fi
     file=${1}
-    ip=$(k8s_get_service_ip ${CLUSTER[0]} cassandra)
-    if [[ "${ip}" == "" ]];
-    then 
-	k8s_service_create ${TMPLDIR}/cassandra/service.yml ${CLUSTER[0]}
-	ip=$(k8s_get_service_ip ${CLUSTER[0]} cassandra)
-    fi
-    ${CASSDIR}/bin/cqlsh -f ${file} ${ip}
+    log "executing cql (${file})"
+    kubectl --context="${CLUSTERS[0]}" create -f ${TMPLDIR}/cassandra/service.yml >&/dev/null
+    ip=$(k8s_get_service_ip ${CLUSTERS[0]} "cassandra-ext")
+    cqlsh -f ${file} ${ip} >&/dev/null
+    log "done"
 }
 
 

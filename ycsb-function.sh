@@ -80,7 +80,7 @@ ycsb_start() {
     local database=""
 
     if [ "${consistency}" == "ONE" ]; then
-	operationcount=$(echo 100 ${operationcount} | awk '{ print $1 * $2 }')
+	operationcount=$(echo ${threads} ${operationcount} | awk '{ print $1 * $2 }')
     fi
 
     log "ycsb_start: protocol=${protocol}, type=${typ}, workload=${workload}, thread=${thread}, operationcount=${operationcount}, recordcount=${recordcount}, extra=${extra}"
@@ -134,11 +134,15 @@ ycsb_start() {
             >${ycsb_template}
 
     if [ ${typ} == "load" ]; then
-	# if [[ "${protocol}" == *"cassandra"* ]];
-	# then
-	#     ${CASSDIR}/cqlsh ${YCSBDIR}/cassandra.cql 
-	# fi		    
-        k8s_create ${ycsb_template} ${MASTER_CLUSTER} 42
+	if [[ "${protocol}" == "cassandra" ]]; then
+	    cassandra_execute_cql ${YCSBDIR}/cassandra.cql
+	    sleep 3 # FIXME need to wait that the last epoch stabilizes everywhere
+            k8s_create ${ycsb_template} ${CLUSTERS[0]} 42
+	    k8s_wait_completion ${ycsb_template} ${CLUSTERS[0]} 42
+	    k8s_delete ${ycsb_template} ${CLUSTERS[0]} 42
+	else
+	    log "NYI"
+	fi
     else
         if [[ "${protocol}" == *"vcd"* || "${protocol}" == "epaxos" ]]; then
             for id in $(ids); do
@@ -168,20 +172,20 @@ ycsb_wait() {
     if [ ${typ} == "load" ]; then
 	if [[ "${protocol}" == *"vcd"* || "${protocol}" == "epaxos" ]];
 	then
-            k8s_wait_completion ${ycsb_template} ${MASTER_CLUSTER} 42    
+            k8s_wait_completion ${ycsb_template} ${CLUSTERS[0]} 42
 	fi
 
         pod_name=$(k8s_pod_name "${ycsb_template}-42")
-        file="${LOGDIR}/.ycsb-load-${protocol}-${MASTER_CLUSTER}-${workload}.log"
-        kubectl --context=${MASTER_CLUSTER} logs ${pod_name} >${file}
+        file="${LOGDIR}/.ycsb-load-${protocol}-${CLUSTERS[0]}-${workload}.log"
+        kubectl --context=${CLUSTERS[0]} logs ${pod_name} >${file}
 
         op="INSERT"
         ratio=$(compute_ratio ${workload} ${op})
         latency=$(compute_latency ${file} ${op})
-        output="${LOGDIR}/ycsb-load-${protocol}-${MASTER_CLUSTER}-${workload}-${op}.txt"
+        output="${LOGDIR}/ycsb-load-${protocol}-${CLUSTERS[0]}-${workload}-${op}.txt"
         echo ${thread} ${ratio} ${latency} >${output}
 
-        k8s_delete ${ycsb_template} ${MASTER_CLUSTER} 42
+        k8s_delete ${ycsb_template} ${CLUSTERS[0]} 42
     else
         if [[ "${protocol}" == *"vcd"* || "${protocol}" == "epaxos" ]]; then
             for id in $(ids); do
@@ -247,11 +251,6 @@ fetch_ycsb_log() {
         fi
     done
     info "ycsb logs from ${pod_name} at ${cluster} fetched!"
-}
-
-create_cassandra_database () {
-    server=$(k8s_get_service server)
-    cqlsh -f ${YCSBDIR}/cassandra.cql ${server}
 }
 
 create_smap_template() {

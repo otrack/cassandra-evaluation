@@ -7,7 +7,7 @@ source ${DIR}/ycsb-function.sh
 batch_wait=0
 opt_delivery=true
 
-threads_loading=128
+threads_loading=10
 threads=10
 operations_per_thread=1000
 operationcount=$(echo ${threads} ${operations_per_thread} | awk '{ print $1 * $2 }')
@@ -77,31 +77,11 @@ do_run() {
         ;;
     esac
 
-    # protocol_start ${protocol} ${max_faults} ${threads} ${conflicts} ${batch_wait} ${opt_delivery} ${consistency}
-    # exit 0
-    
-    # if [[ "${protocol}" == *"vcd"* || "${protocol}" == "epaxos" ]]; then
-    #     vcd_create_smaps ${batch_wait}
-    # fi
-
-    # if [[ "${protocol}" == "cassandra" ]]; then FIXME
-    # 	cassandra_execute_cql ${YCSBDIR}/cassandra.cql
-    # 	exit 0
-    # fi
-        
-    # ycsb_start ${protocol} "load" ${workload} ${threads_loading} ${operationcount} ${recordcount} # workload E is very slow when pre-loading, need to reduce the slice size
-
-    ycsb_start ${protocol} "run" ${workload} ${threads} ${operationcount} ${recordcount} ${consistency}
-    ycsb_wait ${protocol_name} "run" ${workload} ${threads} ${batch_wait} ${consistency}
-
-    # # pull logs
-    # tunnel_pull_logs
-
-    # if [[ "${protocol}" == *"vcd"* || "${protocol}" == "epaxos" ]]; then
-    #     vcd_delete_smaps
-    # fi
-
-    # protocol_stop ${protocol}
+    # protocol_start ${protocol} ${max_faults} ${threads} ${conflicts} ${batch_wait} ${opt_delivery} ${consistency}        
+    # ycsb_start ${protocol} "load" ${workload} ${threads_loading} ${operationcount} ${recordcount}
+    # ycsb_start ${protocol} "run" ${workload} ${threads} ${operationcount} ${recordcount} ${consistency}
+    # ycsb_wait ${protocol_name} "run" ${workload} ${threads} ${batch_wait} ${consistency}
+    protocol_stop ${protocol}
 }
 
 do_run_all_workloads() {
