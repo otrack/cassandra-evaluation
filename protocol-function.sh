@@ -41,7 +41,6 @@ protocol_start() {
     local conflict=$4
     local batch_wait=$5
     local opt_delivery=$6
-    local pure_optimization=$7
 
     case ${protocol} in
     paxos | mencius)

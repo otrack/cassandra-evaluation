@@ -1,5 +1,3 @@
-DROP TABLE ycsb.usertable;
-DROP KEYSPACE ycsb;
 CREATE KEYSPACE ycsb
        WITH REPLICATION = {'class' : 'NetworkTopologyStrategy', 'replication_factor': 1 };
 USE ycsb;

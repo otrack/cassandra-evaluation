@@ -15,23 +15,16 @@ operationcount=1000
 recordcount=1000
 
 protocols=("accord")
+# protocols=("cassandra")
 max_faults=(0) 
 workloads=("a" "b" "c" "d" "e")
-# pure_opts=(ONE QUORUM SERIAL)
-pure_opts=(SERIAL)
+# workloads=("c")
+# consistencies=(ONE QUORUM SERIAL)
+consistencies=(SERIAL)
 
 sclusters=3
 init_clusters ${sclusters} false
 init_log_dir "ycsb/${sclusters}"
-
-# fed-bootstrap with NODE_NUMBER=3
-# I had to transform all eclocks into vclocks in actors:
-# - stability
-# - chao
-# - recovery
-# Also removed all vcd:store's from vcd and epaxos coordinators
-# Without this, these actors' mailboxes were growing unbounded
-# This is Docker image: noeclock2 (28 Oct 2019)
 
 cleanup() {
     ${DIR}/pods-stop.sh client
@@ -43,15 +36,14 @@ cleanup() {
 trap "cleanup; exit 255" SIGINT SIGTERM
 
 do_run() {
-    if [ $# -ne 4 ]; then
-        echo "usage: do_run protocol max_faults consistency workload"
+    if [ $# -ne 3 ]; then
+        echo "usage: do_run protocol max_faults consistency"
         exit -1
     fi
 
     local protocol=$1
     local max_faults=$2
     local consistency=$3
-    local workload=$4
     
     local protocol_name=${protocol}
     if [[ "${protocol}" == "accord" ]]; then
@@ -77,59 +69,50 @@ do_run() {
         ;;
     esac
 
-    # protocol_start ${protocol} ${max_faults} ${threads} ${conflicts} ${batch_wait} ${opt_delivery} ${consistency}        
-    # ycsb_start ${protocol} "load" ${workload} ${threads_loading} ${operationcount} ${recordcount}
-    # ycsb_start ${protocol} "run" ${workload} ${threads} ${operationcount} ${recordcount} ${consistency}
-    # ycsb_wait ${protocol_name} "run" ${workload} ${threads} ${batch_wait} ${consistency}
+    protocol_start ${protocol} ${max_faults} ${threads} ${conflicts} ${batch_wait} ${opt_delivery} ${consistency}        
+    ycsb_start ${protocol} "load" "a" ${threads_loading} ${operationcount} ${recordcount} "ALL"
+
+    for workload in ${workloads[@]};
+    do
+	ycsb_start ${protocol} "run" ${workload} ${threads} ${operationcount} ${recordcount} ${consistency}
+	ycsb_wait ${protocol_name} "run" ${workload} ${threads} ${batch_wait} ${consistency}
+	sleep 5
+    done
+    
     protocol_stop ${protocol}
 }
 
-do_run_all_workloads() {
-    if [ $# -ne 3 ]; then
-        echo "usage: do_run_all_workloads protocol max_faults consistency"
-        exit -1
-    fi
-
-    local protocol=$1
-    local max_faults=$2
-    local consistency=$3
-    
-    for workload in ${workloads[@]}; do
-        do_run ${protocol} ${max_faults} ${consistency} ${workload}
-    done
-}
-
-do_run_all_consistency_opts() {
+do_run_all_consistencies() {
     if [ $# -ne 2 ]; then
-        echo "usage: do_run_all_consistency_opts protocol max_faults"
+        echo "usage: do_run_all_consistencies protocol max_faults"
         exit -1
     fi
 
     local protocol=$1
     local max_faults=$2
 
-    for consistency in ${pure_opts[@]}; do
-        do_run_all_workloads ${protocol} ${max_faults} ${consistency}
+    for consistency in ${consistencies[@]}; do
+        do_run ${protocol} ${max_faults} ${consistency}
     done
 }
 
 for protocol in ${protocols[@]}; do
     case ${protocol} in
 	accord)
-        do_run_all_consistency_opts ${protocol} 0
+        do_run_all_consistencies ${protocol} 0
         ;;	    	    
     cassandra)
-        do_run_all_consistency_opts ${protocol} 0
+        do_run_all_consistencies ${protocol} 0
         ;;	    
     paxos)
         do_run_all_workloads ${protocol} 0 false
         ;;
     epaxos)
-        do_run_all_consistency_opts ${protocol} 0
+        do_run_all_consistencies ${protocol} 0
         ;;
     vcd)
         for f in ${max_faults[@]}; do
-            do_run_all_consistency_opts ${protocol} ${f}
+            do_run_all_consistencies ${protocol} ${f}
         done
         ;;
     esac

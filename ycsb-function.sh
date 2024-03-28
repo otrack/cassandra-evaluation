@@ -135,8 +135,9 @@ ycsb_start() {
 
     if [ ${typ} == "load" ]; then
 	if [[ "${protocol}" == "cassandra" ]]; then
+	    sleep 5 # FIXME need to wait that the last epoch stabilizes everywhere
 	    cassandra_execute_cql ${YCSBDIR}/cassandra.cql
-	    sleep 3 # FIXME need to wait that the last epoch stabilizes everywhere
+	    sleep 5
             k8s_create ${ycsb_template} ${CLUSTERS[0]} 42
 	    k8s_wait_completion ${ycsb_template} ${CLUSTERS[0]} 42
 	    k8s_delete ${ycsb_template} ${CLUSTERS[0]} 42

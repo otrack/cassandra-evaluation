@@ -33,7 +33,7 @@ source ${DIR}/clusters.sh
 
 init_clusters() {
     if [ $# -ne 2 ] || [ "$1" -eq "0" ]; then
-        log "usage: init_clusters number_clusters (>0) is_local (boolean)"
+        log "usage: init_clusters number_clusters is_local ($@)"
         exit -1
     fi
 
@@ -50,7 +50,7 @@ init_clusters() {
 
 init_log_dir() {
     if [ $# -ne 1 ] ; then
-        log "usage: init_log_dir suffix"
+        log "usage: init_log_dir suffix ($@)"
         exit -1
     fi
 
@@ -75,7 +75,7 @@ unique_clusters() {
 
 ip() {
     if [ $# -ne 2 ]; then
-        log "usage: ip cluster pod_selector"
+        log "usage: ip cluster pod_selector ($@)"
         exit -1
     fi
     local cluster=$1
@@ -90,7 +90,7 @@ ip() {
 
 find_master() {
     if [ $# -ne 1 ]; then
-        log "usage: find_master master_cluster"
+        log "usage: find_master master_cluster ($@)"
         exit -1
     fi
 
@@ -109,7 +109,7 @@ find_master() {
 
 k8s_fed_create() {
     if [ $# -ne 1 ]; then
-        log "usage: k8s_fed_create template.yaml"
+        log "usage: k8s_fed_create template.yaml ($@)"
         exit -1
     fi
     local template=$1
@@ -127,7 +127,7 @@ k8s_fed_create() {
 
 k8s_fed_wait_completion() {
     if [ $# -ne 1 ]; then
-        log "usage: k8s_fed_wait_completion template.yaml"
+        log "usage: k8s_fed_wait_completion template.yaml ($@)"
         exit -1
     fi
     local template=$1
@@ -145,7 +145,7 @@ k8s_fed_wait_completion() {
 
 k8s_fed_delete() {
     if [ $# -ne 1 ]; then
-        log "usage: k8s_fed_delete template.yaml"
+        log "usage: k8s_fed_delete template.yaml ($@)"
         exit -1
     fi
     local template=$1
@@ -165,7 +165,7 @@ k8s_fed_delete() {
 
 k8s_create() {
     if [ $# -ne 2 ] && [ $# -ne 3 ]; then
-        log "usage: k8s_create template.yaml cluster [id]"
+        log "usage: k8s_create template.yaml cluster [id] ($@)"
         exit -1
     fi
     local template=$1
@@ -203,7 +203,7 @@ k8s_create() {
 
 k8s_wait_completion() {
     if [ $# -ne 2 ] && [ $# -ne 3 ]; then
-        log "usage: k8s_completion template.yaml cluster [id]"
+        log "usage: k8s_completion template.yaml cluster [id] ($@)"
         exit -1
     fi
     local template=$1
@@ -224,7 +224,7 @@ k8s_wait_completion() {
 
 k8s_delete() {
     if [ $# -ne 2 ] && [ $# -ne 3 ]; then
-        log "usage: k8s_delete template.yaml cluster [id]"
+        log "usage: k8s_delete template.yaml cluster [id] ($@)"
         exit -1
     fi
     local template=$1
@@ -247,7 +247,7 @@ k8s_delete() {
 
 k8s_pod_name() {
     if [ $# -ne 1 ]; then
-        log "usage: k8s_pod_name file"
+        log "usage: k8s_pod_name file ($@)"
         exit -1
     fi
     local file=$1
@@ -256,7 +256,7 @@ k8s_pod_name() {
 
 k8s_pod_status() {
     if [ $# -ne 2 ]; then
-        log "usage: k8s_pod_status cluster pod_name"
+        log "usage: k8s_pod_status cluster pod_name ($@)"
         exit -1
     fi
     local cluster=$1
@@ -267,7 +267,7 @@ k8s_pod_status() {
 
 k8s_get_pod_ip(){
     if [ $# -ne 2 ]; then
-        log "usage: k8s_get_pod_ip cluster name"
+        log "usage: k8s_get_pod_ip cluster name ($@)"
         exit -1
     fi
     local cluster=$1
