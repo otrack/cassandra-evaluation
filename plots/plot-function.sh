@@ -195,8 +195,8 @@ ycsb_lat() {
 
         if [ "${input}" == "" ] || [ ! -s "${input}" ]; then
             echo >&2 "missing file: ${LOGDIR}/ycsb-${batch_wait}-${consistency}-${protocol}-${cluster}-${threads}-${workload}-${op}"
-        else
-            cat ${input} | awk -v w=${workload} -v o=${op} -v c=${cluster} -v p=${protocol} -v n=${consistency}  '{print w","o","p","n","c","$2}'
+        else 
+           cat ${input} | awk -v w=${workload} -v o=${op} -v c=${cluster} -v p=${protocol} -v n=${consistency}  '{print w","o","p","n","c","$2/1000}'
         fi
     done
 }
@@ -213,17 +213,11 @@ threads=10
 
 echo "workload,operation,protocol,consistency,cluster,latency"
 for workload in ${workloads[@]}; do
-
-    for op in ${operations[@]}; do
-    
+    for op in ${operations[@]}; do    
 	for protocol in ${protocols[@]}; do
-
 	    for consistency in ${consistencies[@]}; do
-
-		ycsb_lat 3 ${protocol} 0 ${consistency} ${threads} ${workload} ${op}
-		
-	    done
-	    
+		ycsb_lat 3 ${protocol} 0 ${consistency} ${threads} ${workload} ${op}	       
+	    done	    
 	done
     done
 done

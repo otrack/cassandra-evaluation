@@ -20,19 +20,14 @@ operations=("READ" "INSERT" "UPDATE" "SCAN")
 output=${EXP_DIR}/ycsb.dat
 
 rm ${output}
-for workload in ${workloads[@]}; do
-
-    for op in ${operations[@]}; do
-    
-	for protocol in ${protocols[@]}; do
+for protocol in ${protocols[@]}; do
+    for workload in ${workloads[@]}; do
+	for op in ${operations[@]}; do    
             perf=$(ycsb_lat ${protocol} ${batch_wait} ${consistency} ${workload} ${threads})
             line=${protocol}" "${total}
-	done
-	
-    done
-	
+	done	
+    done	
     echo ${line} >>${output}
-
 done
 
 cat ${output}
