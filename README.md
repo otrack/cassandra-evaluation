@@ -69,8 +69,8 @@ This means that
 
 #### Running the benchmark
 
-Edit `ACCORD_CASSANDRA_IMAGE` in `start_cassandra_data_centers.py` to indicate the name of your Docker image (e.g., `user/cassandra-accord:latest`)
-Launch the benchmark with `run_all.sh`.
+Edit `ACCORD_CASSANDRA_IMAGE` in `start_cassandra_data_centers.py` to indicate the name of your Docker image (e.g., `user/cassandra-accord:latest`).
+Then, launch the benchmark with `run_all.sh`.
 
 ### Going further
 
