@@ -1,5 +1,5 @@
 This repository contains a set of scripts to benchmark Apache Cassandra 5 with the Yahoo! Cloud Serving Benchmark (YCSB).
-Below, we provide a how-to guide for the impatient.
+Below, we provide a brief how-to guide.
 
 ## Overview 
 
