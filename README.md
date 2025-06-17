@@ -58,7 +58,7 @@ Typically, a call to `run_benchmark.sh`is of the following form:
 	./run_benchmarks.sh SERIAL 1 accord 3 3 c 1 100
 
 This means that 
-- `SERIAL` we benchmark Accord 
+- `SERIAL` benchmarks Accord 
 - `1` a single client thread is used
 - `accord` the Accord image is used (more on this below)
 - `3` the system starts with 3 Cassandra nodes
