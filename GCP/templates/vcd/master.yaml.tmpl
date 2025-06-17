@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: master
+  labels:
+    app: master
+spec:
+  restartPolicy: Never
+  containers:
+  - name: zookeeper
+    image: zookeeper
+    imagePullPolicy: IfNotPresent
+  - name: redis
+    image: redis
+    imagePullPolicy: IfNotPresent

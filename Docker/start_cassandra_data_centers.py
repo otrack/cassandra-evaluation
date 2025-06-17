@@ -4,7 +4,7 @@ import time
 import math
 import re
 
-NORMAL_CASSANDRA_IMAGE = "cassandra:latest"
+NORMAL_CASSANDRA_IMAGE = "0track/cassandra:latest"
 ACCORD_CASSANDRA_IMAGE = "0track/cassandra-accord:latest"
 LATENCY_SIMULATION = True
 
@@ -34,7 +34,8 @@ def haversine(lat1, lon1, lat2, lon2):
     return distance
 
 def estimate_latency(distance_km):
-    # Speed of light in fiber optics is approximately 200,000 km/s
+    # return 50
+    Speed of light in fiber optics is approximately 200,000 km/s
     speed_of_light_km_per_ms = 200  # km/ms
     latency_ms = distance_km / speed_of_light_km_per_ms
     return math.floor(latency_ms)
@@ -75,9 +76,9 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
                 name=container_name,
                 network=network_name,
                 auto_remove=True,
-                mem_limit="4g",
+                mem_limit="5g",
                 environment={
-                    "CASSANDRA_SEEDS": "cassandra-node1" if i > 1 else "",
+                   "CASSANDRA_SEEDS": "cassandra-node1" if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
                     "CASSANDRA_DC": dc_name,
                     "CASSANDRA_RACK": "RAC1"
@@ -120,8 +121,9 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
                     dst_container.exec_run(exec_command)
                     exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:1"
                     dst_container.exec_run(exec_command)
-                    
-                    print(f"Added {latency:.2f}ms latency between '{src}' and '{dst}' (distance: {distance:.2f} km).")
+
+                    latency = 2 * latency
+                    print(f"Added {latency:.2f}ms ping latency between '{src}' and '{dst}' (distance: {distance:.2f} km).")
                 except docker.errors.APIError as e:
                     print(f"Error adding latency between '{src}' and '{dst}': {e}")
 

@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: server-%ID%
+  labels:
+    app: "server"
+    id: "%ID%"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: server
+    image: "%VCD_IMAGE%"
+    imagePullPolicy: "%PULL_IMAGES%"
+    resources:
+      requests:
+        cpu: 7
+    env:
+    - name: ID
+      value: "%ID%"
+    - name: CLUSTER
+      value: "%CLUSTER%"
+    - name: TIMESTAMP
+      value: "undefined"
+    - name: PROTOCOL
+      value: "%PROTOCOL%"
+    - name: NODE_NUMBER
+      value: "%NSITE%"
+    - name: MAX_FAULTS
+      value: "%MAX_FAULTS%"
+    - name: IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    - name: HPORT
+      value: "5000"
+    - name: POOL_SIZE
+      value: "1024"
+    - name: STABILITY
+      value: "true"
+    - name: STABILITY_INTERVAL
+      value: "1000"
+    - name: REDIS
+      value: "%MASTER%"
+    - name: ZK
+      value: "%MASTER%"
+    - name: CLIENTS
+      value: "%NCLIENT%"
+    - name: CONFLICTS
+      value: "%CONFLICT%"
+    - name: BATCH_WAIT
+      value: "%BATCH_WAIT%"
+    - name: OPT_DELIVERY
+      value: "%OPT_DELIVERY%"
+    - name: SLEEP
+      value: "42"
+    - name: PURE_OPTIMIZATION
+      value: "%PURE_OPTIMIZATION%"

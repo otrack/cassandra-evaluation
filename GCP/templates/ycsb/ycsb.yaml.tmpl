@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client
+  labels:
+    app: "client"
+    id: "%ID%"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: client
+    image: "%IMAGE%"
+    imagePullPolicy: "%PULL_IMAGES%"
+    resources:
+      requests:
+        cpu: .1
+    env:
+      - name : TYPE
+        value: "%TYPE%"
+      - name : DB
+        value: "%DATABASE%"
+      - name : WORKLOAD
+        value: "%WORKLOAD%"
+      - name : THREADS
+        value: "%THREADS%"
+      - name : RECORDCOUNT
+        value: "%RECORDCOUNT%"
+      - name : OPERATIONCOUNT
+        value: "%OPERATIONCOUNT%"
+      - name : HOST
+        value: "%HOST%"
+      - name : PORT
+        value: "%PORT%"
+      - name : SMAPPORT
+        value: "8980"
+      - name : LEADERLESS
+        value: "%LEADERLESS%"
+      - name : VERBOSE
+        value: "%VERBOSE%"
+      - name : FAST
+        value: "false"
+      - name : EXTRA
+        value: "%EXTRA%"

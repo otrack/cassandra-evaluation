@@ -49,8 +49,8 @@ run_ycsb() {
     consistency_level=$7
     output_file=$8
     threads=$9
-
-    cmd="$ycsb_dir/bin/ycsb.sh $action cassandra-cql -p hosts=$hosts -P $ycsb_dir/$workload -p cassandra.writeconsistencylevel=$consistency_level -p cassandra.readconsistencylevel=$consistency_level -p recordcount=$recordcount -p operationcount=$operationcount -threads $nthreads"
+    debug="JAVA_OPTS=\"-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\"" # comment out to have debug on
+    cmd="${debug} $ycsb_dir/bin/ycsb.sh $action cassandra-cql -p hosts=$hosts -P $ycsb_dir/$workload -p cassandra.writeconsistencylevel=$consistency_level -p cassandra.readconsistencylevel=$consistency_level -p recordcount=$recordcount -p operationcount=$operationcount -threads $nthreads -s"
 
     eval "$cmd" | tee "$output_file"
     if [ $? -eq 0 ]; then
@@ -73,8 +73,8 @@ stop_container_after_delay() {
 }
 
 # Main script
-if [ $# -ne 4 ]; then
-    echo "Usage: $0 <consistency_level> <number_of_threads> <output_file> <workload>"
+if [ $# -ne 6 ]; then
+    echo "Usage: $0 <consistency_level> <number_of_threads> <output_file> <workload> <record_count> <operation_count>"
     echo "Example: $0 ONE 1 results.txt a"
     exit 1
 fi
@@ -83,10 +83,10 @@ consistency_level=$1
 nthreads=$2
 output_file=$3
 workload="workloads/workload$4"
-ycsb_dir="../YCSB"
+recordcount=$5
+operationcount=$6
+ycsb_dir="/home/otrack/Implementation/YCSB"
 network_name="cassandra-network"
-recordcount=1000
-operationcount=1000
 
 node_count=$(get_node_count)
 # hosts=$(get_all_cassandra_ips "$network_name" "$node_count")

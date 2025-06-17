@@ -2,7 +2,7 @@
 
 # Function to print usage
 print_usage() {
-    echo "Usage: $0 <consistency_level> <number_of_threads> <serial_protocol> <min_loop> <max_loop> <workload>"
+    echo "Usage: $0 <consistency_level> <number_of_threads> <serial_protocol> <min_loop> <max_loop> <workload> <record_count> <operation_count>"
     echo "Example: $0 ONE 10 accord 3 10 a"
     exit 1
 }
@@ -37,12 +37,14 @@ load_ycsb_workload() {
     local transaction_mode=$3
     local filename=$4
     local workload=$5
+    local record_count=$6
+    local operation_count=$7
     local max_retries=3
     local retry_count=0
     local success=false
 
     while [ $retry_count -lt $max_retries ]; do
-        ./load_ycsb.sh "$consistency_level" "$nthreads" "$transaction_mode" "$filename" "$workload"
+        ./load_ycsb.sh "$consistency_level" "$nthreads" "$transaction_mode" "$filename" "$workload" "$record_count" "$operation_count"
         if [ $? -eq 0 ]; then
             success=true
             break
@@ -64,8 +66,10 @@ run_ycsb_benchmark() {
     local nthreads=$2
     local filename=$3
     local workload=$4
+    local record_count=$5
+    local operation_count=$6
     echo "Running YCSB benchmark..."
-    ./run_ycsb.sh "$consistency_level" "$nthreads" "$filename" "$workload"
+    ./run_ycsb.sh "$consistency_level" "$nthreads" "$filename" "$workload" "$record_count" "$operation_count"
     if [ $? -ne 0 ]; then
         echo "YCSB benchmark failed."
         exit 1
@@ -83,7 +87,7 @@ cleanup_cluster() {
 }
 
 # Main script
-if [ $# -ne 6 ]; then
+if [ $# -ne 8 ]; then
     print_usage
 fi
 
@@ -93,6 +97,8 @@ mode=$3
 min_loop=$4
 max_loop=$5
 workload=$6
+record_count=$7
+operation_count=$8
 
 # Determine transaction mode
 if [ "$mode" == "accord" ] && [ "$consistency_level" == "SERIAL" ]; then 
@@ -110,14 +116,14 @@ for ((i=min_loop; i<=max_loop; i++)); do
     fi
 
     echo "Loading YCSB workload for $i node(s)..."
-    load_ycsb_workload "$consistency_level" "$nthreads" "$transaction_mode" "$(echo "${consistency_level,,}")_${i}_nodes_${mode}_load_$workload.txt" "$workload"
+    load_ycsb_workload "$consistency_level" "$nthreads" "$transaction_mode" "$(echo "${consistency_level,,}")_${i}_nodes_${mode}_load_$workload.txt" "$workload" "$record_count" "$operation_count"
 
     echo "Running YCSB benchmark for $i node(s)..."
-    run_ycsb_benchmark "$consistency_level" "$nthreads" "$(echo "${consistency_level,,}")_${i}_nodes_${mode}_run_$workload.txt" "$workload"
+    run_ycsb_benchmark "$consistency_level" "$nthreads" "$(echo "${consistency_level,,}")_${i}_nodes_${mode}_run_$workload.txt" "$workload" "$record_count" "$operation_count"
 
-    echo "Completed iteration for $i node(s)."
+    # echo "Completed iteration for $i node(s)."
 done
 
 # cleanup_cluster
 
-echo "All iterations completed."
+# echo "All iterations completed."

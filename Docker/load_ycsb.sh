@@ -28,9 +28,9 @@ get_node_count() {
     i=1
     while true; do
         container_name="cassandra-node$i"
-        ip=$(get_container_ip "$container_name")
+        ip=$(get_container_ip "$container_name") 2>/dev/null
         if [ -z "$ip" ]; then
-            break
+            break # FIXME
         fi
         i=$((i + 1))
     done
@@ -105,19 +105,15 @@ run_ycsb() {
     output_file=$8
     threads=$9
     retries=1
-
-    for ((i=0; i<retries; i++)); do
-        cmd="$ycsb_dir/bin/ycsb.sh $action cassandra-cql -p hosts=$hosts -P $ycsb_dir/$workload -p cassandra.writeconsistencylevel=$consistency_level -p cassandra.readconsistencylevel=$consistency_level -p recordcount=$recordcount -p operationcount=$operationcount -threads $threads"
-        eval "$cmd" | tee "$output_file"
-        if [ $? -eq 0 ]; then
-            echo "YCSB $action completed successfully."
-            return 0
-        else
-            echo "Error running YCSB $action. Retrying..."
-            sleep 5
-        fi
-    done
-
+    
+    echo "Starting YCSB"
+    debug="JAVA_OPTS=\"-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\"" # comment out to have debug on
+    cmd="${debug} $ycsb_dir/bin/ycsb.sh $action cassandra-cql -p hosts=$hosts -P $ycsb_dir/$workload -p cassandra.writeconsistencylevel=$consistency_level -p cassandra.readconsistencylevel=$consistency_level -p recordcount=$recordcount -p operationcount=$operationcount -threads $threads -s"
+    eval "$cmd" | tee "$output_file"
+    if [ $? -eq 0 ]; then
+        echo "YCSB $action completed successfully."
+        return 0
+    fi
     echo "YCSB $action failed after $retries attempts."
     exit 1
 }
@@ -135,8 +131,8 @@ stop_container_after_delay() {
 }
 
 # Main script
-if [ $# -ne 5 ]; then
-    echo "Usage: $0 <consistency_level> <number_of_threads> <transaction_mode> <output_file> <workload>"
+if [ $# -ne 7 ]; then
+    echo "Usage: $0 <consistency_level> <number_of_threads> <transaction_mode> <output_file> <workload> <record_count> <operation_count>"
     echo "Example: $0 ONE 1 full results.txt a"
     exit 1
 fi
@@ -146,10 +142,10 @@ nthreads=$2
 transaction_mode=$3
 output_file=$4
 workload="workloads/workload$5"
-ycsb_dir="/home/otrack/Implementation/YCSB"
-recordcount=1000
-operationcount=1000
+record_count=$6
+operation_count=$7
 
+ycsb_dir="/home/otrack/Implementation/YCSB"
 node_count=$(get_node_count)
 # hosts=$(get_all_cassandra_ips "$node_count")
 hosts=$(get_container_ip "cassandra-node$node_count")
@@ -165,7 +161,7 @@ create_keyspace 3600 "$node_count"
 create_usertable 3600 "$transaction_mode" "$node_count"
 
 # Load data and write performance results to the output file
-run_ycsb "load" "$ycsb_dir" "$workload" "$hosts" "$recordcount" "$operationcount" "$consistency_level" "$output_file" "$nthreads"
+run_ycsb "load" "$ycsb_dir" "$workload" "$hosts" "$record_count" "$operation_count" "$consistency_level" "$output_file" "$nthreads"
 
 # Simulate a node crash after 2 minutes
 # stop_container_after_delay "cassandra-node2" 90
