@@ -40,6 +40,7 @@ docker build -t user/cassandra-accord:latest .
 There are two possible environments
 - `Docker` uses containers 
 - `GCP` uses Google Cloud Platform
+
 Below, we explain how to use the docker one.
 
 ### Docker
