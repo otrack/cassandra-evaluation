@@ -121,9 +121,9 @@ for ((i=min_loop; i<=max_loop; i++)); do
     echo "Running YCSB benchmark for $i node(s)..."
     run_ycsb_benchmark "$consistency_level" "$nthreads" "$(echo "${consistency_level,,}")_${i}_nodes_${mode}_run_$workload.txt" "$workload" "$record_count" "$operation_count"
 
-    # echo "Completed iteration for $i node(s)."
+    echo "Completed iteration for $i node(s)."
 done
 
-# cleanup_cluster
+cleanup_cluster
 
-# echo "All iterations completed."
+echo "All iterations completed."
