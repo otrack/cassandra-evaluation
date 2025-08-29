@@ -28,7 +28,7 @@ get_node_count() {
     i=1
     while true; do
         container_name="cassandra-node$i"
-        ip=$(get_container_ip "$container_name" 2 >/dev/null)
+        ip=$(get_container_ip "$container_name" 2>/dev/null)
         if [ -z "$ip" ]; then
             break # FIXME
         fi
