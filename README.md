@@ -10,13 +10,18 @@ The benchmark suite uses the following forks:
 
 ## Building artifacts
 
+The instructions that follow work for Java 11.
+Higher versions of Java might require adjustements.
+
 ### YCSB
 
 ``` bash
 git clone https://github.com/otrack/YCSB
 cd YCSB
 git checkout cassandra5
+mvn -pl core dependency:copy-dependencies
 mvn -pl site.ycsb:cassandra-binding -am clean install
+
 ```
 
 ### Cassandra
@@ -24,7 +29,7 @@ mvn -pl site.ycsb:cassandra-binding -am clean install
 git clone https://github.com/otrack/cassandra/
 cd cassandra
 git checkout testing6
-ant artifacts -Dant.gen-doc.skip=true
+ant artifacts -Dant.gen-doc.skip=true -Dcheckstyle.skip=true
 ```
 
 ### Cassandra Docker Library
@@ -69,7 +74,9 @@ This means that
 
 #### Running the benchmark
 
-Edit `ACCORD_CASSANDRA_IMAGE` in `start_cassandra_data_centers.py` to indicate the name of your Docker image (e.g., `user/cassandra-accord:latest`).
+First of all install the Docker python library on your machine if needed (e.g., `sudo apt install python3-docker`).
+The files `load_ycsb.sh` and `run_ycsb.sh` makes use of the YCSB directory. Please adjust the variable `ycsb_dir` appropriately.  
+Edit `ACCORD_CASSANDRA_IMAGE` in `start_cassandra_data_centers.py` to indicate the name of your Docker image (e.g., `user/cassandra-accord:latest`).  
 Then, launch the benchmark with `run_all.sh`.
 
 ### Going further
