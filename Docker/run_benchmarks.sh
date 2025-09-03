@@ -116,10 +116,10 @@ for ((i=min_loop; i<=max_loop; i++)); do
     fi
 
     echo "Loading YCSB workload for $i node(s)..."
-    load_ycsb_workload "$consistency_level" "$nthreads" "$transaction_mode" "$(echo "${consistency_level,,}")_${i}_nodes_${mode}_load_$workload.txt" "$workload" "$record_count" "$operation_count"
+    load_ycsb_workload "$consistency_level" "$nthreads" "$transaction_mode" "$(echo "${consistency_level}")_${i}_nodes_${mode}_load_$workload.txt" "$workload" "$record_count" "$operation_count"
 
     echo "Running YCSB benchmark for $i node(s)..."
-    run_ycsb_benchmark "$consistency_level" "$nthreads" "$(echo "${consistency_level,,}")_${i}_nodes_${mode}_run_$workload.txt" "$workload" "$record_count" "$operation_count"
+    run_ycsb_benchmark "$consistency_level" "$nthreads" "$(echo "${consistency_level}")_${i}_nodes_${mode}_run_$workload.txt" "$workload" "$record_count" "$operation_count"
 
     # echo "Completed iteration for $i node(s)."
 done

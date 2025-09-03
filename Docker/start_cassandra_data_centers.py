@@ -4,9 +4,10 @@ import time
 import math
 import re
 
-NORMAL_CASSANDRA_IMAGE = "0track/cassandra:latest"
-ACCORD_CASSANDRA_IMAGE = "0track/cassandra-accord:latest"
+NORMAL_CASSANDRA_IMAGE = "cassandra:latest"
+ACCORD_CASSANDRA_IMAGE = "user/cassandra-accord:latest"
 LATENCY_SIMULATION = True
+#LATENCY_SIMULATION = False
 
 locations_lat_long = [
     (21.027763, 105.834160), # Hanoi
@@ -76,14 +77,15 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
                 name=container_name,
                 network=network_name,
                 auto_remove=True,
-                mem_limit="5g",
+                mem_limit="6g",
                 environment={
                    "CASSANDRA_SEEDS": "cassandra-node1" if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
                     "CASSANDRA_DC": dc_name,
                     "CASSANDRA_RACK": "RAC1"
                 },
-                cap_add=["NET_ADMIN"],  # Add NET_ADMIN capability
+                cap_add=["NET_ADMIN"],  # Add NET_ADMIN capability,
+                ports={ '9042/tcp': ('127.0.0.1', (3333+i)), '5005/tcp': ('127.0.0.1', (5005+i)) },
                 detach=True
             )
             containers.append(container)
@@ -95,6 +97,19 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
             print(f"Error starting container '{container_name}': {e}")
 
     if LATENCY_SIMULATION:
+        for i in range(num_nodes):
+            src = f'cassandra-node{i + 1}'
+            src_container = client.containers.get(src)
+            exec_command = f"tc qdisc del dev eth0 root"
+            print(f"{src} {exec_command}")
+            src_container.exec_run(exec_command)
+            exec_command = f"tc qdisc add dev eth0 root handle 1: htb default 30"
+            print(f"{src} {exec_command}")
+            src_container.exec_run(exec_command)
+            exec_command = f"tc class add dev eth0 parent 1: classid 1:1 htb rate 1000mbit"
+            print(f"{src} {exec_command}")
+            src_container.exec_run(exec_command)
+
         # Add specific latencies based on geographical distances
         for i in range(num_nodes):
             for j in range(i + 1, num_nodes):
@@ -111,16 +126,27 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
                     src_ip = src_container.attrs['NetworkSettings']['Networks'][network_name]['IPAddress']
                     
                     # Add latency from src to dst
-                    exec_command = f"tc qdisc add dev eth0 root netem delay {latency}ms"
+                    exec_command = f"tc class add dev eth0 parent 1:1 classid 1:{j+1}0 htb rate 100mbit"
+                    print(f"{src} {exec_command}")
                     src_container.exec_run(exec_command)
-                    exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:1"
+                    exec_command = f"tc qdisc add dev eth0 parent 1:{j+1}0 handle {j+1}0: netem delay {latency}ms"
+                    print(f"{src} {exec_command}")
+                    src_container.exec_run(exec_command)
+                    exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{j+1}0"
+                    print(f"{src} {exec_command}")
                     src_container.exec_run(exec_command)
                     
                     # Add latency from dst to src
-                    exec_command = f"tc qdisc add dev eth0 root netem delay {latency}ms"
+                    exec_command = f"tc class add dev eth0 parent 1:1 classid 1:{i+1}0 htb rate 100mbit"
+                    print(f"{dst} {exec_command}")
                     dst_container.exec_run(exec_command)
-                    exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:1"
+                    exec_command = f"tc qdisc add dev eth0 parent 1:{i+1}0 handle {i+1}0: netem delay {latency}ms"
+                    print(f"{dst} {exec_command}")
                     dst_container.exec_run(exec_command)
+                    exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{i+1}0"
+                    print(f"{dst} {exec_command}")
+                    dst_container.exec_run(exec_command)
+
 
                     latency = 2 * latency
                     print(f"Added {latency:.2f}ms ping latency between '{src}' and '{dst}' (distance: {distance:.2f} km).")

@@ -44,13 +44,14 @@ run_ycsb() {
     ycsb_dir=$2
     workload=$3
     hosts=$4
-    recordcount=$5
-    operationcount=$6
-    consistency_level=$7
-    output_file=$8
-    threads=$9
-    debug="JAVA_OPTS=\"-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\"" # comment out to have debug on
-    cmd="${debug} $ycsb_dir/bin/ycsb.sh $action cassandra-cql -p hosts=$hosts -P $ycsb_dir/$workload -p cassandra.writeconsistencylevel=$consistency_level -p cassandra.readconsistencylevel=$consistency_level -p recordcount=$recordcount -p operationcount=$operationcount -threads $nthreads -s"
+    port=$5
+    recordcount=$6
+    operationcount=$7
+    consistency_level=$8
+    output_file=$9
+    threads=${10}
+    #debug="JAVA_OPTS=\"-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\"" # comment out to have debug on
+    cmd="${debug} $ycsb_dir/bin/ycsb.sh $action cassandra-cql -p hosts=$hosts -p port=$port -P $ycsb_dir/$workload -p cassandra.writeconsistencylevel=$consistency_level -p cassandra.readconsistencylevel=$consistency_level -p recordcount=$recordcount -p operationcount=$operationcount -threads $nthreads -s"
 
     eval "$cmd" | tee "$output_file"
     if [ $? -eq 0 ]; then
@@ -85,19 +86,21 @@ output_file=$3
 workload="workloads/workload$4"
 recordcount=$5
 operationcount=$6
-ycsb_dir="/home/otrack/Implementation/YCSB"
+ycsb_dir="/Users/belliottsmith/code/cassandra-evaluation/YCSB/"
 network_name="cassandra-network"
 
 node_count=$(get_node_count)
 # hosts=$(get_all_cassandra_ips "$network_name" "$node_count")
-hosts=$(get_container_ip "cassandra-node$node_count")
+#hosts=$(get_container_ip "cassandra-node$node_count")
+hosts=127.0.0.1
+port=3336
 if [ -z "$hosts" ]; then
     echo "Failed to retrieve the IP addresses."
     exit 1
 fi
 
 # Load data and write performance results to the output file
-run_ycsb "run" "$ycsb_dir" "$workload" "$hosts" "$recordcount" "$operationcount" "$consistency_level" "$output_file" "$nthreads"
+run_ycsb "run" "$ycsb_dir" "$workload" "$hosts" "$port" "$recordcount" "$operationcount" "$consistency_level" "$output_file" "$nthreads"
 
 # Simulate a node crash after 2 minutes
 # stop_container_after_delay "cassandra-node2" 90
