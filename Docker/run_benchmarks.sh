@@ -1,8 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+DIR=$(dirname "${BASH_SOURCE[0]}")
+
+source ${DIR}/utils.sh
 
 # Function to print usage
 print_usage() {
-    echo "Usage: $0 <consistency_level> <number_of_threads> <serial_protocol> <min_loop> <max_loop> <workload> <record_count> <operation_count>"
+    echo "Usage: $0 <protocol> <number_of_threads> <min_loop> <max_loop> <workload> <record_count> <operation_count> <do_create_and_load>"
     echo "Example: $0 ONE 10 accord 3 10 a"
     exit 1
 }
@@ -10,11 +14,10 @@ print_usage() {
 # Function to start Cassandra cluster
 start_cluster() {
     local node_count=$1
-    local mode=$2
-    echo "Starting Cassandra cluster with $node_count node(s)..."
-    python3 start_cassandra_data_centers.py "$node_count" "$mode"
+    local protocol=$2
+    python3 start_cassandra_data_centers.py "$node_count" "$protocol"
     if [ $? -ne 0 ]; then
-        echo "Failed to start Cassandra cluster with $node_count node(s)."
+        error "Failed to start Cassandra cluster with $node_count node(s)."
         exit 1
     fi
 }
@@ -22,13 +25,23 @@ start_cluster() {
 # Function to add a new Cassandra node
 add_node() {
     local mode=$1
-    echo "Adding new Cassandra node to the cluster..."
     python3 create_new_node.py "$mode"
     if [ $? -ne 0 ]; then
-        echo "Failed to add new Cassandra node."
+        error "Failed to add new Cassandra node."
         exit 1
     fi
 }
+
+# Function to emulate geo-distributed latency
+emulate_latency() {
+    local node_count=$1
+    python3 emulate_latency.py "$node_count"
+    if [ $? -ne 0 ]; then
+        error "Failed to add latency emulation."
+        exit 1
+    fi
+}
+
 
 # Function to load YCSB workload
 load_ycsb_workload() {
@@ -49,13 +62,13 @@ load_ycsb_workload() {
             success=true
             break
         else
-            echo "load_ycsb.sh failed. Retrying... ($((retry_count+1))/$max_retries)"
+            error "load_ycsb.sh failed. Retrying... ($((retry_count+1))/$max_retries)"
             retry_count=$((retry_count+1))
         fi
     done
 
     if [ "$success" = false ]; then
-        echo "load_ycsb.sh failed after $max_retries attempts. Exiting."
+        error "load_ycsb.sh failed after $max_retries attempts. Exiting."
         exit 1
     fi
 }
@@ -68,20 +81,9 @@ run_ycsb_benchmark() {
     local workload=$4
     local record_count=$5
     local operation_count=$6
-    echo "Running YCSB benchmark..."
     ./run_ycsb.sh "$consistency_level" "$nthreads" "$filename" "$workload" "$record_count" "$operation_count"
     if [ $? -ne 0 ]; then
-        echo "YCSB benchmark failed."
-        exit 1
-    fi
-}
-
-# Function to clean up Cassandra cluster
-cleanup_cluster() {
-    echo "Cleaning up Cassandra cluster..."
-    python3 cleanup_cassandra_cluster.py
-    if [ $? -ne 0 ]; then
-        echo "Failed to clean up Cassandra cluster."
+        error "YCSB benchmark failed."
         exit 1
     fi
 }
@@ -91,39 +93,39 @@ if [ $# -ne 8 ]; then
     print_usage
 fi
 
-consistency_level=$1
+protocol=$1
 nthreads=$2
-mode=$3
-min_loop=$4
-max_loop=$5
-workload=$6
-record_count=$7
-operation_count=$8
+min_loop=$3
+max_loop=$4
+workload=$5
+record_count=$6
+operation_count=$7
+do_create_and_load=$8
 
-# Determine transaction mode
-if [ "$mode" == "accord" ] && [ "$consistency_level" == "SERIAL" ]; then 
-    transaction_mode="full"
-else
-    transaction_mode="bruh"
+# Create cluster and load YCSB if needed
+if [ $do_create_and_load == "1" ];
+then
+    log "Starting Cassandra cluster with ${min_loop} node(s)..."
+    start_cluster "${min_loop}" "$protocol"
+
+    log "Loading YCSB for ${min_loop} node(s)..."
+    load_ycsb_workload "$protocol" "$nthreads" "${LOGDIR}/$(echo "${protocol}")_${min_loop}_load_$workload.dat" "$workload" "$record_count" "$operation_count"
+
+    log "Emulating latency for ${min_loop} node(s)..."
+    emulate_latency "${min_loop}"    
 fi
 
 # Loop from min_loop to max_loop
 for ((i=min_loop; i<=max_loop; i++)); do
-    if [ $i -eq $min_loop ]; then
-        start_cluster "$i" "$mode"
-    else
-        add_node "$mode"
+
+    log "Running YCSB benchmark ${workload^^} for $i node(s)..."
+    run_ycsb_benchmark "$protocol" "$nthreads" "${LOGDIR}/$(echo "${protocol}")_${i}_run_$workload.dat" "$workload" "$record_count" "$operation_count"
+
+    if [ $i -lt $max_loop ];
+    then
+	log "Adding a new Cassandra node to the cluster..."
+        add_node "$protocol"
     fi
-
-    echo "Loading YCSB workload for $i node(s)..."
-    load_ycsb_workload "$consistency_level" "$nthreads" "$transaction_mode" "$(echo "${consistency_level}")_${i}_nodes_${mode}_load_$workload.txt" "$workload" "$record_count" "$operation_count"
-
-    echo "Running YCSB benchmark for $i node(s)..."
-    run_ycsb_benchmark "$consistency_level" "$nthreads" "$(echo "${consistency_level}")_${i}_nodes_${mode}_run_$workload.txt" "$workload" "$record_count" "$operation_count"
-
-    # echo "Completed iteration for $i node(s)."
+    
 done
 
-# cleanup_cluster
-
-# echo "All iterations completed."
