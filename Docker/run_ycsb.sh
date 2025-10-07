@@ -86,14 +86,15 @@ output_file=$3
 workload="workloads/workload$4"
 recordcount=$5
 operationcount=$6
-ycsb_dir="/Users/belliottsmith/code/cassandra-evaluation/YCSB/"
+ycsb_dir="/home/otrack/Implementation/YCSB"
 network_name="cassandra-network"
 
 node_count=$(get_node_count)
-# hosts=$(get_all_cassandra_ips "$network_name" "$node_count")
+hosts=$(get_all_cassandra_ips "$network_name" "$node_count")
+echo "HOSTS:${hosts}"
 #hosts=$(get_container_ip "cassandra-node$node_count")
-hosts=127.0.0.1
-port=3336
+#hosts=127.0.0.1
+port=9042
 if [ -z "$hosts" ]; then
     echo "Failed to retrieve the IP addresses."
     exit 1

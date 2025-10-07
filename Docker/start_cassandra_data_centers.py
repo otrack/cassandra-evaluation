@@ -4,8 +4,8 @@ import time
 import math
 import re
 
-NORMAL_CASSANDRA_IMAGE = "cassandra:latest"
-ACCORD_CASSANDRA_IMAGE = "user/cassandra-accord:latest"
+NORMAL_CASSANDRA_IMAGE = "0track/cassandra:latest"
+ACCORD_CASSANDRA_IMAGE = "0track/cassandra-accord:latest"
 LATENCY_SIMULATION = True
 #LATENCY_SIMULATION = False
 

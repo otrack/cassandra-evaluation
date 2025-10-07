@@ -146,7 +146,7 @@ workload="workloads/workload$5"
 record_count=$6
 operation_count=$7
 
-ycsb_dir="/Users/belliottsmith/code/cassandra-evaluation/YCSB"
+ycsb_dir="/home/otrack/Implementation/YCSB"
 node_count=$(get_node_count)
 echo $node_count
 # hosts=$(get_all_cassandra_ips "$node_count")
