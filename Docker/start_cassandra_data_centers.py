@@ -3,11 +3,7 @@ import sys
 import time
 import math
 import re
-
-NORMAL_CASSANDRA_IMAGE = "0track/cassandra:latest"
-ACCORD_CASSANDRA_IMAGE = "0track/cassandra-accord:latest"
-LATENCY_SIMULATION = True
-#LATENCY_SIMULATION = False
+from datetime import datetime
 
 locations_lat_long = [
     (21.027763, 105.834160), # Hanoi
@@ -24,6 +20,11 @@ locations_lat_long = [
     (32.776665, -96.796989) # Dallas
 ]
 
+def debug(msg):
+    if config["debug"]:
+        timestamp = datetime.now().strftime("%s:%f")
+        print(f"[{timestamp}] \033[32m{msg}\033[0m")
+        
 def haversine(lat1, lon1, lat2, lon2):
     # Calculate the great-circle distance between two points on the Earth
     R = 6371  # Earth radius in kilometers
@@ -46,10 +47,10 @@ def wait_for_log(container, log_pattern, timeout=300):
     start_time = time.time()
     for log in log_stream:
         if re.search(log_pattern, log.decode('utf-8')):
-            print(f"Log pattern '{log_pattern}' found in container '{container.name}'.")
+            debug(f"Log pattern '{log_pattern}' found in container '{container.name}'.")
             return True
         if time.time() - start_time > timeout:
-            print(f"Timeout waiting for log pattern '{log_pattern}' in container '{container.name}'.")
+            debug(f"Timeout waiting for log pattern '{log_pattern}' in container '{container.name}'.")
             return False
     return False
 
@@ -60,10 +61,10 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
     network_name = 'cassandra-network'
     try:
         client.networks.get(network_name)
-        print(f"Network '{network_name}' already exists.")
+        debug(f"Network '{network_name}' already exists.")
     except docker.errors.NotFound:
         client.networks.create(network_name, driver="bridge")
-        print(f"Created network '{network_name}'.")
+        debug(f"Created network '{network_name}'.")
 
     # Start the Cassandra nodes
     containers = []
@@ -89,25 +90,25 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
                 detach=True
             )
             containers.append(container)
-            print(f"Started container '{container_name}' in data center '{dc_name}'.")
+            debug(f"Started container '{container_name}' in data center '{dc_name}'.")
             if not wait_for_log(container, log_pattern):
-                print(f"Failed to start container '{container_name}' within the timeout period.")
+                debug(f"Failed to start container '{container_name}' within the timeout period.")
                 return
         except docker.errors.APIError as e:
-            print(f"Error starting container '{container_name}': {e}")
+            debug(f"Error starting container '{container_name}': {e}")
 
-    if LATENCY_SIMULATION:
+    if config["latency_simulation"]:
         for i in range(num_nodes):
             src = f'cassandra-node{i + 1}'
             src_container = client.containers.get(src)
             exec_command = f"tc qdisc del dev eth0 root"
-            print(f"{src} {exec_command}")
+            debug(f"{src} {exec_command}")
             src_container.exec_run(exec_command)
             exec_command = f"tc qdisc add dev eth0 root handle 1: htb default 30"
-            print(f"{src} {exec_command}")
+            debug(f"{src} {exec_command}")
             src_container.exec_run(exec_command)
             exec_command = f"tc class add dev eth0 parent 1: classid 1:1 htb rate 1000mbit"
-            print(f"{src} {exec_command}")
+            debug(f"{src} {exec_command}")
             src_container.exec_run(exec_command)
 
         # Add specific latencies based on geographical distances
@@ -127,47 +128,67 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
                     
                     # Add latency from src to dst
                     exec_command = f"tc class add dev eth0 parent 1:1 classid 1:{j+1}0 htb rate 100mbit"
-                    print(f"{src} {exec_command}")
+                    debug(f"{src} {exec_command}")
                     src_container.exec_run(exec_command)
                     exec_command = f"tc qdisc add dev eth0 parent 1:{j+1}0 handle {j+1}0: netem delay {latency}ms"
-                    print(f"{src} {exec_command}")
+                    debug(f"{src} {exec_command}")
                     src_container.exec_run(exec_command)
                     exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{j+1}0"
-                    print(f"{src} {exec_command}")
+                    debug(f"{src} {exec_command}")
                     src_container.exec_run(exec_command)
                     
                     # Add latency from dst to src
                     exec_command = f"tc class add dev eth0 parent 1:1 classid 1:{i+1}0 htb rate 100mbit"
-                    print(f"{dst} {exec_command}")
+                    debug(f"{dst} {exec_command}")
                     dst_container.exec_run(exec_command)
                     exec_command = f"tc qdisc add dev eth0 parent 1:{i+1}0 handle {i+1}0: netem delay {latency}ms"
-                    print(f"{dst} {exec_command}")
+                    debug(f"{dst} {exec_command}")
                     dst_container.exec_run(exec_command)
                     exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{i+1}0"
-                    print(f"{dst} {exec_command}")
+                    debug(f"{dst} {exec_command}")
                     dst_container.exec_run(exec_command)
 
 
                     latency = 2 * latency
-                    print(f"Added {latency:.2f}ms ping latency between '{src}' and '{dst}' (distance: {distance:.2f} km).")
+                    debug(f"Added {latency:.2f}ms ping latency between '{src}' and '{dst}' (distance: {distance:.2f} km).")
                 except docker.errors.APIError as e:
                     print(f"Error adding latency between '{src}' and '{dst}': {e}")
 
-    print(f"Started {num_nodes} Cassandra nodes in the cluster with specified latencies.")
+    debug(f"Started {num_nodes} Cassandra nodes in the cluster with specified latencies.")
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python3 start_cassandra_data_centers.py <num_nodes> <cassandra_image>")
         sys.exit(1)
 
-    try:
+    try:        
         num_nodes = int(sys.argv[1])
-        cassandra_image_version = sys.argv[2]
-        if cassandra_image_version != "normal" and cassandra_image_version != "accord":
-            raise ValueError("Cassandra image must be either 'normal' or 'accord'")
+        protocol = sys.argv[2]
+        if protocol != "accord" and protocol != "paxos" and protocol != "quorum" and protocol != "one":
+            raise ValueError("Protocol must be either 'accord', 'paxos', 'quorum', or 'one' ")
         if num_nodes < 1:
             raise ValueError("Number of nodes must be at least 1.")
-        cassandra_image = NORMAL_CASSANDRA_IMAGE if cassandra_image_version == "normal" else ACCORD_CASSANDRA_IMAGE
+
+        config = {}
+        with open('exp.config', 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue  # Skip empty lines and comments
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    value = value.strip()
+                    # Try to cast to int, then float, else keep as string
+                    try:
+                        value = int(value)
+                    except ValueError:
+                        try:
+                            value = float(value)
+                        except ValueError:
+                            pass
+                    config[key.strip()] = value
+        
+        cassandra_image = config["accord_cassandra_image"] if protocol == "accord" else config["normal_cassandra_image"]
     except ValueError as e:
         print(f"Invalid number of nodes: {e}")
         sys.exit(1)
