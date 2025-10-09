@@ -78,9 +78,10 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
                 name=container_name,
                 network=network_name,
                 auto_remove=True,
-                mem_limit="6g",
+                mem_limit=config["xmx"],
                 environment={
-                   "CASSANDRA_SEEDS": "cassandra-node1" if i > 1 else "",
+                    "JVM_OPTS" : " -Xms2g -Xmx"+config["xmx"], 
+                    "CASSANDRA_SEEDS": "cassandra-node1" if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
                     "CASSANDRA_DC": dc_name,
                     "CASSANDRA_RACK": "RAC1"
@@ -89,11 +90,11 @@ def create_cassandra_cluster(num_nodes, cassandra_image, node_locations):
                 ports={ '9042/tcp': ('127.0.0.1', (3333+i)), '5005/tcp': ('127.0.0.1', (5005+i)) },
                 detach=True
             )
-            containers.append(container)
+            containers.append(container)            
             debug(f"Started container '{container_name}' in data center '{dc_name}'.")
             if not wait_for_log(container, log_pattern):
                 debug(f"Failed to start container '{container_name}' within the timeout period.")
-                return
+                exit(-1)
         except docker.errors.APIError as e:
             debug(f"Error starting container '{container_name}': {e}")
 

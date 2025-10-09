@@ -6,7 +6,7 @@ source ${DIR}/utils.sh
 
 # Function to print usage
 print_usage() {
-    echo "Usage: $0 <protocol> <number_of_threads> <min_loop> <max_loop> <workload> <record_count> <operation_count>"
+    echo "Usage: $0 <protocol> <number_of_threads> <min_loop> <max_loop> <workload> <record_count> <operation_count> <do_load>"
     echo "Example: $0 ONE 10 accord 3 10 a"
     exit 1
 }
@@ -80,18 +80,8 @@ run_ycsb_benchmark() {
     fi
 }
 
-# Function to clean up Cassandra cluster
-cleanup_cluster() {
-    log "Cleaning up Cassandra cluster..."
-    python3 cleanup_cassandra_cluster.py
-    if [ $? -ne 0 ]; then
-        error "Failed to clean up Cassandra cluster."
-        exit 1
-    fi
-}
-
 # Main script
-if [ $# -ne 7 ]; then
+if [ $# -ne 8 ]; then
     print_usage
 fi
 
@@ -102,24 +92,27 @@ max_loop=$4
 workload=$5
 record_count=$6
 operation_count=$7
+do_load=$8
 
 # Loop from min_loop to max_loop
 for ((i=min_loop; i<=max_loop; i++)); do
+
     if [ $i -eq $min_loop ]; then
         start_cluster "$i" "$protocol"
     else
         add_node "$protocol"
     fi
 
-    log "Loading YCSB workload for $i node(s)..."
-    load_ycsb_workload "$protocol" "$nthreads" "${LOGDIR}/$(echo "${protocol}")_${i}_load_$workload.dat" "$workload" "$record_count" "$operation_count"
+    if [ $do_load == "1" ];
+    then
+	log "Loading YCSB workload for $i node(s)..."
+	load_ycsb_workload "$protocol" "$nthreads" "${LOGDIR}/$(echo "${protocol}")_${i}_load_$workload.dat" "$workload" "$record_count" "$operation_count"
+    fi
 
     log "Running YCSB benchmark for $i node(s)..."
     run_ycsb_benchmark "$protocol" "$nthreads" "${LOGDIR}/$(echo "${protocol}")_${i}_run_$workload.dat" "$workload" "$record_count" "$operation_count"
 
     # log "Completed iteration for $i node(s)."
 done
-
-# cleanup_cluster
 
 # log "All iterations completed."
