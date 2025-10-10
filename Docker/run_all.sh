@@ -10,12 +10,6 @@ records=1000
 clients=$(nproc)
 ops_per_client=100
 
-workloads="a"
-protocols="quorum"
-records=1000
-clients=100
-ops_per_client=100
-
 # Function to clean up Cassandra cluster
 cleanup_cluster() {
     log "Cleaning up Cassandra cluster..."
