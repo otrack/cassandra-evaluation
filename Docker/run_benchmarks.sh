@@ -6,7 +6,7 @@ source ${DIR}/utils.sh
 
 # Function to print usage
 print_usage() {
-    echo "Usage: $0 <protocol> <number_of_threads> <min_loop> <max_loop> <workload> <record_count> <operation_count> <do_load>"
+    echo "Usage: $0 <protocol> <number_of_threads> <min_loop> <max_loop> <workload> <record_count> <operation_count> <do_create_and_load>"
     echo "Example: $0 ONE 10 accord 3 10 a"
     exit 1
 }
@@ -15,7 +15,6 @@ print_usage() {
 start_cluster() {
     local node_count=$1
     local protocol=$2
-    log "Starting Cassandra cluster with $node_count node(s)..."
     python3 start_cassandra_data_centers.py "$node_count" "$protocol"
     if [ $? -ne 0 ]; then
         error "Failed to start Cassandra cluster with $node_count node(s)."
@@ -26,13 +25,23 @@ start_cluster() {
 # Function to add a new Cassandra node
 add_node() {
     local mode=$1
-    log "Adding new Cassandra node to the cluster..."
     python3 create_new_node.py "$mode"
     if [ $? -ne 0 ]; then
         error "Failed to add new Cassandra node."
         exit 1
     fi
 }
+
+# Function to emulate geo-distributed latency
+emulate_latency() {
+    local node_count=$1
+    python3 emulate_latency.py "$node_count"
+    if [ $? -ne 0 ]; then
+        error "Failed to add latency emulation."
+        exit 1
+    fi
+}
+
 
 # Function to load YCSB workload
 load_ycsb_workload() {
@@ -72,7 +81,6 @@ run_ycsb_benchmark() {
     local workload=$4
     local record_count=$5
     local operation_count=$6
-    log "Running YCSB benchmark..."
     ./run_ycsb.sh "$consistency_level" "$nthreads" "$filename" "$workload" "$record_count" "$operation_count"
     if [ $? -ne 0 ]; then
         error "YCSB benchmark failed."
@@ -92,27 +100,32 @@ max_loop=$4
 workload=$5
 record_count=$6
 operation_count=$7
-do_load=$8
+do_create_and_load=$8
+
+# Create cluster and load YCSB if needed
+if [ $do_create_and_load == "1" ];
+then
+    log "Starting Cassandra cluster with ${min_loop} node(s)..."
+    start_cluster "${min_loop}" "$protocol"
+
+    log "Loading YCSB for ${min_loop} node(s)..."
+    load_ycsb_workload "$protocol" "$nthreads" "${LOGDIR}/$(echo "${protocol}")_${min_loop}_load_$workload.dat" "$workload" "$record_count" "$operation_count"
+
+    log "Emulating latency for ${min_loop} node(s)..."
+    emulate_latency "${min_loop}"    
+fi
 
 # Loop from min_loop to max_loop
 for ((i=min_loop; i<=max_loop; i++)); do
 
-    if [ $i -eq $min_loop ]; then
-        start_cluster "$i" "$protocol"
-    else
-        add_node "$protocol"
-    fi
-
-    if [ $do_load == "1" ];
-    then
-	log "Loading YCSB workload for $i node(s)..."
-	load_ycsb_workload "$protocol" "$nthreads" "${LOGDIR}/$(echo "${protocol}")_${i}_load_$workload.dat" "$workload" "$record_count" "$operation_count"
-    fi
-
-    log "Running YCSB benchmark for $i node(s)..."
+    log "Running YCSB benchmark ${workload^^} for $i node(s)..."
     run_ycsb_benchmark "$protocol" "$nthreads" "${LOGDIR}/$(echo "${protocol}")_${i}_run_$workload.dat" "$workload" "$record_count" "$operation_count"
 
-    # log "Completed iteration for $i node(s)."
+    if [ $i -lt $max_loop ];
+    then
+	log "Adding a new Cassandra node to the cluster..."
+        add_node "$protocol"
+    fi
+    
 done
 
-# log "All iterations completed."

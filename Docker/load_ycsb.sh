@@ -89,7 +89,7 @@ create_keyspace 3600 "$node_count"
 create_usertable 3600 "$transaction_mode" "$node_count"
 
 # Load data and write performance results to the output file
-run_ycsb "load" "$ycsb_dir" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$output_file" 1000 # FIXME desactivate latency instead
+run_ycsb "load" "$ycsb_dir" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$output_file" "$nthreads"
 
 # Simulate a node crash after 2 minutes
 # stop_container_after_delay "cassandra-node2" 90

@@ -4,17 +4,17 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 
 source ${DIR}/utils.sh
 
-workloads="a b c d e f"
+workloads="a b c d e"
 protocols="quorum paxos accord"
-clients="1 20 40"
-records=1000000
-operations=1000
+records=1000
+clients=$(nproc)
+ops_per_client=100
 
-# workloads="a b c d e f"
-# protocols="quorum"
-# clients="1 10"
-# records=1
-# operations=1
+workloads="a"
+protocols="quorum"
+records=1000
+clients=100
+ops_per_client=100
 
 # Function to clean up Cassandra cluster
 cleanup_cluster() {
@@ -28,13 +28,13 @@ cleanup_cluster() {
 
 for p in ${protocols}
 do
+    do_create_and_load=1
     for w in ${workloads}
     do
-	do_load=1
 	for c in ${clients}
 	do
-	    ./run_benchmarks.sh ${p} 12 3 3 ${w} ${records} ${operations} ${do_load}
-	    do_load=0
+	    ./run_benchmarks.sh ${p} 12 3 3 ${w} ${records} $((client * ops_per_client)) ${do_create_and_load}
+	    do_create_and_load=0
 	done
     done
     cleanup_cluster
