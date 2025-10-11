@@ -112,7 +112,7 @@ def main():
         f.write("        xmajorgrids=true,\n")
         f.write("        ymin=0, ymax=1,\n")
         f.write(f"        xmin={min_latency:.2f},\n")
-        f.write(f"        xmax={max_latency:.2f},\n")
+        f.write(f"        xmax={500:.2f},\n")
         f.write("        ytick={0,0.5,1},\n")
         f.write("        cycle list name=color list,\n")
         f.write("      ]\n")
