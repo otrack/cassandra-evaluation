@@ -27,7 +27,7 @@ do
     do
 	for c in ${clients}
 	do
-	    ./run_benchmarks.sh ${p} 12 3 3 ${w} ${records} $((client * ops_per_client)) ${do_create_and_load}
+	    ./run_benchmarks.sh ${p} 12 3 3 ${w} ${records} $((clients*ops_per_client)) ${do_create_and_load}
 	    do_create_and_load=0
 	done
     done
