@@ -10,6 +10,12 @@ records=1000
 clients=$(nproc)
 ops_per_client=100
 
+# workloads="c"
+# protocols="paxos"
+# records=1
+# clients=1
+# ops_per_client=100
+
 # Function to clean up Cassandra cluster
 cleanup_cluster() {
     log "Cleaning up Cassandra cluster..."

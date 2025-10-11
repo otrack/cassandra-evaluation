@@ -5,7 +5,7 @@ Below, we provide a brief how-to guide.
 
 The benchmark suite uses the following forks:
 - [YCSB](https://github.com/otrack/YCSB) (`cassandra5` branch)
-- [Apache Cassandra](https://github.com/otrack/cassandra/tree/testing5) (`testing5` branch)
+- [Apache Cassandra](https://github.com/otrack/cassandra/tree/testing6) (`testing6` branch)
 - [Cassandra Docker Library](https://github.com/otrack/cassandra-docker-library) 
 
 ## Building artifacts
@@ -23,7 +23,7 @@ mvn -pl site.ycsb:cassandra-binding -am clean install
 ``` bash
 git clone https://github.com/otrack/cassandra/
 cd cassandra
-git checkout testing5
+git checkout testing6
 ant artifacts -Dant.gen-doc.skip=true
 ```
 

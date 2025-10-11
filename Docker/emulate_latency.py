@@ -55,7 +55,7 @@ def emulate_latency(num_nodes, node_locations):
         exec_command = f"tc qdisc del dev eth0 root"
         debug(f"{src} {exec_command}")
         src_container.exec_run(exec_command)
-        exec_command = f"tc qdisc add dev eth0 root handle 1: htb default 30"
+        exec_command = f"tc qdisc add dev eth0 root handle 1: htb default 1"
         debug(f"{src} {exec_command}")
         src_container.exec_run(exec_command)
         exec_command = f"tc class add dev eth0 parent 1: classid 1:1 htb rate 1000mbit"
@@ -78,9 +78,9 @@ def emulate_latency(num_nodes, node_locations):
                 src_ip = src_container.attrs['NetworkSettings']['Networks'][network_name]['IPAddress']
                 
                 # Add latency from src to dst
-                exec_command = f"tc class add dev eth0 parent 1:1 classid 1:{j+1}0 htb rate 100mbit"
+                exec_command = f"tc class add dev eth0 parent 1:1 classid 1:1 htb rate 100mbit"
                 debug(f"{src} {exec_command}")
-                src_container.exec_run(exec_command)
+                src_container.exec_run(exec_command) 
                 exec_command = f"tc qdisc add dev eth0 parent 1:{j+1}0 handle {j+1}0: netem delay {latency}ms"
                 debug(f"{src} {exec_command}")
                 src_container.exec_run(exec_command)
