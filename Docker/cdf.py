@@ -87,9 +87,8 @@ def main():
     min_latency = max(0, min_latency - xpad)
     max_latency = max_latency + xpad
 
-    # PGFPlots default cycle colors
     color_cycle = [
-        "blue", "red", "green!50!black", "cyan!80!black",
+        "red", "blue", "green!50!black", "cyan!80!black",
         "magenta!80!black", "yellow!80!black", "black"
     ]
 
@@ -128,7 +127,7 @@ def main():
                 if dfw.empty:
                     continue
 
-                for proto_idx, proto in enumerate(protocol_order):
+                for proto_idx, proto in enumerate(protocol_order):                    
                     if proto not in dfw['protocol'].unique():
                         continue
                     row = dfw[dfw['protocol'] == proto].iloc[0] if not dfw[dfw['protocol'] == proto].empty else None
@@ -138,7 +137,8 @@ def main():
                                  if pd.notnull(row.get(f'p{i}')) and row[f'p{i}'] != 'unknown']
                     if not latencies:
                         continue
-                    f.write("          \\addplot+[mark=none] table {\n")
+                    col = color_cycle[proto_idx % len(color_cycle)]
+                    f.write("          \\addplot+["+col+", mark=none] table {\n")
                     for i, val in enumerate(latencies):
                         pct = i/99
                         f.write(f"          {val} {pct}\n")
@@ -155,10 +155,10 @@ def main():
 
         # --- Caption with color swatches ---
         f.write("    \\caption{CDF of operation latencies for different YCSB workloads and Cassandra protocols. ")
-        for idx, proto in enumerate(protocol_order):
-            col = color_cycle[idx % len(color_cycle)]
+        for proto_idx, proto in enumerate(protocol_order):
+            col = color_cycle[proto_idx % len(color_cycle)]
             f.write(r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.8,0);~{{{proto}}}".format(color=col, proto=proto))
-            if idx < len(protocol_order) - 1:
+            if proto_idx < len(protocol_order) - 1:
                 f.write(", ")
         # Optimum
         f.write(". The optimum (dashed gray line) corresponds to a protocol that always reaches the closest quorum.}\n")
