@@ -123,9 +123,8 @@ for ((i=min_loop; i<=max_loop; i++)); do
 
     if [ $i -lt $max_loop ];
     then
-	log "Adding a new Cassandra node to the cluster..."
+      	log "Adding a new Cassandra node to the cluster..."
         add_node "$protocol"
     fi
     
 done
-
