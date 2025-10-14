@@ -5,7 +5,7 @@ Below, we provide a brief how-to guide.
 
 The benchmark suite uses the following forks:
 - [YCSB](https://github.com/otrack/YCSB) (`cassandra5` branch)
-- [Apache Cassandra](https://github.com/otrack/cassandra/tree/testing5) (`testing5` branch)
+- [Apache Cassandra](https://github.com/otrack/cassandra/tree/testing6) (`testing6` branch)
 - [Cassandra Docker Library](https://github.com/otrack/cassandra-docker-library) 
 
 ## Building artifacts
@@ -28,7 +28,7 @@ mvn -pl site.ycsb:cassandra-binding -am clean install
 ``` bash
 git clone https://github.com/otrack/cassandra/
 cd cassandra
-git checkout testing5
+git checkout testing6
 ant artifacts -Dant.gen-doc.skip=true -Dcheckstyle.skip=true
 ```
 
@@ -59,25 +59,30 @@ The structure of the `Docker`directory is as follows:
 - `run_all.sh` invokes the previous script
 
 Typically, a call to `run_benchmark.sh`is of the following form:
-
-	./run_benchmarks.sh SERIAL 1 accord 3 3 c 1 100
+	./run_benchmarks.sh accord 1 3 3 c 1 100 1
 
 This means that 
-- `SERIAL` benchmarks Accord 
+- `accord` benchmarks Accord (more on this below)
 - `1` a single client thread is used
-- `accord` the Accord image is used (more on this below)
 - `3` the system starts with 3 Cassandra nodes
 - `3` it ends with 3 Cassandra nodes (no new node is added after a round of experiments)
 - `c` the benchark runs workload c in YCSB (a read-only workload) 
 - `1` there is a single item in the dataset
 - `100` the client(s) execute in the run phase 100 operations
+- `1` load YCSB dataset before doing running the benchmark (useful to skip the loading phase when running multiple benchmarks)
 
 #### Running the benchmark
 
+The file `exp.config` contains all the configuration parameters.
+These are detailed below.
+
 First of all install the Docker python library on your machine if needed (e.g., `sudo apt install python3-docker`).
-The files `load_ycsb.sh` and `run_ycsb.sh` makes use of the YCSB directory. Please adjust the variable `ycsb_dir` appropriately.  
-Edit `ACCORD_CASSANDRA_IMAGE` in `start_cassandra_data_centers.py` to indicate the name of your Docker image (e.g., `user/cassandra-accord:latest`).  
-Then, launch the benchmark with `run_all.sh`.
+The files `load_ycsb.sh` and `run_ycsb.sh` makes use of the YCSB directory. 
+Please adjust the variable `ycsb_dir` appropriately.  
+Edit `accord_cassandra_image` to indicate the name of your Docker image.
+
+To launch the benchmark, use `run_all.sh`.
+This will generate a CDF plot under `results`.
 
 ### Going further
 
@@ -87,4 +92,5 @@ This requires the following steps:
 - edit `conf/cassandra.yaml` and set `enabled` in the `accord` section to `false`
 - recompile Cassandra with ant
 - create a new Docker image, e.g., after copying the tarball, `docker build -t user/cassandra:latest .`
-- change the `NORMAL_CASSANDRA_IMAGE` in `start_cassandra_data_centers.py` appropriately
+- change the `normal_cassandra_image` in `exp.config` appropriately
+
