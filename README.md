@@ -19,8 +19,8 @@ Higher versions of Java might require adjustements.
 git clone https://github.com/otrack/YCSB
 cd YCSB
 git checkout cassandra5
-mvn -pl core dependency:copy-dependencies
 mvn -pl site.ycsb:cassandra-binding -am clean install
+mvn -pl core dependency:copy-dependencies
 
 ```
 
