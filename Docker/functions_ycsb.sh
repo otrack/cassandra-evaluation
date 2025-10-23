@@ -63,11 +63,12 @@ cassandra_create_usertable() {
 }
 
 cassandra_run_ycsb() {
-    if [ $# -ne 10 ]; then
+    if [ $# -lt 10 ]; then
 	echo "Usage: $0 <action> <workload_type> <workload> <hosts> <port> <recordcount> <operation_count> <protocol> <output_file> <threads>"
 	echo "Example: $0 load site.ycsb.CoreWorkload a 127.0.0.1,127.0.0.2 8080 1 1 QUORUM results.txt 100"
 	exit 1
-    fi    
+    fi
+
     action=$1
     workload_type=$2
     workload=$3
@@ -88,6 +89,17 @@ cassandra_run_ycsb() {
     output_file=$9
     threads=${10}
 
+    # capture any extra arguments (11th onward) and prepare a safely quoted string
+    shift 10
+    extra_opts=( "$@" )
+    extra_opts_str=""
+    if [ ${#extra_opts[@]} -gt 0 ]; then
+      for o in "${extra_opts[@]}"; do
+        # printf %q produces a shell-escaped representation; safe to append to the command string
+        extra_opts_str+=" $(printf '%q' "$o")"
+      done
+    fi
+    
     ycsb_dir=$(config ycsb_dir)
     
     debug ${nthreads}
@@ -110,7 +122,7 @@ cassandra_run_ycsb() {
 	# Create the usertable if it doesn't exist
 	cassandra_create_usertable 3600 "$transaction_mode" "$node_count"
     fi
-    
+
     #debug="JAVA_OPTS=\"-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\"" # comment out to have debug on
     cmd="${debug} $ycsb_dir/bin/ycsb.sh $action cassandra-cql \
     -p workload=$workload_type \
@@ -125,7 +137,7 @@ cassandra_run_ycsb() {
     -p hdrhistogram.fileoutput=false \
     -p hdrhistogram.output.path=${DIR}/${hdr_file} \
     -p hdrhistogram.percentiles=$(seq -s, 1 100) \
-    -threads $nthreads -s"
+    -threads $nthreads -s ${extra_opts_str}"
 
     eval "$cmd" | tee "$output_file"
     if [ $? -eq 0 ]; then

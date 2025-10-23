@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+# Compute the latency distribution of each protocol (broken down per operation) over all the YCSB workloads.
+
+DIR=$(dirname "${BASH_SOURCE[0]}")
+
+source ${DIR}/utils.sh
+
+clean_logdir
+
+workload_type="site.ycsb.workloads.ConflictWorkload"
+theta=$(seq -f "%.1f" 0 0.1 1.0)
+protocols="accord"
+records=1000
+clients=12
+ops_per_client=1000
+
+do_clean_up=0
+total=$(( $(echo ${protocols} | wc -w) * $(echo ${workloads} | wc -w) * $(echo ${clients} | wc -w) ))
+count=0
+for p in ${protocols}
+do
+    do_create_and_load=1
+    for t in ${theta}
+    do
+	for c in ${clients}
+	do
+	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
+	    ./run_benchmarks.sh ${p} 12 3 3 ${workload_type} a ${records} $((clients * ops_per_client)) ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0
+	    do_create_and_load=0
+	    count=$((count+1))
+	done
+    done    
+done
+
+${DIR}/parse_ycsb_to_csv.sh ${DIR}/logs/* > ${RESULTSDIR}/conflict.csv
+
+# python ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv ${workloads} 3 ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
+
+# pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
+# "\documentclass{article}\
+#  \usepackage{pgfplots}\
+#  \usepackage{tikz}\
+#  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
+#  \usetikzlibrary{shapes,arrows}\
+#  \usepgflibrary{shapes.symbols}\
+#  \usetikzlibrary{shapes.symbols}\
+#  \usetikzlibrary{patterns}\
+#  \usetikzlibrary{matrix, positioning, pgfplots.groupplots}\
+#  \begin{document}\
+#  \thispagestyle{empty}\centering\input{conflict.tex}\
+#  \end{document}"
