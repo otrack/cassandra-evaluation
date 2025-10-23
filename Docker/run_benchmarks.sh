@@ -10,7 +10,7 @@ source ${DIR}/functions_cassandra.sh
 
 # Function to print usage
 print_usage() {
-    echo "Usage: $0 <protocol> <number_of_threads> <min_loop> <max_loop> <workload_type> <workload> <record_count> <operation_count> <do_create_and_load> <do_clean_up>"
+    echo "Usage: $0 <protocol> <number_of_threads> <min_loop> <max_loop> <workload_type> <workload> <record_count> <operation_count> <output_file> <do_create_and_load> <do_clean_up>"
     echo "Example: $0 ONE 10 3 3 site.ycsb.workloads.CoreWorkload a 1 1 1 1"
     exit 1
 }
@@ -26,7 +26,7 @@ emulate_latency() {
 }
 
 # Main script
-if [ $# -lt 10 ]; then
+if [ $# -lt 11 ]; then
     print_usage
 fi
 
@@ -38,15 +38,12 @@ workload_type=$5
 workload=$6
 record_count=$7
 operation_count=$8
-do_create_and_load=$9
-do_clean_up=${10}
+output_file=$9
+do_create_and_load=${10}
+do_clean_up=${11}
 
-# Everything after the 10th arg becomes EXTRA_YCSB_OPTS (may be empty)
-# Preserve exact quoting/spacing by using "$@" expansion slice.
-if [ $# -gt 10 ]; then
-  # EXTRA_YCSB_OPTS is an array-like expansion used later; keep it as a positional expansion slice
-  # Note: "${@:11}" preserves each extra arg as its own word.
-  EXTRA_YCSB_OPTS=( "${@:11}" )
+if [ $# -gt 11 ]; then
+  EXTRA_YCSB_OPTS=( "${@:12}" )
 else
   EXTRA_YCSB_OPTS=()
 fi
@@ -72,8 +69,7 @@ then
 	exit 1
     fi
 
-    output_file="${LOGDIR}/$(echo "${protocol}")_${min_loop}_load_$workload.dat"
-    cassandra_run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$output_file" "$nthreads" "${EXTRA_YCSB_OPTS[@]}"
+    cassandra_run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}.load" "$nthreads" "${EXTRA_YCSB_OPTS[@]}"
 
     log "Emulating latency for ${min_loop} node(s)..."
     emulate_latency "${min_loop}"    
@@ -91,8 +87,7 @@ for ((i=min_loop; i<=max_loop; i++)); do
 	exit 1
     fi
     
-    output_file="${LOGDIR}/$(echo "${protocol}")_${i}_run_$workload.dat"
-    cassandra_run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$output_file" "$nthreads" "${EXTRA_YCSB_OPTS[@]}"
+    cassandra_run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}" "$nthreads" "${EXTRA_YCSB_OPTS[@]}"
 
     if [ $i -lt $max_loop ];
     then

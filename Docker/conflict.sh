@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Compute the latency distribution of each protocol (broken down per operation) over all the YCSB workloads.
+# In this workload, we change a parameter theta to increase the conflict rate from 0 to 1, by step of 0.1.
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
 
@@ -26,7 +26,8 @@ do
 	for c in ${clients}
 	do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
-	    ./run_benchmarks.sh ${p} 12 3 3 ${workload_type} a ${records} $((clients * ops_per_client)) ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0
+	    output_file="${LOGDIR}/$(echo "${protocol}")_${i}_run_${workload}_${t}.dat"
+	    ./run_benchmarks.sh ${p} 12 3 3 ${workload_type} a ${records} $((clients * ops_per_client)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0
 	    do_create_and_load=0
 	    count=$((count+1))
 	done
