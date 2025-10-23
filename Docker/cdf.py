@@ -24,7 +24,7 @@ def get_global_latency_range(df, workloads, all_ops, num_nodes, opt_latencies):
     for workload in workloads:
         for op in all_ops:
             dfw = df[(df['workload'] == workload) & (df['nodes'] == num_nodes)
-                     & (df['phase'] == 'run') & (df['op'] == op)]
+                     & (df['op'] == op)]
             for _, row in dfw.iterrows():
                 latencies = [float(row[f'p{i}']) for i in range(1, 101)
                              if pd.notnull(row.get(f'p{i}')) and row[f'p{i}'] != 'unknown']
@@ -67,7 +67,7 @@ def main():
     # Get all unique operations
     all_ops = set()
     for workload in workloads:
-        subdf = df[(df['workload'] == workload) & (df['nodes'] == num_nodes) & (df['phase'] == 'run')]
+        subdf = df[(df['workload'] == workload) & (df['nodes'] == num_nodes) ]
         all_ops.update(subdf['op'].unique())
     all_ops = sorted(list(all_ops))
     n_ops = len(all_ops)
@@ -78,7 +78,7 @@ def main():
     for workload in workloads:
         for op in all_ops:
             dfw = df[(df['workload'] == workload) & (df['nodes'] == num_nodes)
-                     & (df['phase'] == 'run') & (df['op'] == op)]
+                     & (df['op'] == op)]
             for proto in dfw['protocol'].unique():
                 if proto not in protocol_order:
                     protocol_order.append(proto)
@@ -113,7 +113,7 @@ def main():
         for wl_index, workload in enumerate(workloads):
             for op_index, op in enumerate(all_ops):
                 dfw = df[(df['workload'] == workload) & (df['nodes'] == num_nodes)
-                         & (df['phase'] == 'run') & (df['op'] == op)]
+                         & (df['op'] == op)]
                 f.write("        \\nextgroupplot[\n")
                 if op_index == 0:
                     f.write(f"          ylabel={{{workload}}},\n")

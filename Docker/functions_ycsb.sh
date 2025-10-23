@@ -7,8 +7,8 @@ source ${DIR}/utils.sh
 ## Cassandra
 
 cassandra_create_keyspace() {
-    timeout=$1
-    node_count=$2
+    local timeout=$1
+    local node_count=$2
     drop_keyspace_command="DROP KEYSPACE IF EXISTS ycsb;"
     create_keyspace_command="CREATE KEYSPACE IF NOT EXISTS ycsb WITH replication = {'class': 'SimpleStrategy', 'replication_factor': $node_count};"
     
@@ -33,9 +33,9 @@ cassandra_create_keyspace() {
 
 # Function to create the usertable
 cassandra_create_usertable() {
-    timeout=$1
-    transaction_mode=$2
-    node_count=$3
+    local timeout=$1
+    local transaction_mode=$2
+    local node_count=$3
     truncate_table_command="TRUNCATE ycsb.usertable;"
     if [ "$transaction_mode" == "full" ]; then
         create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 VARCHAR, field1 VARCHAR, field2 VARCHAR, field3 VARCHAR, field4 VARCHAR, field5 VARCHAR, field6 VARCHAR, field7 VARCHAR, field8 VARCHAR, field9 VARCHAR) WITH transactional_mode = 'full';"
@@ -69,30 +69,29 @@ cassandra_run_ycsb() {
 	exit 1
     fi
 
-    action=$1
-    workload_type=$2
-    workload=$3
-    hosts=$4
-    port=$5
-    recordcount=$6
-    operationcount=$7
-    protocol=$8
+    local action=$1
+    local workload_type=$2
+    local workload=$3
+    local hosts=$4
+    local port=$5
+    local recordcount=$6
+    local operationcount=$7
+    local protocol=$8
+    local consistency_level="ONE"
     if [ "$protocol" == "accord" ] || [ "$protocol" == "paxos" ];
     then
 	consistency_level="SERIAL"
     elif [ "$protocol" == "quorum" ];
     then
 	consistency_level="QUORUM"
-    else
-	consistency_level="ONE"
     fi
-    output_file=$9
-    threads=${10}
+    local output_file=$9
+    local threads=${10}
 
     # capture any extra arguments (11th onward) and prepare a safely quoted string
     shift 10
-    extra_opts=( "$@" )
-    extra_opts_str=""
+    local extra_opts=( "$@" )
+    local extra_opts_str=""
     if [ ${#extra_opts[@]} -gt 0 ]; then
       for o in "${extra_opts[@]}"; do
         # printf %q produces a shell-escaped representation; safe to append to the command string
@@ -102,18 +101,15 @@ cassandra_run_ycsb() {
     
     ycsb_dir=$(config ycsb_dir)
     
-    debug ${nthreads}
-    
     hdr_file=output_file.hdr
 
     if [ "$action" == "load" ];
     then
 
 	# Determine transaction mode
+	local transaction_mode="bruh"
 	if [ "$protocol" == "accord" ]; then 
 	    transaction_mode="full"
-	else
-	    transaction_mode="bruh"
 	fi
 
 	# Create the keyspace if it doesn't exist

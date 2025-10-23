@@ -27,7 +27,7 @@ do
 	for c in ${clients}
 	do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
-	    output_file="${LOGDIR}/${p}_${nodes}_${c}_${t}.dat"
+	    output_file="${LOGDIR}/${p}_${nodes}_a.dat"
 	    ./run_benchmarks.sh ${p} ${c} ${nodes} ${workload_type} a ${records} $((clients * ops_per_client)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0
 	    do_create_and_load=0
 	    count=$((count+1))
@@ -35,8 +35,10 @@ do
     done    
 done
 
+debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${DIR}/logs/* > ${RESULTSDIR}/conflict.csv
 
+debug "Plotting..."
 # python ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv ${workloads} 3 ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
 
 # pdflatex -jobname=conflict -output-directory=${RESULTSDIR} \

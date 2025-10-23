@@ -68,7 +68,7 @@ then
 	exit 1
     fi
 
-    cassandra_run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}.load" "$nthreads" "${EXTRA_YCSB_OPTS[@]}"
+    cassandra_run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}".load "$nthreads" "${EXTRA_YCSB_OPTS[@]}"
 
     log "Emulating latency for ${node_count} node(s)..."
     emulate_latency "${node_count}"    
@@ -85,7 +85,7 @@ fi
 
 cassandra_run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}" "$nthreads" "${EXTRA_YCSB_OPTS[@]}"
 
-if [ $do_clean_up == "1" ];
-then
-    cassandra_cleanup_cluster
-fi
+# if [ $do_clean_up == "1" ];
+# then
+#     cassandra_cleanup_cluster
+# fi
