@@ -18,7 +18,7 @@ ordinal_suffix() {
 }
 
 # Output concise header
-header="protocol,nodes,workload,op,clients,tput"
+header="protocol,nodes,workload,conflict_rate,op,clients,tput"
 for p in $(seq 1 100); do
     header="$header,p$p"
 done
@@ -45,6 +45,11 @@ for file in "$@"; do
         clients="unknown"
     fi
 
+    conflict_rate="NA"
+    if grep -q 'site.ycsb.workloads.ConflictWorkload' "$file"; then
+	conflict_rate=$(grep -oE 'conflict.theta=[0-9]+(\.[0-9]+)?' "$file" | head -n1 | cut -d= -f2)
+    fi
+    
     # Extract overall throughput and truncate to two digits after the dot
     tput=$(grep '^\[OVERALL\], Throughput(ops/sec),' "$file" | head -1 | awk -F, '{print $3}' | xargs)
     if [ -z "$tput" ]; then
@@ -55,7 +60,7 @@ for file in "$@"; do
 
     for op in read insert update scan readmodifywrite; do
         op_upper=$(echo "$op" | awk '{print toupper($0)}')
-        row="$protocol,$nodes,$workload,$op,$clients,$tput"
+        row="$protocol,$nodes,$workload,$conflict_rate,$op,$clients,$tput"
 
         for p in $(seq 1 100); do
             ord=$(ordinal_suffix $p)
