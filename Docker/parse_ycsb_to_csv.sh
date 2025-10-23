@@ -17,8 +17,8 @@ ordinal_suffix() {
     fi
 }
 
-# Output concise header
-header="protocol,nodes,workload,phase,op,clients,tput"
+# Output concise header (added conflict_rate column)
+header="protocol,nodes,workload,conflict_rate,phase,op,clients,tput"
 for p in $(seq 1 100); do
     header="$header,p$p"
 done
@@ -27,17 +27,44 @@ echo "$header"
 for file in "$@"; do
     filename=$(basename "$file")
 
-    # Parse filename: <protocol>_<nodes>_[load|run]_<workload>.dat
-    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_(load|run)_([^\.]+)\.dat$ ]]; then
+    # Parse filename with a pattern that matches the conflict.sh output naming:
+    # <protocol>_<nodes>_[load|run]_<workload>_<conflict>.dat
+    # Example: accord_3_run_a_0.1.dat
+    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_(load|run)_([^_]+)_([0-9]+(\.[0-9]+)?)\.dat$ ]]; then
         protocol="${BASH_REMATCH[1]}"
         nodes="${BASH_REMATCH[2]}"
         phase="${BASH_REMATCH[3]}"
         workload="${BASH_REMATCH[4]}"
+        conflict="${BASH_REMATCH[5]}"
     else
-        protocol="unknown"
-        nodes="unknown"
-        phase="unknown"
-        workload="unknown"
+        # Fallback to the older best-effort parsing if the strict pattern didn't match
+        if [[ "$filename" =~ ^([^_]+)_([0-9]+)_(load|run)_([^\.]+)\.dat$ ]]; then
+            protocol="${BASH_REMATCH[1]}"
+            nodes="${BASH_REMATCH[2]}"
+            phase="${BASH_REMATCH[3]}"
+            workload="${BASH_REMATCH[4]}"
+        else
+            protocol="unknown"
+            nodes="unknown"
+            phase="unknown"
+            workload="unknown"
+        fi
+
+        # Try to extract a conflict rate from the filename (several common patterns)
+        conflict="unknown"
+        if [[ "$filename" =~ [._-]conflict[_-]?([0-9]+(\.[0-9]+)?) ]]; then
+            conflict="${BASH_REMATCH[1]}"
+        elif [[ "$filename" =~ [._-]cr[_-]?([0-9]+(\.[0-9]+)?) ]]; then
+            conflict="${BASH_REMATCH[1]}"
+        else
+            # fallback: take the first 0..1 decimal or integer match (avoid matching node counts which are integers >1)
+            if [[ "$filename" =~ ([01](\.[0-9]+)?) ]]; then
+                cand="${BASH_REMATCH[1]}"
+                if [[ "$cand" == "0" || "$cand" == "1" || "$cand" == *.* ]]; then
+                    conflict="$cand"
+                fi
+            fi
+        fi
     fi
 
     # Extract clients (threads) from the file
@@ -59,7 +86,8 @@ for file in "$@"; do
 
     for op in read insert update scan readmodifywrite; do
         op_upper=$(echo "$op" | awk '{print toupper($0)}')
-        row="$protocol,$nodes,$workload,$phase,$op,$clients,$tput"
+        # include conflict in the row right after workload
+        row="$protocol,$nodes,$workload,$conflict,$phase,$op,$clients,$tput"
 
         for p in $(seq 1 100); do
             ord=$(ordinal_suffix $p)

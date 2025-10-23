@@ -11,23 +11,24 @@ clean_logdir
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=$(seq -f "%.1f" 0 0.1 1.0)
 protocols="accord"
+nodes=3
 records=1000
 clients=12
 ops_per_client=1
 
 do_clean_up=0
-total=$(( $(echo ${protocols} | wc -w) * $(echo ${workloads} | wc -w) * $(echo ${clients} | wc -w) ))
-count=0
 for p in ${protocols}
 do
     do_create_and_load=1
+    total=$(( $(echo ${workloads} | wc -w) * $(echo ${clients} | wc -w) ))
+    count=0
     for t in ${theta}
     do
 	for c in ${clients}
 	do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
-	    output_file="${LOGDIR}/$(echo "${p}")_${i}_run_${workload}_${t}.dat"
-	    ./run_benchmarks.sh ${p} 12 3 3 ${workload_type} a ${records} $((clients * ops_per_client)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0
+	    output_file="${LOGDIR}/${p}_${nodes}_${c}_${t}.dat"
+	    ./run_benchmarks.sh ${p} ${c} ${nodes} ${workload_type} a ${records} $((clients * ops_per_client)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0
 	    do_create_and_load=0
 	    count=$((count+1))
 	done
@@ -38,7 +39,7 @@ ${DIR}/parse_ycsb_to_csv.sh ${DIR}/logs/* > ${RESULTSDIR}/conflict.csv
 
 # python ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv ${workloads} 3 ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
 
-# pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
+# pdflatex -jobname=conflict -output-directory=${RESULTSDIR} \
 # "\documentclass{article}\
 #  \usepackage{pgfplots}\
 #  \usepackage{tikz}\
