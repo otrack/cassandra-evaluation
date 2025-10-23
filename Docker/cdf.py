@@ -39,10 +39,11 @@ def get_global_latency_range(df, workloads, all_ops, num_nodes, opt_latencies):
     return min_latency, max_latency
 
 def main():
-    if len(sys.argv) < 7:
+    if len(sys.argv) < 6:
         print(
-            "Usage: python csv_to_tikz_cdf_groupplot.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex"
+            "Usage: python cdf.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex"
         )
+        print(len(sys.argv))
         sys.exit(1)
     results_csv = sys.argv[1]
     workloads = sys.argv[2:-3]

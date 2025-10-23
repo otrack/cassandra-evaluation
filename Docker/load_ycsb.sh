@@ -63,8 +63,8 @@ create_usertable() {
 
 # Main script
 if [ $# -ne 7 ]; then
-    echo "Usage: $0 <protocol> <number_of_threads> <output_file> <workload> <record_count> <operation_count>"
-    echo "Example: one 1 results.txt a 1 1"
+    echo "Usage: $0 <protocol> <number_of_threads> <output_file> <workload_type> <workload> <record_count> <operation_count>"
+    echo "Example: one 1 results.txt site.ycsb.CoreWorkload a 1 1"
     echo "Was: $@ ($#)"
     exit 1
 fi
@@ -78,9 +78,10 @@ else
     transaction_mode="bruh"
 fi
 output_file=$3
-workload="workloads/workload$4"
-record_count=$5
-operation_count=$6
+workload_type=$4
+workload="workloads/workload$5"
+record_count=$6
+operation_count=$7
 
 # Create the keyspace if it doesn't exist
 create_keyspace 3600 "$node_count"
@@ -89,8 +90,5 @@ create_keyspace 3600 "$node_count"
 create_usertable 3600 "$transaction_mode" "$node_count"
 
 # Load data and write performance results to the output file
-run_ycsb "load" "$ycsb_dir" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$output_file" "$nthreads"
-
-# Simulate a node crash after 2 minutes
-# stop_container_after_delay "cassandra-node2" 90
+run_ycsb "load" "$ycsb_dir" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$output_file" "$nthreads"
 
