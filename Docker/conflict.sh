@@ -13,7 +13,7 @@ theta=$(seq -f "%.1f" 0 0.1 1.0)
 protocols="accord"
 records=1000
 clients=12
-ops_per_client=1000
+ops_per_client=1
 
 do_clean_up=0
 total=$(( $(echo ${protocols} | wc -w) * $(echo ${workloads} | wc -w) * $(echo ${clients} | wc -w) ))
@@ -26,7 +26,7 @@ do
 	for c in ${clients}
 	do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
-	    output_file="${LOGDIR}/$(echo "${protocol}")_${i}_run_${workload}_${t}.dat"
+	    output_file="${LOGDIR}/$(echo "${p}")_${i}_run_${workload}_${t}.dat"
 	    ./run_benchmarks.sh ${p} 12 3 3 ${workload_type} a ${records} $((clients * ops_per_client)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0
 	    do_create_and_load=0
 	    count=$((count+1))
