@@ -27,12 +27,13 @@ echo "$header"
 for file in "$@"; do
     filename=$(basename "$file")
 
-    # Parse filename: <protocol>_<nodes>_<workload>.dat
-    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_([^\.]+)\.dat$ ]]; then
+    # Parse filename: <protocol>_<nodes>_<workload>_<timestamp>.dat
+    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_([^_]+)_([0-9]+)\.dat$ ]]; then
         protocol="${BASH_REMATCH[1]}"
         nodes="${BASH_REMATCH[2]}"
         workload="${BASH_REMATCH[3]}"
     else
+
 	continue
     fi
 
