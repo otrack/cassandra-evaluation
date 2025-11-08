@@ -24,7 +24,7 @@ def get_global_latency_range(df, workloads, all_ops, num_nodes, opt_latencies):
     for workload in workloads:
         for op in all_ops:
             dfw = df[(df['workload'] == workload) & (df['nodes'] == num_nodes)
-                     & (df['phase'] == 'run') & (df['op'] == op)]
+                     & (df['op'] == op)]
             for _, row in dfw.iterrows():
                 latencies = [float(row[f'p{i}']) for i in range(1, 101)
                              if pd.notnull(row.get(f'p{i}')) and row[f'p{i}'] != 'unknown']
@@ -39,10 +39,11 @@ def get_global_latency_range(df, workloads, all_ops, num_nodes, opt_latencies):
     return min_latency, max_latency
 
 def main():
-    if len(sys.argv) < 7:
+    if len(sys.argv) < 6:
         print(
-            "Usage: python csv_to_tikz_cdf_groupplot.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex"
+            "Usage: python cdf.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex"
         )
+        print(len(sys.argv))
         sys.exit(1)
     results_csv = sys.argv[1]
     workloads = sys.argv[2:-3]
@@ -66,7 +67,7 @@ def main():
     # Get all unique operations
     all_ops = set()
     for workload in workloads:
-        subdf = df[(df['workload'] == workload) & (df['nodes'] == num_nodes) & (df['phase'] == 'run')]
+        subdf = df[(df['workload'] == workload) & (df['nodes'] == num_nodes) ]
         all_ops.update(subdf['op'].unique())
     all_ops = sorted(list(all_ops))
     n_ops = len(all_ops)
@@ -77,7 +78,7 @@ def main():
     for workload in workloads:
         for op in all_ops:
             dfw = df[(df['workload'] == workload) & (df['nodes'] == num_nodes)
-                     & (df['phase'] == 'run') & (df['op'] == op)]
+                     & (df['op'] == op)]
             for proto in dfw['protocol'].unique():
                 if proto not in protocol_order:
                     protocol_order.append(proto)
@@ -96,6 +97,7 @@ def main():
         f.write("\\begin{figure}[htbp]\n")
         f.write("    \\centering\n")
         f.write("    \\begin{tikzpicture}\n")
+
         f.write("      \\begin{groupplot}[\n")
         f.write(f"        group style={{group size={n_ops} by {n_wl}, horizontal sep=1.2cm, vertical sep=1.2cm}},\n")
         f.write("        width=4cm, height=4cm,\n")
@@ -112,7 +114,7 @@ def main():
         for wl_index, workload in enumerate(workloads):
             for op_index, op in enumerate(all_ops):
                 dfw = df[(df['workload'] == workload) & (df['nodes'] == num_nodes)
-                         & (df['phase'] == 'run') & (df['op'] == op)]
+                         & (df['op'] == op)]
                 f.write("        \\nextgroupplot[\n")
                 if op_index == 0:
                     f.write(f"          ylabel={{{workload}}},\n")
@@ -143,12 +145,12 @@ def main():
                         pct = i/99
                         f.write(f"          {val} {pct}\n")
                     f.write("          };\n")
-                # Optimum
-                f.write("          \\addplot+[gray, dashed, mark=none] table {\n")
-                for i, val in enumerate(opt_latencies):
-                    pct = i/(n_opt-1) if n_opt > 1 else 1
-                    f.write(f"          {val:.2f} {pct}\n")
-                f.write("          };\n")
+                # # Optimum
+                # f.write("          \\addplot+[gray, dashed, mark=none] table {\n")
+                # for i, val in enumerate(opt_latencies):
+                #     pct = i/(n_opt-1) if n_opt > 1 else 1
+                #     f.write(f"          {val:.2f} {pct}\n")
+                # f.write("          };\n")
 
         f.write("      \\end{groupplot}\n")
         f.write("    \\end{tikzpicture}\n")

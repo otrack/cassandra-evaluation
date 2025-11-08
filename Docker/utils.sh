@@ -31,7 +31,11 @@ log() {
 
 error() {
     local message=$1
-    echo -e >&1 "["$(date +%s:%N)"] \033[31m${message}\033[0m"
+    echo -e >&2 "["$(date +%s:%N)"] \033[31m${message}\033[0m"
+}
+
+clean_logdir() {
+    rm -Rf ${LOGDIR}/*
 }
 
 DEBUG=$(config debug)
@@ -54,32 +58,3 @@ stop_container_after_delay() {
     ) &
 }
 
-# Function to get the IP addresses of all Cassandra nodes
-get_all_cassandra_ips() {
-    node_count=$1
-    ips=""
-    for i in $(seq 1 $node_count); do
-        container_name="cassandra-node$i"
-        ip=$(get_container_ip "$container_name")
-        if [ -n "$ip" ]; then
-            ips="$ips,$ip"
-        fi
-    done
-    # Remove leading comma
-    ips=${ips#,}
-    echo "$ips"
-}
-
-# Function to get the number of Cassandra nodes
-get_node_count() {
-    i=1
-    while true; do
-        container_name="cassandra-node$i"
-	ip=$(get_container_ip "$container_name")
-        if [ -z "$ip" ]; then
-            break # FIXME
-        fi
-        i=$((i + 1))
-    done
-    echo $((i - 1))
-}

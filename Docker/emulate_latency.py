@@ -3,6 +3,7 @@ import sys
 import time
 import math
 import re
+import csv
 
 from datetime import datetime
 
@@ -22,9 +23,8 @@ def haversine(lat1, lon1, lat2, lon2):
     return distance
 
 def estimate_latency(distance_km):
-    # return 50
-    # Speed of light in fiber optics is approximately 200,000 km/s
-    speed_of_light_km_per_ms = 200  # km/ms
+    # Speed of light in fiber optics is approximately 204,000 km/s
+    speed_of_light_km_per_ms = 204  # km/ms
     latency_ms = distance_km / speed_of_light_km_per_ms
     return math.floor(latency_ms)
         

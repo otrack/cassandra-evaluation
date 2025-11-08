@@ -2,6 +2,10 @@
 
 # Usage: ./parse_ycsb_files_to_csv.sh <file1> <file2> ... > output.csv
 
+DIR=$(dirname "${BASH_SOURCE[0]}")
+
+source ${DIR}/utils.sh
+
 # Helper to get correct English ordinal
 ordinal_suffix() {
     n=$1
@@ -18,7 +22,7 @@ ordinal_suffix() {
 }
 
 # Output concise header
-header="protocol,nodes,workload,phase,op,clients,tput"
+header="protocol,nodes,workload,conflict_rate,op,clients,tput"
 for p in $(seq 1 100); do
     header="$header,p$p"
 done
@@ -27,17 +31,14 @@ echo "$header"
 for file in "$@"; do
     filename=$(basename "$file")
 
-    # Parse filename: <protocol>_<nodes>_[load|run]_<workload>.dat
-    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_(load|run)_([^\.]+)\.dat$ ]]; then
+    # Parse filename: <protocol>_<nodes>_<workload>_<timestamp>.dat
+    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_([^_]+)_([0-9]+)\.dat$ ]]; then
         protocol="${BASH_REMATCH[1]}"
         nodes="${BASH_REMATCH[2]}"
-        phase="${BASH_REMATCH[3]}"
-        workload="${BASH_REMATCH[4]}"
+        workload="${BASH_REMATCH[3]}"
     else
-        protocol="unknown"
-        nodes="unknown"
-        phase="unknown"
-        workload="unknown"
+	error "Ignoring ${filename}"
+	continue
     fi
 
     # Extract clients (threads) from the file
@@ -49,6 +50,11 @@ for file in "$@"; do
         clients="unknown"
     fi
 
+    conflict_rate="NA"
+    if grep -q 'site.ycsb.workloads.ConflictWorkload' "$file"; then
+	conflict_rate=$(grep -oE 'conflict.theta=[0-9]+(\.[0-9]+)?' "$file" | head -n1 | cut -d= -f2)
+    fi
+    
     # Extract overall throughput and truncate to two digits after the dot
     tput=$(grep '^\[OVERALL\], Throughput(ops/sec),' "$file" | head -1 | awk -F, '{print $3}' | xargs)
     if [ -z "$tput" ]; then
@@ -59,7 +65,7 @@ for file in "$@"; do
 
     for op in read insert update scan readmodifywrite; do
         op_upper=$(echo "$op" | awk '{print toupper($0)}')
-        row="$protocol,$nodes,$workload,$phase,$op,$clients,$tput"
+        row="$protocol,$nodes,$workload,$conflict_rate,$op,$clients,$tput"
 
         for p in $(seq 1 100); do
             ord=$(ordinal_suffix $p)
@@ -79,6 +85,9 @@ for file in "$@"; do
         # Only output if at least one percentile exists for this op in this file
         if echo "$row" | grep -vq ",unknown$"; then
             echo "$row"
+	# else
+	#     error "Ignoring ${row}"
         fi
+
     done
 done
