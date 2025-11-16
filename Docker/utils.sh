@@ -40,6 +40,69 @@ clean_logdir() {
 
 DEBUG=$(config debug)
 
+start_container() {
+    # start_container <image> <name> <message> [args...]
+    # Starts a container from <image> with name <name>, waits until <message> appears in its logs,
+    # or returns a non-zero status if the container exits or a timeout occurs.
+    #
+    # Prints the container name on success.
+    if [ $# -lt 3 ]; then
+        error "usage: start_container <image> <name> <message> [args...]"
+        return 2
+    fi
+
+    local image="$1"
+    local cname="$2"
+    local wait_msg="$3"
+    shift 3
+    local container_args=("$@")
+
+    log "Starting container from image '${image}' as '${cname}'"
+    local cid
+    cid=$(docker run -d --name "$cname" "$image" "${container_args[@]}" 2>&1) || {
+        error "docker run failed: ${cid}"
+        return 3
+    }
+    log "Started container '${cname}' (id: ${cid})"
+
+    local start_time
+    start_time=$(date +%s)
+    local timeout
+    timeout=${START_CONTAINER_TIMEOUT:-60}   # seconds, override by exporting START_CONTAINER_TIMEOUT
+
+    while true; do
+        # Check for the readiness message in logs
+        if docker logs "$cname" 2>&1 | grep -F -- "$wait_msg" >/dev/null; then
+            log "Container '${cname}' is ready (found: '${wait_msg}')"
+            echo "$cname"
+            return 0
+        fi
+
+        # Check whether container is still running
+        local running
+        running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null) || {
+            error "Failed to inspect container '${cname}'"
+            return 4
+        }
+        if [ "$running" != "true" ]; then
+            local exit_code
+            exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$cname" 2>/dev/null || echo "unknown")
+            error "Container '${cname}' exited with code ${exit_code} before readiness message appeared. Logs:"
+            docker logs "$cname" 2>&1 | sed 's/^/  /'
+            return 5
+        fi
+
+        # Timeout check
+        if (( $(date +%s) - start_time >= timeout )); then
+            error "Timeout (${timeout}s) waiting for '${wait_msg}' in container '${cname}' logs. Logs:"
+            docker logs "$cname" 2>&1 | sed 's/^/  /'
+            return 6
+        fi
+
+        sleep 0.5
+    done
+}
+
 # Function to get the IP address of a container
 get_container_ip() {
     container_name=$1
