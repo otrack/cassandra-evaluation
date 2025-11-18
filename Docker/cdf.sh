@@ -10,7 +10,8 @@ clean_logdir
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
-protocols="quorum accord paxos"
+protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
+protocols="swiftpaxos-paxos"
 nodes=3
 records=1000
 clients=12

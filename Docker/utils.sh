@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-DIR=$(dirname "${BASH_SOURCE[0]}")
-
 BINDIR="${DIR}"
 LOGDIR="${DIR}/logs"
 RESULTSDIR="${DIR}/results/"
@@ -19,18 +17,18 @@ config() {
 debug() {
     if [[ DEBUG -eq 1 ]]
     then
-	local message=$1
+	local message="$@"
 	echo -e >&1 "["$(date +%s:%N)"] \033[32m${message}\033[0m"
     fi
 }
 
 log() {
-    local message=$1
+    local message="$@"
     echo -e >&1 "["$(date +%s:%N)"] \033[33m${message}\033[0m"
 }
 
 error() {
-    local message=$1
+    local message="$@"
     echo -e >&2 "["$(date +%s:%N)"] \033[31m${message}\033[0m"
 }
 
@@ -41,11 +39,6 @@ clean_logdir() {
 DEBUG=$(config debug)
 
 start_container() {
-    # start_container <image> <name> <message> [args...]
-    # Starts a container from <image> with name <name>, waits until <message> appears in its logs,
-    # or returns a non-zero status if the container exits or a timeout occurs.
-    #
-    # Prints the container name on success.
     if [ $# -lt 3 ]; then
         error "usage: start_container <image> <name> <message> [args...]"
         return 2
@@ -55,11 +48,13 @@ start_container() {
     local cname="$2"
     local wait_msg="$3"
     shift 3
-    local container_args=("$@")
+    local docker_args=("$@")
+    
+    echo 
 
-    log "Starting container from image '${image}' as '${cname}'"
+    log "Starting container from image '${image}' as '${cname}' with args '${docker_args[@]}'"
     local cid
-    cid=$(docker run -d --name "$cname" "$image" "${container_args[@]}" 2>&1) || {
+    cid=$(docker run ${docker_args[@]} -d --name "$cname" "$image"  2>&1) || {
         error "docker run failed: ${cid}"
         return 3
     }
@@ -74,7 +69,6 @@ start_container() {
         # Check for the readiness message in logs
         if docker logs "$cname" 2>&1 | grep -F -- "$wait_msg" >/dev/null; then
             log "Container '${cname}' is ready (found: '${wait_msg}')"
-            echo "$cname"
             return 0
         fi
 
@@ -97,6 +91,58 @@ start_container() {
             error "Timeout (${timeout}s) waiting for '${wait_msg}' in container '${cname}' logs. Logs:"
             docker logs "$cname" 2>&1 | sed 's/^/  /'
             return 6
+        fi
+
+        sleep 0.5
+    done
+}
+
+stop_container() {
+    if [ $# -lt 1 ]; then
+        error "usage: stop_container <name> [timeout_seconds]"
+        return 2
+    fi
+
+    local cname="$1"
+    local timeout="${2:-${STOP_CONTAINER_TIMEOUT:-30}}"  # seconds, can be overridden by arg or STOP_CONTAINER_TIMEOUT env
+
+    log "Stopping container '${cname}' (timeout: ${timeout}s)"
+
+    # Check container existence / get running state
+    local running
+    running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null) || {
+        error "Container '${cname}' does not exist or cannot be inspected"
+        return 3
+    }
+
+    if [ "$running" != "true" ]; then
+        log "Container '${cname}' is already stopped"
+        return 0
+    fi
+
+    if ! docker stop "$cname" >/dev/null 2>&1; then
+        error "docker stop failed for container '${cname}'"
+        return 4
+    fi
+
+    local start_time
+    start_time=$(date +%s)
+
+    # Wait until container is no longer running (or inspect disappears)
+    while true; do
+        running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null) || {
+            # Inspect failing -> container removed or no longer present; treat as stopped
+            log "Container '${cname}' no longer present; considered stopped"
+            return 0
+        }
+        if [ "$running" != "true" ]; then
+            log "Container '${cname}' stopped"
+            return 0
+        fi
+
+        if (( $(date +%s) - start_time >= timeout )); then
+            error "Timeout (${timeout}s) waiting for container '${cname}' to stop"
+            return 5
         fi
 
         sleep 0.5
