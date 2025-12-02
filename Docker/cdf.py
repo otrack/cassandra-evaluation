@@ -39,19 +39,28 @@ def get_global_latency_range(df, workloads, all_ops, num_nodes, opt_latencies):
     return min_latency, max_latency
 
 def main():
-    if len(sys.argv) < 6:
+    if len(sys.argv) < 7:
         print(
-            "Usage: python cdf.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex"
+            "Usage: python cdf.py results.csv workload1 [workload2 ...] num_nodes city latencies.csv output.tex"
         )
         print(len(sys.argv))
         sys.exit(1)
     results_csv = sys.argv[1]
-    workloads = sys.argv[2:-3]
-    num_nodes = int(sys.argv[-3])
+    workloads = sys.argv[2:-4]
+    num_nodes = int(sys.argv[-4])
+    city = sys.argv[-3]
     lat_csv = sys.argv[-2]
     output_tikz = sys.argv[-1]
 
     df = pd.read_csv(results_csv)
+    
+    # Filter by city if the column exists
+    if 'city' in df.columns:
+        available_cities = df['city'].unique().tolist()
+        df = df[df['city'] == city]
+        if df.empty:
+            print(f"WARNING: No data found for city '{city}'. Available cities: {available_cities}", file=sys.stderr)
+            sys.exit(1)
     latdf = pd.read_csv(lat_csv)
     node_lats, node_lons = [], []
     for idx, row in latdf.iloc[:num_nodes].iterrows():
@@ -156,7 +165,7 @@ def main():
         f.write("    \\end{tikzpicture}\n")
 
         # --- Caption with color swatches ---
-        f.write("    \\caption{CDF of operation latencies for different YCSB workloads and Cassandra protocols. ")
+        f.write(f"    \\caption{{CDF of operation latencies for different YCSB workloads and Cassandra protocols at {city}. ")
         for proto_idx, proto in enumerate(protocol_order):
             col = color_cycle[proto_idx % len(color_cycle)]
             f.write(r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.8,0);~{{{proto}}}".format(color=col, proto=proto))
