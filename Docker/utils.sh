@@ -39,26 +39,27 @@ clean_logdir() {
 DEBUG=$(config debug)
 
 start_container() {
-    if [ $# -lt 3 ]; then
-        error "usage: start_container <image> <name> <message> [args...]"
+    if [ $# -lt 4 ]; then
+        error "usage: start_container <image> <name> <message> <logfile> [docker args...]"
         return 2
     fi
 
     local image="$1"
     local cname="$2"
     local wait_msg="$3"
-    shift 3
-    local docker_args=("$@")
+    local log_file="$4"
+    shift 4
+    local docker_args="$@"
     
-    echo 
-
-    log "Starting container from image '${image}' as '${cname}' with args '${docker_args[@]}'"
+    log "Starting container from image '${image}' as '${cname}' using ${log_file} to log and args '${docker_args}'"
     local cid
-    cid=$(docker run ${docker_args[@]} -d --name "$cname" "$image"  2>&1) || {
-        error "docker run failed: ${cid}"
-        return 3
+    cid=$(docker run -d ${docker_args} --name "$cname" "$image" 2>&1) || {
+         error "docker run failed: ${cid}"
+         return 3
     }
     log "Started container '${cname}' (id: ${cid})"
+
+    docker logs -f $cname > ${log_file} 2>&1 &
 
     local start_time
     start_time=$(date +%s)
@@ -95,6 +96,43 @@ start_container() {
 
         sleep 0.5
     done
+}
+
+wait_container() {
+    if [ $# -lt 1 ]; then
+        error "usage: wait_container <name>"
+        return 2
+    fi
+
+    local cname="$1"
+
+    # Wait until container is no longer running (or inspect disappears)
+    log "Waiting container '${cname}' to terminate"
+    while true; do
+        running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null) || {
+            # Inspect failing -> container removed or no longer present; treat as stopped
+            log "Container '${cname}' no longer present; considered stopped"
+            return 0
+        }
+
+        if [ "$running" != "true" ]; then
+            log "Container '${cname}' stopped"
+            return 0
+        fi
+
+        sleep 0.5
+    done    
+}
+
+fetch_logs_container() {
+    if [ $# -lt 1 ]; then
+        error "usage: fetch_logs_container <name> [timeout_seconds]"
+        return 2
+    fi
+
+    local cname="$1"
+    
+    docker logs "$cname" 2>&1 | sed 's/^/  /'    
 }
 
 stop_container() {

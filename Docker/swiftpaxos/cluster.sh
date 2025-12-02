@@ -11,7 +11,7 @@ swiftpaxos_start_cluster() {
     local protocol=$2
     image=$(config swiftpaxos_image)
     # Start master
-    start_container ${image} "swiftpaxos-master" "waiting for ${node_count} replicas" --rm --network $(config "network_name") -e NSERVERS=${node_count} -e TYPE=master || {
+    start_container ${image} "swiftpaxos-master" "waiting for ${node_count} replicas" ${LOGDIR}/swiftpaxos_master.log --rm -d --network $(config "network_name") -e NSERVERS=${node_count} -e TYPE=master || {
         error "Failed to start master"
         return 1
     }
@@ -24,7 +24,7 @@ swiftpaxos_start_cluster() {
 	    message="Server starting"
 	fi
         container_name=$(config "node_name")$i
-	start_container ${image} ${container_name} "${message}" --rm --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW -e PROTOCOL=${protocol} -e NSERVERS=${node_count} -e TYPE=server -e MADDR=${maddr} || {
+	start_container ${image} ${container_name} "${message}" ${LOGDIR}/swiftpaxos_node${i}.log --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW -e PROTOCOL=${protocol} -e NSERVERS=${node_count} -e TYPE=server -e MADDR=${maddr} || {
             error "Failed to start server $i"
             return 2
 	}

@@ -61,9 +61,9 @@ emulate_latency() {
 }
 
 run_ycsb() {
-    if [ $# -lt 10 ]; then
-	echo "Usage: $0 <action> <workload_type> <workload> <hosts> <port> <recordcount> <operation_count> <protocol> <output_file> <threads>"
-	echo "Example: $0 load site.ycsb.CoreWorkload a 127.0.0.1,127.0.0.2 8080 1 1 QUORUM results.txt 100"
+    if [ $# -lt 12 ]; then
+	echo "Usage: $0 <action> <workload_type> <workload> <hosts> <port> <recordcount> <operation_count> <protocol> <output_file> <threads> <container_name> <network_adapter> [extra_ycsb_options]"
+	echo "Example: $0 load site.ycsb.CoreWorkload a 127.0.0.1,127.0.0.2 8080 1 1 QUORUM results.txt 100 ycsb database-node1"
 	exit 1
     fi
 
@@ -77,9 +77,11 @@ run_ycsb() {
     local protocol=$8
     local output_file=$9
     local threads=${10}
+    local container_name=${11}
+    local nearby_database=${12}
     
-    # capture any extra arguments (11th onward) and prepare a safely quoted string
-    shift 10
+    # capture any extra arguments (13th onward) and prepare a safely quoted string
+    shift 12
     local extra_opts=( "$@" )
     local extra_opts_str=""
     if [ ${#extra_opts[@]} -gt 0 ]; then
@@ -87,12 +89,10 @@ run_ycsb() {
         # printf %q produces a shell-escaped representation; safe to append to the command string
         extra_opts_str+=" $(printf '%q' "$o")"
       done
-    fi
-    
-    local ycsb_dir=$(config ycsb_dir)
-    
-    local hdr_file=output_file.hdr
+    fi   
 
+    local docker_args="--rm -d --network container:${nearby_database} --env-file=${output_file}.docker"
+    
     if [ "$action" == "load" ];
     then
 
@@ -114,16 +114,16 @@ run_ycsb() {
 	    # Create the usertable if it doesn't exist
 	    cassandra_create_usertable 3600 "$transaction_mode" "$node_count"
 	fi
-	
     fi
 
-
+    local ycsb_image=$(config ycsb_image)    
+    
     local ycsb_client="swiftpaxos"
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
     then
-	# nothing to do
-	extra_opts_str+="-p maddr=${hosts} -p mport=${port} \
-	-p verbose=false"
+	extra_opts_str+="-p maddr=${hosts} \
+-p mport=${port} \
+-p verbose=false"
     else
 	# cassandra
 	ycsb_client="cassandra-cql"
@@ -136,29 +136,27 @@ run_ycsb() {
 	    consistency_level="QUORUM"
 	fi
 	extra_opts_str+="-p hosts=$hosts -p port=$port \
-	-p cassandra.writeconsistencylevel=$consistency_level \
-	-p cassandra.readconsistencylevel=$consistency_level"
+-p cassandra.writeconsistencylevel=$consistency_level \
+-p cassandra.readconsistencylevel=$consistency_level"
     fi
 
+    local debug=""
+    # comment out to have debug on
+    # debug="JAVA_OPTS=\"-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\"" 
+    echo -e "YCSB_COMMAND=${action}\n\
+YCSB_BINDING=${ycsb_client}\n\
+YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
+YCSB_RECORDCOUNT=${recordcount}\n\
+YCSB_OPERATIONCOUNT=${operationcount}\n\
+YCSB_THREADS=${nthreads}\n\
+YCSB_OPTS=-s -p workload=${workload_type} ${debug} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file}.docker
+    
+    start_container ${ycsb_image} ${container_name} "Starting test" ${output_file} ${docker_args}
 
-    # debug="JAVA_OPTS=\"-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\"" # comment out to have debug on
-    cmd="${debug} $ycsb_dir/bin/ycsb.sh $action $ycsb_client \
-    -p workload=$workload_type \
-    -P ${ycsb_dir}/workloads/workload${workload} \
-    -p recordcount=$recordcount \
-    -p operationcount=$operationcount \
-    -p measurementtype=hdrhistogram \
-    -p hdrhistogram.fileoutput=false \
-    -p hdrhistogram.output.path=${DIR}/${hdr_file} \
-    -p hdrhistogram.percentiles=$(seq -s, 1 100) \
-    ${extra_opts_str} \
-    -threads $nthreads -s"
-
-    eval "$cmd" | tee "$output_file"
     if [ $? -eq 0 ]; then
-        log "YCSB $action completed successfully."
+        log "YCSB $action launched successfully."
     else
-        log "Error running YCSB $action."
+        log "Error launching YCSB $action."
         exit 1
     fi
 }
@@ -170,6 +168,8 @@ run_benchmark() {
 	exit 1
     fi
 
+    log "run_benchmark using args: $@"
+    
     protocol=$1
     nthreads=$2
     node_count=$3
@@ -214,7 +214,9 @@ run_benchmark() {
 		exit 1
 	fi
 
-	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}".load "$nthreads" "${EXTRA_YCSB_OPTS[@]}"
+	nearby_database=$(config "node_name")1
+	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}".load "$nthreads" "ycsb" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
+	wait_container "ycsb"
 
 	log "Emulating latency for ${node_count} node(s)..."
 	emulate_latency "${node_count}"    
@@ -229,7 +231,16 @@ run_benchmark() {
         exit 1
     fi
 
-    run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}" "$nthreads" "${EXTRA_YCSB_OPTS[@]}"
+    for i in $(seq 1 1 ${node_count});
+    do
+	nearby_database=$(config "node_name")$i
+	run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}.${i}" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
+    done
+    
+    for i in $(seq 1 1 ${node_count});
+    do
+	wait_container "ycsb-${i}"
+    done
 
     if [ $do_clean_up == "1" ];
     then
@@ -239,6 +250,6 @@ run_benchmark() {
 }
 
 # Example usage
-# run_benchmark paxos 1 3 site.ycsb.workloads.CoreWorkload a 1000 1000 /tmp/log 1 1
-run_benchmark swiftpaxos-paxos 1 3 site.ycsb.workloads.CoreWorkload a 1000 1000 /tmp/log 0 0
-
+# run_benchmark paxos 1 3 site.ycsb.workloads.CoreWorkload a 1000 1000 /tmp/log 1 0
+# run_benchmark swiftpaxos-paxos 1 3 site.ycsb.workloads.CoreWorkload a 1000 1000 /tmp/log 1 1
+# run_benchmark swiftpaxos-paxos 12 3 site.ycsb.workloads.CoreWorkload a 1000 100 /tmp/log 1 1
