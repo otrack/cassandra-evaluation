@@ -91,7 +91,7 @@ run_ycsb() {
       done
     fi   
 
-    local docker_args="--rm -d --network container:${nearby_database} --env-file=${output_file}.docker"
+    local docker_args="--rm -d --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
     
     if [ "$action" == "load" ];
     then
@@ -150,7 +150,7 @@ YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
 YCSB_RECORDCOUNT=${recordcount}\n\
 YCSB_OPERATIONCOUNT=${operationcount}\n\
 YCSB_THREADS=${nthreads}\n\
-YCSB_OPTS=-s -p workload=${workload_type} ${debug} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file}.docker
+YCSB_OPTS=-s -p workload=${workload_type} ${debug} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
     
     start_container ${ycsb_image} ${container_name} "Starting test" ${output_file} ${docker_args}
 
@@ -216,7 +216,7 @@ run_benchmark() {
 	fi
 
 	nearby_database=$(config "node_name")1
-	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}".load "$nthreads" "ycsb" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
+	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file%.dat}.load" "$nthreads" "ycsb" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
 	wait_container "ycsb"
 
 	log "Emulating latency for ${node_count} node(s)..."
@@ -235,7 +235,9 @@ run_benchmark() {
     for i in $(seq 1 1 ${node_count});
     do
 	nearby_database=$(config "node_name")$i
-	run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file}.${i}" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
+	location=$(get_location $i ${DIR}/latencies.csv)
+	log ${location} 
+	run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
     done
     
     for i in $(seq 1 1 ${node_count});

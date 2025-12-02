@@ -205,3 +205,55 @@ stop_container_after_delay() {
     ) &
 }
 
+get_location() {
+  local k="$1"
+  local file="${2:-latencies.csv}"
+
+  # Validate arguments
+  if [ -z "$k" ]; then
+    echo "Usage: get_location <k> [file]" >&2
+    return 2
+  fi
+  if ! [[ "$k" =~ ^[0-9]+$ ]] || [ "$k" -le 0 ]; then
+    echo "Error: k must be a positive integer" >&2
+    return 2
+  fi
+  if [ ! -r "$file" ]; then
+    echo "Error: file '$file' not found or not readable" >&2
+    return 3
+  fi
+
+  # Compute the target file line number (header is line 1)
+  local target_line=$((k + 1))
+
+  # Extract the 3rd CSV field from the target line.
+  # NOTE: some awk implementations (e.g., busybox awk) do not accept "--" as an option terminator.
+  # Do NOT pass "--" to awk; pass the filename as the last argument instead.
+  local loc
+  loc=$(awk -F',' -v n="$target_line" 'NR==n{
+      field=$3
+      gsub(/\r/,"",field)               # drop CR if file has CRLF
+      sub(/^[ \t]+/,"",field)           # trim leading space
+      sub(/[ \t]+$/,"",field)           # trim trailing space
+      print field
+    }' "$file") || { echo "Error: failed to read '$file' with awk" >&2; return 3; }
+
+  if [ -z "$loc" ]; then
+    echo "Error: no such data line (k=$k) in '$file'" >&2
+    return 4
+  fi
+
+  # Strip surrounding double quotes if present
+  loc="${loc%\"}"
+  loc="${loc#\"}"
+
+  # Extract leading alphabetic sequence and print lower-case
+  if [[ "$loc" =~ ^([A-Za-z]+) ]]; then
+    # portable lowercase: use tr
+    printf '%s\n' "$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
+    return 0
+  fi
+
+  echo "Error: location value does not contain alphabetic name: '$loc'" >&2
+  return 5
+}

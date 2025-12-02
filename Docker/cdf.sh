@@ -7,7 +7,7 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
-clean_logdir
+# clean_logdir
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
@@ -39,22 +39,22 @@ do
     done    
 done
 
-# debug "Parsing results..."
-# ${DIR}/parse_ycsb_to_csv.sh ${DIR}/logs/* > ${RESULTSDIR}/cdf.csv
+debug "Parsing results..."
+${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/cdf.csv
 
-# debug "Plotting..."
-# python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} 3 ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
+debug "Plotting..."
+python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} 3 ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
 
-# pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
-# "\documentclass{article}\
-#  \usepackage{pgfplots}\
-#  \usepackage{tikz}\
-#  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
-#  \usetikzlibrary{shapes,arrows}\
-#  \usepgflibrary{shapes.symbols}\
-#  \usetikzlibrary{shapes.symbols}\
-#  \usetikzlibrary{patterns}\
-#  \usetikzlibrary{matrix, positioning, pgfplots.groupplots}\
-#  \begin{document}\
-#  \thispagestyle{empty}\centering\input{cdf.tex}\
-#  \end{document}" > /dev/null
+pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
+"\documentclass{article}\
+ \usepackage{pgfplots}\
+ \usepackage{tikz}\
+ \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
+ \usetikzlibrary{shapes,arrows}\
+ \usepgflibrary{shapes.symbols}\
+ \usetikzlibrary{shapes.symbols}\
+ \usetikzlibrary{patterns}\
+ \usetikzlibrary{matrix, positioning, pgfplots.groupplots}\
+ \begin{document}\
+ \thispagestyle{empty}\centering\input{cdf.tex}\
+ \end{document}" > /dev/null

@@ -22,7 +22,7 @@ ordinal_suffix() {
 }
 
 # Output concise header
-header="protocol,nodes,workload,conflict_rate,op,clients,tput"
+header="protocol,nodes,workload,conflict_rate,city,op,clients,tput"
 for p in $(seq 1 100); do
     header="$header,p$p"
 done
@@ -31,11 +31,12 @@ echo "$header"
 for file in "$@"; do
     filename=$(basename "$file")
 
-    # Parse filename: <protocol>_<nodes>_<workload>_<timestamp>.dat
-    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_([^_]+)_([0-9]+)\.dat$ ]]; then
+    # Parse filename: <protocol>_<nodes>_<workload>_<timestamp>_<city>.dat
+    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_([A-Za-z]+)\.dat$ ]]; then
         protocol="${BASH_REMATCH[1]}"
         nodes="${BASH_REMATCH[2]}"
         workload="${BASH_REMATCH[3]}"
+	city="${BASH_REMATCH[5]}"
     else
 	error "Ignoring ${filename}"
 	continue
@@ -65,7 +66,7 @@ for file in "$@"; do
 
     for op in read insert update scan readmodifywrite; do
         op_upper=$(echo "$op" | awk '{print toupper($0)}')
-        row="$protocol,$nodes,$workload,$conflict_rate,$op,$clients,$tput"
+        row="$protocol,$nodes,$workload,$conflict_rate,$city,$op,$clients,$tput"
 
         for p in $(seq 1 100); do
             ord=$(ordinal_suffix $p)
