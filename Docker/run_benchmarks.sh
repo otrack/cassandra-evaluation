@@ -135,6 +135,7 @@ run_ycsb() {
 	then
 	    consistency_level="QUORUM"
 	fi
+	hosts=$(get_container_ip ${nearby_database})
 	extra_opts_str+="-p hosts=$hosts -p port=$port \
 -p cassandra.writeconsistencylevel=$consistency_level \
 -p cassandra.readconsistencylevel=$consistency_level"
