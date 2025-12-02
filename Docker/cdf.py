@@ -4,6 +4,24 @@ import pandas as pd
 
 from emulate_latency import haversine
 
+def escape_latex(text):
+    """Escape special LaTeX characters in a string."""
+    replacements = [
+        ('\\', '\\textbackslash{}'),
+        ('&', '\\&'),
+        ('%', '\\%'),
+        ('$', '\\$'),
+        ('#', '\\#'),
+        ('_', '\\_'),
+        ('{', '\\{'),
+        ('}', '\\}'),
+        ('~', '\\textasciitilde{}'),
+        ('^', '\\textasciicircum{}'),
+    ]
+    for old, new in replacements:
+        text = text.replace(old, new)
+    return text
+
 def compute_optimum_cdf(latlon, n_nodes):
     latencies = []
     for i in range(n_nodes):
@@ -56,11 +74,12 @@ def main():
     
     # Filter by city if the column exists
     if 'city' in df.columns:
-        available_cities = df['city'].unique().tolist()
-        df = df[df['city'] == city]
-        if df.empty:
+        df_filtered = df[df['city'] == city]
+        if df_filtered.empty:
+            available_cities = df['city'].unique().tolist()
             print(f"WARNING: No data found for city '{city}'. Available cities: {available_cities}", file=sys.stderr)
             sys.exit(1)
+        df = df_filtered
     latdf = pd.read_csv(lat_csv)
     node_lats, node_lons = [], []
     for idx, row in latdf.iloc[:num_nodes].iterrows():
@@ -165,7 +184,8 @@ def main():
         f.write("    \\end{tikzpicture}\n")
 
         # --- Caption with color swatches ---
-        f.write(f"    \\caption{{CDF of operation latencies for different YCSB workloads and Cassandra protocols at {city}. ")
+        city_escaped = escape_latex(city)
+        f.write(f"    \\caption{{CDF of operation latencies for different YCSB workloads and Cassandra protocols at {city_escaped}. ")
         for proto_idx, proto in enumerate(protocol_order):
             col = color_cycle[proto_idx % len(color_cycle)]
             f.write(r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.8,0);~{{{proto}}}".format(color=col, proto=proto))
