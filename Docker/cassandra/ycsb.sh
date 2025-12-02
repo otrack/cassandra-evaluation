@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 
-DIR=$(dirname "${BASH_SOURCE[0]}")
+CASSANDRA_DIR=$(dirname "${BASH_SOURCE[0]}")
 
-source ${DIR}/functions_ycsb.sh
-
-# Function to create the ycsb keyspace
-create_keyspace() {
-    timeout=$1
-    node_count=$2
+cassandra_create_keyspace() {
+    local timeout=$1
+    local node_count=$2
+    local container=$(config "node_name")${node_count}
     drop_keyspace_command="DROP KEYSPACE IF EXISTS ycsb;"
     create_keyspace_command="CREATE KEYSPACE IF NOT EXISTS ycsb WITH replication = {'class': 'SimpleStrategy', 'replication_factor': $node_count};"
     
     # Drop the keyspace if it exists
-    docker exec -i cassandra-node"$node_count" cqlsh --request-timeout="$timeout" -e "$drop_keyspace_command"
+    docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$drop_keyspace_command"
     if [ $? -eq 0 ]; then
         debug "Keyspace 'ycsb' dropped if it existed."
     else
@@ -21,7 +19,7 @@ create_keyspace() {
     fi
     
     # Create the keyspace
-    docker exec -i cassandra-node"$node_count" cqlsh --request-timeout="$timeout" -e "$create_keyspace_command"
+    docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$create_keyspace_command"
     if [ $? -eq 0 ]; then
         debug "Keyspace 'ycsb' created."
     else
@@ -31,10 +29,11 @@ create_keyspace() {
 }
 
 # Function to create the usertable
-create_usertable() {
-    timeout=$1
-    transaction_mode=$2
-    node_count=$3
+cassandra_create_usertable() {
+    local timeout=$1
+    local transaction_mode=$2
+    local node_count=$3
+    local container=$(config "node_name")${node_count}	
     truncate_table_command="TRUNCATE ycsb.usertable;"
     if [ "$transaction_mode" == "full" ]; then
         create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 VARCHAR, field1 VARCHAR, field2 VARCHAR, field3 VARCHAR, field4 VARCHAR, field5 VARCHAR, field6 VARCHAR, field7 VARCHAR, field8 VARCHAR, field9 VARCHAR) WITH transactional_mode = 'full';"
@@ -43,7 +42,7 @@ create_usertable() {
     fi
 
     # Create the table if it does not exist
-    docker exec -i cassandra-node"$node_count" cqlsh --request-timeout="$timeout" -e "$create_table_command"
+    docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$create_table_command"
     if [ $? -eq 0 ]; then
         debug "Table 'usertable' created or already exists."
     else
@@ -52,7 +51,7 @@ create_usertable() {
     fi
 
     # Truncate the table to empty it
-    docker exec -i cassandra-node"$node_count" cqlsh --request-timeout="$timeout" -e "$truncate_table_command"
+    docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$truncate_table_command"
     if [ $? -eq 0 ]; then
         debug "Table 'usertable' truncated."
     else
@@ -60,35 +59,3 @@ create_usertable() {
         exit 1
     fi
 }
-
-# Main script
-if [ $# -ne 7 ]; then
-    echo "Usage: $0 <protocol> <number_of_threads> <output_file> <workload_type> <workload> <record_count> <operation_count>"
-    echo "Example: one 1 results.txt site.ycsb.CoreWorkload a 1 1"
-    echo "Was: $@ ($#)"
-    exit 1
-fi
-
-protocol=$1
-nthreads=$2
-# Determine transaction mode
-if [ "$protocol" == "accord" ]; then 
-    transaction_mode="full"
-else
-    transaction_mode="bruh"
-fi
-output_file=$3
-workload_type=$4
-workload="workloads/workload$5"
-record_count=$6
-operation_count=$7
-
-# Create the keyspace if it doesn't exist
-create_keyspace 3600 "$node_count"
-
-# Create the usertable if it doesn't exist
-create_usertable 3600 "$transaction_mode" "$node_count"
-
-# Load data and write performance results to the output file
-run_ycsb "load" "$ycsb_dir" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$output_file" "$nthreads"
-

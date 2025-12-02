@@ -5,12 +5,15 @@
 DIR=$(dirname "${BASH_SOURCE[0]}")
 
 source ${DIR}/utils.sh
+source ${DIR}/run_benchmarks.sh
 
-clean_logdir
+# clean_logdir
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
-protocols="quorum accord paxos"
+workloads="a"
+protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
+protocols="swiftpaxos-paxos"
 nodes=3
 records=1000
 clients=12
@@ -29,7 +32,7 @@ do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/${p}_${nodes}_${w}_${ts}.dat"
-	    ./run_benchmarks.sh ${p} ${c} ${nodes} ${workload_type} ${w} ${records} $((clients * ops_per_client)) ${output_file} ${do_create_and_load} ${do_clean_up}
+	    run_benchmark ${p} ${c} ${nodes} ${workload_type} ${w} ${records} $((clients * ops_per_client)) ${output_file} ${do_create_and_load} ${do_clean_up}
 	    do_create_and_load=0
 	    count=$((count+1))
 	done
@@ -37,7 +40,7 @@ do
 done
 
 debug "Parsing results..."
-${DIR}/parse_ycsb_to_csv.sh ${DIR}/logs/* > ${RESULTSDIR}/cdf.csv
+${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/cdf.csv
 
 debug "Plotting..."
 python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} 3 ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex

@@ -33,10 +33,10 @@ def emulate_latency(num_nodes, node_locations):
         return
             
     client = docker.from_env()
-    network_name = 'cassandra-network'
+    network_name = config["network_name"]
 
     for i in range(num_nodes):
-        src = f'cassandra-node{i + 1}'
+        src = f'{config["node_name"]}{i + 1}'
         src_container = client.containers.get(src)
         exec_command = f"tc qdisc del dev eth0 root"
         debug(f"{src} {exec_command}")
@@ -51,8 +51,8 @@ def emulate_latency(num_nodes, node_locations):
     # Add specific latencies based on geographical distances
     for i in range(num_nodes):
         for j in range(i + 1, num_nodes):
-            src = f'cassandra-node{i + 1}'
-            dst = f'cassandra-node{j + 1}'
+            src = f'{config["node_name"]}{i + 1}'
+            dst = f'{config["node_name"]}{j + 1}'
             lat1, lon1 = node_locations[i]
             lat2, lon2 = node_locations[j]
             distance = haversine(lat1, lon1, lat2, lon2)

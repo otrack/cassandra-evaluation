@@ -24,21 +24,13 @@ def wait_for_log(container, log_pattern, timeout=300):
 
 def create_cassandra_cluster(num_nodes, cassandra_image):
     client = docker.from_env()
-    
-    # Create a Docker network if it doesn't exist
-    network_name = 'cassandra-network'
-    try:
-        client.networks.get(network_name)
-        debug(f"Network '{network_name}' already exists.")
-    except docker.errors.NotFound:
-        client.networks.create(network_name, driver="bridge")
-        debug(f"Created network '{network_name}'.")
+    network_name = config["network_name"]
 
     # Start the Cassandra nodes
     containers = []
     log_pattern = r"Startup complete"
     for i in range(1, num_nodes + 1):
-        container_name = f'cassandra-node{i}'
+        container_name = f'{config["node_name"]}{i}'
         dc_name = f'DC{i}'
         try:
             container = client.containers.run(
@@ -49,7 +41,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 mem_limit=config["xmx"],
                 environment={
                     "JVM_OPTS" : " -Xms2g -Xmx"+config["xmx"], 
-                    "CASSANDRA_SEEDS": "cassandra-node1" if i > 1 else "",
+                    "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
                     "CASSANDRA_DC": dc_name,
                     "CASSANDRA_RACK": "RAC1"
