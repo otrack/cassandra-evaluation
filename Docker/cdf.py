@@ -2,7 +2,50 @@ import sys
 import math
 import pandas as pd
 
-from emulate_latency import haversine
+from emulate_latency import haversine, estimate_latency
+
+def compute_optimum_per_replica(latlon, n_nodes):
+    """
+    For each replica i (0..n_nodes-1), compute the RTT to the closest quorum
+    (majority) of replicas.
+
+    Algorithm:
+      - quorum_size = floor(n_nodes/2) + 1 (majority)
+      - for replica i, compute haversine distances to all other replicas
+      - take the (quorum_size - 1) nearest other replicas (since the local replica
+        itself counts toward the quorum)
+      - the RTT for replica i is the largest of those selected distances divided
+        by 100 (same units/scale used elsewhere)
+    Returns a list of RTTs (same order as latlon[0..n_nodes-1]).
+    """
+    optimums = []
+    # quorum (majority)
+    quorum = (n_nodes // 2) + 1
+
+    for i in range(n_nodes):
+        dists = []
+        for j in range(n_nodes):
+            if i == j:
+                continue
+            dist = haversine(latlon[i][0], latlon[i][1], latlon[j][0], latlon[j][1])
+            dists.append(dist)
+
+        if not dists:
+            # single-node case -> no neighbour, fallback to 0
+            optimums.append(0.0)
+            continue
+
+        # sort ascending and pick the nearest (quorum - 1) other replicas
+        dists.sort()
+        need = max(1, quorum - 1)  # at least 1 if quorum>1, safe if quorum==1
+        selected = dists[:min(need, len(dists))]
+
+        # RTT to reach a quorum is determined by the slowest member in that quorum
+        max_dist = max(selected)
+        rtt = 2*estimate_latency(max_dist)
+        optimums.append(rtt)
+
+    return optimums
 
 def escape_latex(text):
     """Escape special LaTeX characters in a string."""
@@ -63,14 +106,27 @@ def main():
             sys.exit(1)
         df = df_filtered
     latdf = pd.read_csv(lat_csv)
-    node_lats, node_lons = [], []
+    node_lats, node_lons, node_locs = [], [], []
     for idx, row in latdf.iloc[:num_nodes].iterrows():
         try:
             node_lats.append(float(row['lat']))
             node_lons.append(float(row['lon']))
+            node_locs.append(row['loc'] if 'loc' in row else '')
         except Exception as e:
             print(f"WARNING: Skipping row {idx+2} in latencies.csv due to error: {e}", file=sys.stderr)
     latlon = list(zip(node_lats, node_lons))
+
+    # Compute theoretical optimum for the specified city
+    city_optimum = None
+    city_index = None
+    for idx, loc in enumerate(node_locs):
+        if loc == city:
+            city_index = idx
+            break
+    if city_index is not None and len(latlon) > 0:
+        optimums = compute_optimum_per_replica(latlon, num_nodes)
+        if city_index < len(optimums):
+            city_optimum = optimums[city_index]
 
     # Get all unique operations
     all_ops = set()
@@ -154,6 +210,10 @@ def main():
                         f.write(f"          {val} {pct}\n")
                     f.write("          };\n")
 
+                # Draw vertical gray line for the theoretical optimum
+                if city_optimum is not None:
+                    f.write(f"          \\draw[gray, thick] (axis cs:{city_optimum:.2f},0) -- (axis cs:{city_optimum:.2f},1);\n")
+
         f.write("      \\end{groupplot}\n")
         f.write("    \\end{tikzpicture}\n")
 
@@ -165,6 +225,10 @@ def main():
             f.write(r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.8,0);~{{{proto}}}".format(color=col, proto=proto))
             if proto_idx < len(protocol_order) - 1:
                 f.write(", ")
+        # Add reference to the gray optimum line in the caption
+        if city_optimum is not None:
+            f.write(". ")
+            f.write(r"\protect\tikz \protect\draw[thick, gray] (0,0) -- +(0.8,0);~{optimum}")
         f.write("    \\label{fig:workload-cdf}}\n")
         f.write("\\end{figure}\n")
 
