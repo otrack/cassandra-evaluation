@@ -38,8 +38,8 @@ def compute_optimum_per_replica(latlon, n_nodes):
       - for replica i, compute haversine distances to all other replicas
       - take the (quorum_size - 1) nearest other replicas (since the local replica
         itself counts toward the quorum)
-      - the RTT for replica i is the largest of those selected distances divided
-        by 100 (same units/scale used elsewhere)
+      - the RTT for replica i is 2 * estimate_latency(max_distance) where
+        max_distance is the distance to the farthest replica in the quorum
     Returns a list of RTTs (same order as latlon[0..n_nodes-1]).
     """
     optimums = []
