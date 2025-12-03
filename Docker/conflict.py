@@ -38,8 +38,8 @@ def compute_optimum_per_replica(latlon, n_nodes):
       - for replica i, compute haversine distances to all other replicas
       - take the (quorum_size - 1) nearest other replicas (since the local replica
         itself counts toward the quorum)
-      - the RTT for replica i is the largest of those selected distances divided
-        by 100 (same units/scale used elsewhere)
+      - the RTT for replica i is 2 * estimate_latency(max_distance) where
+        max_distance is the distance to the farthest replica in the quorum
     Returns a list of RTTs (same order as latlon[0..n_nodes-1]).
     """
     optimums = []
@@ -302,16 +302,15 @@ def main():
             f.write("      };\n")
             f.write(f"      \\addlegendentry{{{proto}}}\n\n")
 
-        # Draw one horizontal dashed line per replica (theoretical optimum)
-        for i, mean in enumerate(replica_means):
-            col = color_cycle[(len(protocol_order) + i) % len(color_cycle)]
-            label = replica_labels[i] if i < len(replica_labels) else f"replica-{i}"
-            # draw a horizontal line from x=0 to x=1 at the mean value
-            f.write(f"      \\addplot+[{col}, dashed, thick] table {{\n")
-            f.write(f"        0.00 {mean:.2f}\n")
-            f.write(f"        1.00 {mean:.2f}\n")
+        # Draw a single horizontal dashed gray line for the average theoretical optimum across all locations
+        if replica_means:
+            avg_optimum = sum(replica_means) / len(replica_means)
+            # draw a horizontal line from x=0 to x=1 at the average optimum value
+            f.write(f"      \\addplot+[gray, dashed, thick] table {{\n")
+            f.write(f"        0.00 {avg_optimum:.2f}\n")
+            f.write(f"        1.00 {avg_optimum:.2f}\n")
             f.write("      };\n")
-            f.write(f"      \\addlegendentry{{{label} (opt)}}\n\n")
+            f.write("      \\addlegendentry{optimum}\n\n")
 
         # include data replica location in caption (third entry in latencies.csv if present)
         f.write("    \\end{axis}\n")
