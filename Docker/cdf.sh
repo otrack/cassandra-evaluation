@@ -15,6 +15,7 @@ workloads="a"
 protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
 protocols="swiftpaxos-paxos"
 nodes=3
+city="Hanoi"
 records=1000
 clients=12
 ops_per_client=1000
@@ -43,7 +44,7 @@ debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/cdf.csv
 
 debug "Plotting..."
-python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} 3 ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
+python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${city} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
 
 pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
