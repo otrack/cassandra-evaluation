@@ -11,11 +11,11 @@ source ${DIR}/run_benchmarks.sh
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
-workloads="a"
+workloads="a c"
 protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
-protocols="swiftpaxos-paxos"
+protocols="quorum accord swiftpaxos-paxos"
 nodes=3
-city="Hanoi"
+city="hanoi"
 records=1000
 clients=12
 ops_per_client=1000

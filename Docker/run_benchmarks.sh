@@ -121,7 +121,7 @@ run_ycsb() {
     local ycsb_client="swiftpaxos"
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
     then
-	extra_opts_str+="-p maddr=${hosts} \
+	extra_opts_str+=" -p maddr=${hosts} \
 -p mport=${port} \
 -p verbose=false"
     else
@@ -136,7 +136,7 @@ run_ycsb() {
 	    consistency_level="QUORUM"
 	fi
 	hosts=$(get_container_ip ${nearby_database})
-	extra_opts_str+="-p hosts=$hosts -p port=$port \
+	extra_opts_str+=" -p hosts=$hosts -p port=$port \
 -p cassandra.writeconsistencylevel=$consistency_level \
 -p cassandra.readconsistencylevel=$consistency_level"
     fi
