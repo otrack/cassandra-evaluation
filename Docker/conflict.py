@@ -302,16 +302,16 @@ def main():
             f.write("      };\n")
             f.write(f"      \\addlegendentry{{{proto}}}\n\n")
 
-        # # Draw one horizontal dashed line per replica (theoretical optimum)
-        # for i, mean in enumerate(replica_means):
-        #     col = color_cycle[(len(protocol_order) + i) % len(color_cycle)]
-        #     label = replica_labels[i] if i < len(replica_labels) else f"replica-{i}"
-        #     # draw a horizontal line from x=0 to x=1 at the mean value
-        #     f.write(f"      \\addplot+[{col}, dashed, thick] table {{\n")
-        #     f.write(f"        0.00 {mean:.2f}\n")
-        #     f.write(f"        1.00 {mean:.2f}\n")
-        #     f.write("      };\n")
-        #     f.write(f"      \\addlegendentry{{{label} (opt)}}\n\n")
+        # Draw one horizontal dashed line per replica (theoretical optimum)
+        for i, mean in enumerate(replica_means):
+            col = color_cycle[(len(protocol_order) + i) % len(color_cycle)]
+            label = replica_labels[i] if i < len(replica_labels) else f"replica-{i}"
+            # draw a horizontal line from x=0 to x=1 at the mean value
+            f.write(f"      \\addplot+[{col}, dashed, thick] table {{\n")
+            f.write(f"        0.00 {mean:.2f}\n")
+            f.write(f"        1.00 {mean:.2f}\n")
+            f.write("      };\n")
+            f.write(f"      \\addlegendentry{{{label} (opt)}}\n\n")
 
         # include data replica location in caption (third entry in latencies.csv if present)
         f.write("    \\end{axis}\n")

@@ -22,21 +22,7 @@ def escape_latex(text):
         text = text.replace(old, new)
     return text
 
-def compute_optimum_cdf(latlon, n_nodes):
-    latencies = []
-    for i in range(n_nodes):
-        dists = []
-        for j in range(n_nodes):
-            if i == j: continue
-            dist = haversine(latlon[i][0], latlon[i][1], latlon[j][0], latlon[j][1])
-            dists.append(dist)
-        dists = sorted(dists)[:1]
-        for d in dists:
-            rtt = d / 100
-            latencies.append(rtt)
-    return sorted(latencies)
-
-def get_global_latency_range(df, workloads, all_ops, num_nodes, opt_latencies):
+def get_global_latency_range(df, workloads, all_ops, num_nodes):
     min_latency = float('inf')
     max_latency = float('-inf')
     for workload in workloads:
@@ -49,9 +35,6 @@ def get_global_latency_range(df, workloads, all_ops, num_nodes, opt_latencies):
                 if latencies:
                     min_latency = min(min_latency, min(latencies))
                     max_latency = max(max_latency, max(latencies))
-    if opt_latencies:
-        min_latency = min(min_latency, min(opt_latencies))
-        max_latency = max(max_latency, max(opt_latencies))
     if min_latency == float('inf'): min_latency = 0
     if max_latency == float('-inf'): max_latency = 1
     return min_latency, max_latency
@@ -61,7 +44,6 @@ def main():
         print(
             "Usage: python cdf.py results.csv workload1 [workload2 ...] num_nodes city latencies.csv output.tex"
         )
-        print(len(sys.argv))
         sys.exit(1)
     results_csv = sys.argv[1]
     workloads = sys.argv[2:-4]
@@ -89,8 +71,6 @@ def main():
         except Exception as e:
             print(f"WARNING: Skipping row {idx+2} in latencies.csv due to error: {e}", file=sys.stderr)
     latlon = list(zip(node_lats, node_lons))
-    opt_latencies = compute_optimum_cdf(latlon, num_nodes)
-    n_opt = len(opt_latencies)
 
     # Get all unique operations
     all_ops = set()
@@ -111,7 +91,7 @@ def main():
                 if proto not in protocol_order:
                     protocol_order.append(proto)
 
-    min_latency, max_latency = get_global_latency_range(df, workloads, all_ops, num_nodes, opt_latencies)
+    min_latency, max_latency = get_global_latency_range(df, workloads, all_ops, num_nodes)
     xpad = 0.05 * (max_latency - min_latency)
     min_latency = max(0, min_latency - xpad)
     max_latency = max_latency + xpad
@@ -173,12 +153,6 @@ def main():
                         pct = i/99
                         f.write(f"          {val} {pct}\n")
                     f.write("          };\n")
-                # # Optimum
-                # f.write("          \\addplot+[gray, dashed, mark=none] table {\n")
-                # for i, val in enumerate(opt_latencies):
-                #     pct = i/(n_opt-1) if n_opt > 1 else 1
-                #     f.write(f"          {val:.2f} {pct}\n")
-                # f.write("          };\n")
 
         f.write("      \\end{groupplot}\n")
         f.write("    \\end{tikzpicture}\n")
@@ -191,9 +165,7 @@ def main():
             f.write(r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.8,0);~{{{proto}}}".format(color=col, proto=proto))
             if proto_idx < len(protocol_order) - 1:
                 f.write(", ")
-        # Optimum
-        f.write(". The optimum (dashed gray line) corresponds to a protocol that always reaches the closest quorum.}\n")
-        f.write("    \\label{fig:workload-cdf}\n")
+        f.write("    \\label{fig:workload-cdf}}\n")
         f.write("\\end{figure}\n")
 
 if __name__ == "__main__":

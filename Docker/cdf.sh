@@ -7,13 +7,13 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
-# clean_logdir
+clean_logdir
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
-workloads="a c"
+workloads="a"
 protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
-protocols="quorum accord swiftpaxos-paxos"
+protocols="swiftpaxos-paxos"
 nodes=3
 city="hanoi"
 records=1000

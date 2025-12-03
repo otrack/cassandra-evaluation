@@ -11,7 +11,7 @@ clean_logdir
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
 thetas=$(seq -f "%.1f" 0 0.1 1.0)
-protocols="quorum accord swiftpaxos-paxos"
+protocols="swiftpaxos-paxos"
 nodes=3
 records=1000
 clients=12
