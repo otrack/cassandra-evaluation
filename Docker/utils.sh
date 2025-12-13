@@ -247,10 +247,9 @@ get_location() {
   loc="${loc%\"}"
   loc="${loc#\"}"
 
-  # Extract leading alphabetic sequence and print lower-case
+  # Extract leading alphabetic sequence for the location
   if [[ "$loc" =~ ^([A-Za-z]+) ]]; then
-    # portable lowercase: use tr
-    printf '%s\n' "$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
+    printf '%s\n' "$(printf '%s' "${BASH_REMATCH[1]}")"
     return 0
   fi
 
