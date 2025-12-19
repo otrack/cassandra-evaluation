@@ -169,7 +169,7 @@ def main():
         f.write("        ymajorgrids=true,\n")
         f.write("        xmajorgrids=true,\n")
         f.write("        ymin=0, ymax=1,\n")
-        f.write(f"        xmin={min_latency:.2f},\n")
+        f.write(f"        xmin={0:.2f},\n")
         f.write(f"        xmax={500:.2f},\n")
         f.write("        ytick={0,0.5,1},\n")
         f.write("        cycle list name=color list,\n")
@@ -219,7 +219,7 @@ def main():
 
         # --- Caption with color swatches ---
         city_escaped = escape_latex(city)
-        f.write(f"    \\caption{{CDF of operation latencies for different YCSB workloads and Cassandra protocols at {city_escaped}. ")
+        f.write(f"    \\caption{{CDF of operation latencies for different YCSB workloads and replication protocols at {city_escaped}. ")
         for proto_idx, proto in enumerate(protocol_order):
             col = color_cycle[proto_idx % len(color_cycle)]
             f.write(r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.8,0);~{{{proto}}}".format(color=col, proto=proto))

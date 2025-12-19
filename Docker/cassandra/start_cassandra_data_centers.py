@@ -1,8 +1,4 @@
-import docker
-import sys
-import time
-import math
-import re
+import docker, sys, time, math, re, csv
 from datetime import datetime
 
 def debug(msg):
@@ -10,6 +6,17 @@ def debug(msg):
         timestamp = datetime.now().strftime("%s:%f")
         print(f"[{timestamp}] \033[32m{msg}\033[0m")
 
+def read_locations(file_path):
+    """
+    Read lat, lon, and loc from the CSV file.
+    """
+    locations = []
+    with open(file_path, 'r') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            locations.append((float(row['lat']), float(row['lon']), row['loc']))
+    return locations
+        
 def wait_for_log(container, log_pattern, timeout=300):
     log_stream = container.logs(stream=True)
     start_time = time.time()
@@ -25,13 +32,13 @@ def wait_for_log(container, log_pattern, timeout=300):
 def create_cassandra_cluster(num_nodes, cassandra_image):
     client = docker.from_env()
     network_name = config["network_name"]
-
+    
     # Start the Cassandra nodes
     containers = []
     log_pattern = r"Startup complete"
-    for i in range(1, num_nodes + 1):
+    for i in range(1, num_nodes+1):
         container_name = f'{config["node_name"]}{i}'
-        dc_name = f'DC{i}'
+        _, _, dc_name = locations[i-1]
         try:
             container = client.containers.run(
                 image=cassandra_image,
@@ -73,6 +80,8 @@ if __name__ == "__main__":
         if num_nodes < 1:
             raise ValueError("Number of nodes must be at least 1.")
 
+        locations = read_locations('latencies.csv')
+        
         config = {}
         with open('exp.config', 'r') as f:
             for line in f:
@@ -91,7 +100,7 @@ if __name__ == "__main__":
                         except ValueError:
                             pass
                     config[key.strip()] = value
-        
+                    
         cassandra_image = config["accord_cassandra_image"] if protocol == "accord" else config["normal_cassandra_image"]
     except ValueError as e:
         print(f"Invalid number of nodes: {e}")

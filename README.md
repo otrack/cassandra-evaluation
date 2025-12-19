@@ -1,5 +1,5 @@
-This repository contains a set of scripts to benchmark Apache Cassandra 5 with the Yahoo! Cloud Serving Benchmark (YCSB).
-Below, we provide a brief how-to guide.
+This repository contains a set of scripts to benchmark Cassandra replication protocols with the Yahoo! Cloud Serving Benchmark (YCSB).
+It also offers a way to compare it against the [SwiftPaxos](https://github.com/imdea-software/swiftpaxos) library which implements a basic replicated key-value store several state-of-the-art protocols such as Paxos, Egalitarian Paxos, and SwiftPaxos.
 
 ## Overview 
 
@@ -7,21 +7,27 @@ The benchmark suite uses the following forks:
 - [YCSB](https://github.com/otrack/YCSB) (`cassandra5` branch)
 - [Apache Cassandra](https://github.com/otrack/cassandra/tree/testing6) (`testing6` branch)
 - [Cassandra Docker Library](https://github.com/otrack/cassandra-docker-library) 
+- [SwiftPaxos](https://github.com/imdea-software/swiftpaxos) (`container` branch)
+
+There are two implementations of the benchmarks, one for Docker and another for Google Cloud Platform (GCP).
+In what follows, we detail the instruction for the Docker implementation.
 
 ## Building artifacts
 
-The instructions that follow work for Java 11.
-Higher versions of Java might require adjustements.
+The instructions that follow work for Java 11+.
 
 ### YCSB
-
 ``` bash
-git clone https://github.com/otrack/YCSB
+git clone --single-branch -b cassandra5 https://github.com/otrack/YCSB
 cd YCSB
-git checkout cassandra5
-mvn -pl site.ycsb:cassandra-binding -am clean install
-mvn -pl core dependency:copy-dependencies
+./bin/image.sh cassandra-cql swiftpaxos
+```
 
+### SwiftPaxos
+``` bash
+git clone --single-branch -b container https://github.com/imdea-software/swiftpaxos
+cd swiftpaxos
+./bin/image.sh
 ```
 
 ### Cassandra
@@ -42,55 +48,26 @@ docker build -t user/cassandra-accord:latest .
 
 ## Benchmarking
 
-There are two possible environments
+As mentioned before, there are two possible environments
 - `Docker` uses containers 
 - `GCP` uses Google Cloud Platform
 
-Below, we explain how to use the docker one.
+Below, we explain how to use the Docker one.
 
 ### Docker
 
-The benchmark relies on containers to emulate a geo-distributed system.
-The structure of the `Docker`directory is as follows:
-- `start_cassandra_data_centers.py` deploys a geo-distributed system (one Cassandra node per DC site)
-- `load_ycsb.sh` executes the load phase of YCSB (insert data in Cassandra)
-- `run_ycsb.sh` executes the run phase of YCSB (do CRUD operations against Cassandra)
-- `run_benchmark.sh` deploys the Cassandra instances, inject latency in the system load YCSB then run it
-- `run_all.sh` invokes the previous script
+At a high-level, the benchmark creates a set of replicas and clients.
+These are spread across several locations to simulate datacenters.
+Currently, there is one data replica and one client per datacenter.
+WAN is simulated thanks to the Linux traffic shapping tool (tc).
+Replicas and clients are running in Docker containers.
+The client share the same network interface as the nearby replica.
 
-Typically, a call to `run_benchmark.sh`is of the following form:
-	./run_benchmarks.sh accord 1 3 3 c 1 100 1
+There are two benchmarks:
+- `cdf.sh` computes the CDF of the latency distribution at one replica across several (standard) YCSB workloads.
+- `conflict.sh` is plotting the average latency across all clients when changing a fixed conflict rate for updates.
+The results of the benchmarks are PDF plots created under `results/`.
+The logs of a benchmark execution are created under `logs/`.
+Please be careful that any new invocation of a benchmark cleans up the logs of the previous runs.
 
-This means that 
-- `accord` benchmarks Accord (more on this below)
-- `1` a single client thread is used
-- `3` the system starts with 3 Cassandra nodes
-- `3` it ends with 3 Cassandra nodes (no new node is added after a round of experiments)
-- `c` the benchark runs workload c in YCSB (a read-only workload) 
-- `1` there is a single item in the dataset
-- `100` the client(s) execute in the run phase 100 operations
-- `1` load YCSB dataset before doing running the benchmark (useful to skip the loading phase when running multiple benchmarks)
-
-#### Running the benchmark
-
-The file `exp.config` contains all the configuration parameters.
-These are detailed below.
-
-First of all install the Docker python library on your machine if needed (e.g., `sudo apt install python3-docker`).
-The files `load_ycsb.sh` and `run_ycsb.sh` makes use of the YCSB directory. 
-Please adjust the variable `ycsb_dir` appropriately.  
-Edit `accord_cassandra_image` to indicate the name of your Docker image.
-
-To launch the benchmark, use `run_all.sh`.
-This will generate a CDF plot under `results`.
-
-### Going further
-
-Instead of Accord, it is possible to use the two other replication protocols in Cassandra (namely, QUORUM and LOCAL).
-For this, one needs to compile a "standard" version of Cassandra.
-This requires the following steps:
-- edit `conf/cassandra.yaml` and set `enabled` in the `accord` section to `false`
-- recompile Cassandra with ant
-- create a new Docker image, e.g., after copying the tarball, `docker build -t user/cassandra:latest .`
-- change the `normal_cassandra_image` in `exp.config` appropriately
-
+Before executing the benchmarks, you will need to fix the configuration parameters that are defined in the file `exp.config`.

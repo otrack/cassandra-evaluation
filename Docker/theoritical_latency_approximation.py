@@ -23,6 +23,7 @@ def one_wide_area_round_trip(node_count: int) -> float:
         rep_pos = locations_lat_long[i]
         latency_list.append(estimate_latency(haversine(current_pos[0], current_pos[1], rep_pos[0], rep_pos[1])))
     latency_list.sort()
+    print(latency_list)
     return latency_list[quorum_size - 1] * 2
 
 def quorum_estimation(node_count: int) -> float:
@@ -59,3 +60,5 @@ def write_paxos_estimation(node_count: int) -> float:
 def accord_estimation(node_count: int, fast_path_quotient: float = 0.3) -> float:
     assert (fast_path_quotient > 0. and fast_path_quotient <= 1.)
     return accord_operation_estimation_fast_path(node_count) * fast_path_quotient + (1 - fast_path_quotient) * accord_operation_estimation_slow_path(node_count)
+
+print(one_wide_area_round_trip(3))

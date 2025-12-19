@@ -89,7 +89,8 @@ run_ycsb() {
         # printf %q produces a shell-escaped representation; safe to append to the command string
         extra_opts_str+=" $(printf '%q' "$o")"
       done
-    fi   
+    fi
+    log ${extra_opts_str[@]}
 
     local docker_args="--rm -d --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
     
@@ -236,8 +237,17 @@ run_benchmark() {
     do
 	nearby_database=$(config "node_name")$i
 	location=$(get_location $i ${DIR}/latencies.csv)
-	log ${location} 
-	run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
+	log ${location}
+
+	# FIXME move this elsewhere
+	EXTRA_YCSB_OPTS2=("${EXTRA_YCSB_OPTS[@]}")
+	if [ "${workload_type}" == "site.ycsb.workloads.ConflictWorkload" ]; 
+	then
+	    EXTRA_YCSB_OPTS2+=("-p")
+	    EXTRA_YCSB_OPTS2+=("conflict.shift=$(( (record_count / node_count) * (i - 1) ))")
+	fi
+
+	run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}"
     done
     
     for i in $(seq 1 1 ${node_count});

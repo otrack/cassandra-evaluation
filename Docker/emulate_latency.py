@@ -64,7 +64,7 @@ def emulate_latency(num_nodes, node_locations):
                 src_ip = src_container.attrs['NetworkSettings']['Networks'][network_name]['IPAddress']
                 
                 # Add latency from src to dst
-                exec_command = f"tc class add dev eth0 parent 1:1 classid 1:1 htb rate 100mbit"
+                exec_command = f"tc class add dev eth0 parent 1:1 classid 1:{j+1}0 htb rate 100mbit"
                 debug(f"{src} {exec_command}")
                 src_container.exec_run(exec_command) 
                 exec_command = f"tc qdisc add dev eth0 parent 1:{j+1}0 handle {j+1}0: netem delay {latency}ms"
@@ -84,7 +84,6 @@ def emulate_latency(num_nodes, node_locations):
                 exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{i+1}0"
                 debug(f"{dst} {exec_command}")
                 dst_container.exec_run(exec_command)
-
 
                 latency = 2 * latency
                 debug(f"Added {latency:.2f}ms ping latency between '{src}' and '{dst}' (distance: {distance:.2f} km).")
