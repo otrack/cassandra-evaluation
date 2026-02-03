@@ -132,7 +132,8 @@ run_ycsb() {
 -p verbose=false"
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
     then
-	# CockroachDB using JDBC
+	# CockroachDB using JDBC (PostgreSQL wire protocol)
+	# Empty password is intentional - CockroachDB runs in insecure mode for testing
 	ycsb_client="jdbc"
 	hosts=$(get_container_ip ${nearby_database})
 	local jdbc_url="jdbc:postgresql://${hosts}:${port}/defaultdb?sslmode=disable"

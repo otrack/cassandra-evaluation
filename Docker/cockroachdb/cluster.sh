@@ -59,8 +59,8 @@ cockroachdb_cleanup_cluster() {
 }
 
 cockroachdb_get_hosts() {
-    node_count=$1
-    ips=""
+    local node_count=$1
+    local ips=""
     for i in $(seq 1 $node_count); do
         container_name=$(config "node_name")${i}
         ip=$(get_container_ip "$container_name")
@@ -74,7 +74,7 @@ cockroachdb_get_hosts() {
 }
 
 cockroachdb_get_node_count() {
-    i=1
+    local i=1
     while true; do
         container_name=$(config "node_name")${i}
         ip=$(get_container_ip "$container_name")
