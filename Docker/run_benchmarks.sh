@@ -6,6 +6,7 @@ source ${DIR}/utils.sh
 source ${DIR}/cassandra/cluster.sh
 source ${DIR}/cassandra/ycsb.sh
 source ${DIR}/swiftpaxos/cluster.sh
+source ${DIR}/cockroachdb/cluster.sh
 
 start_network() {
     local network_name=$(config network_name)
@@ -101,6 +102,10 @@ run_ycsb() {
 	then
 	    # nothing to do
 	    true
+	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
+	then
+	    # CockroachDB - nothing to do for initialization
+	    true
 	else
 	    # cassandra
 	    # Determine transaction mode
@@ -125,6 +130,16 @@ run_ycsb() {
 	extra_opts_str+=" -p maddr=${hosts} \
 -p mport=${port} \
 -p verbose=false"
+    elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
+    then
+	# CockroachDB using JDBC
+	ycsb_client="jdbc"
+	hosts=$(get_container_ip ${nearby_database})
+	local jdbc_url="jdbc:postgresql://${hosts}:${port}/defaultdb?sslmode=disable"
+	extra_opts_str+=" -p db.driver=org.postgresql.Driver \
+-p db.url=${jdbc_url} \
+-p db.user=root \
+-p db.passwd="
     else
 	# cassandra
 	ycsb_client="cassandra-cql"
@@ -192,6 +207,8 @@ run_benchmark() {
     pref=cassandra
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos"; then	
 	pref=swiftpaxos
+    elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
+	pref=cockroachdb
     fi   
 
     log "Running ${workload_type} ${workload^^} for ${node_count} node(s)..."
