@@ -14,6 +14,7 @@ workloads="a b c d"
 # workloads="c"
 protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
 protocols="quorum accord swiftpaxos-paxos"
+protocols="cockroachdb"
 nodes=3
 city="Hanoi"
 records=1000
