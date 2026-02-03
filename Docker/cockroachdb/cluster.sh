@@ -16,7 +16,7 @@ cockroachdb_start_cluster() {
     
     # Start the first node (which initializes the cluster)
     local first_node=$(config "node_name")1
-    start_container ${image} ${first_node} "initialized new cluster" ${LOGDIR}/cockroachdb_node1.log \
+    start_container ${image} ${first_node} "nodeID" ${LOGDIR}/cockroachdb_node1.log \
         --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
         cockroach start --insecure --advertise-addr=${first_node} --join=${first_node} || {
         error "Failed to start first CockroachDB node"
@@ -35,7 +35,7 @@ cockroachdb_start_cluster() {
     # Start remaining nodes
     for i in $(seq 2 $node_count); do
         local container_name=$(config "node_name")${i}
-        start_container ${image} ${container_name} "initialized new node" ${LOGDIR}/cockroachdb_node${i}.log \
+        start_container ${image} ${container_name} "nodeID" ${LOGDIR}/cockroachdb_node${i}.log \
             --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
             cockroach start --insecure --advertise-addr=${container_name} --join=${first_node} || {
             error "Failed to start CockroachDB node ${i}"
