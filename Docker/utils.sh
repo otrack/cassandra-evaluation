@@ -52,27 +52,30 @@ start_container() {
     
     # Split arguments on "--" separator
     # Everything before "--" is docker_args, everything after is container_cmd
-    local docker_args=""
-    local container_cmd=""
+    local docker_args=()
+    local container_cmd=()
     local found_separator=0
     
-    for arg in "$@"; do
-        if [ "$arg" = "--" ]; then
+    while [ $# -gt 0 ]; do
+        if [ "$1" = "--" ]; then
             found_separator=1
+            shift
         elif [ $found_separator -eq 0 ]; then
-            docker_args="$docker_args $arg"
+            docker_args+=("$1")
+            shift
         else
-            container_cmd="$container_cmd $arg"
+            container_cmd+=("$1")
+            shift
         fi
     done
     
-    log "Starting container from image '${image}' as '${cname}' using ${log_file} to log and args '${docker_args}'"
-    if [ -n "$container_cmd" ]; then
-        log "Container command: ${container_cmd}"
+    log "Starting container from image '${image}' as '${cname}' using ${log_file} to log and args '${docker_args[*]}'"
+    if [ ${#container_cmd[@]} -gt 0 ]; then
+        log "Container command: ${container_cmd[*]}"
     fi
     
     local cid
-    cid=$(docker run -d ${docker_args} --name "$cname" "$image" ${container_cmd} 2>&1) || {
+    cid=$(docker run -d "${docker_args[@]}" --name "$cname" "$image" "${container_cmd[@]}" 2>&1) || {
          error "docker run failed: ${cid}"
          return 3
     }
