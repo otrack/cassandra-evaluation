@@ -16,6 +16,9 @@ cockroachdb_start_cluster() {
     
     # Start the first node (which initializes the cluster)
     local first_node=$(config "node_name")1
+    # Note: Using "--" to separate Docker options from container command
+    # Docker options: --rm, -d, --network, --cap-add, -e flags
+    # Container command: start (with flags passed via environment variables)
     start_container ${image} ${first_node} "nodeID" ${LOGDIR}/cockroachdb_node1.log \
         --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
         -e COCKROACH_INSECURE=true \
@@ -39,6 +42,7 @@ cockroachdb_start_cluster() {
     # Start remaining nodes
     for i in $(seq 2 $node_count); do
         local container_name=$(config "node_name")${i}
+        # Note: Using "--" to separate Docker options from container command
         start_container ${image} ${container_name} "nodeID" ${LOGDIR}/cockroachdb_node${i}.log \
             --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
             -e COCKROACH_INSECURE=true \
