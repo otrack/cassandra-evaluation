@@ -5,7 +5,7 @@ COCKROACHDB_DIR=$(dirname "${BASH_SOURCE[0]}")
 cockroachdb_start_cluster() {
     if [ $# -ne 2 ]; then
         echo "usage: node_count protocol"
-        exit -1
+        exit 1
     fi
     local node_count=$1
     local protocol=$2
@@ -25,6 +25,7 @@ cockroachdb_start_cluster() {
     
     # Initialize the cluster
     local first_ip=$(get_container_ip ${first_node})
+    # Wait for node to be ready before initializing cluster
     sleep 2
     docker exec ${first_node} ./cockroach init --insecure --host=${first_node} || {
         error "Failed to initialize CockroachDB cluster"
