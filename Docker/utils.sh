@@ -40,7 +40,7 @@ DEBUG=$(config debug)
 
 start_container() {
     if [ $# -lt 4 ]; then
-        error "usage: start_container <image> <name> <message> <logfile> [docker args...]"
+        error "usage: start_container <image> <name> <message> <logfile> [docker args...] [-- container_cmd...]"
         return 2
     fi
 
@@ -49,11 +49,30 @@ start_container() {
     local wait_msg="$3"
     local log_file="$4"
     shift 4
-    local docker_args="$@"
+    
+    # Split arguments on "--" separator
+    # Everything before "--" is docker_args, everything after is container_cmd
+    local docker_args=""
+    local container_cmd=""
+    local found_separator=0
+    
+    for arg in "$@"; do
+        if [ "$arg" = "--" ]; then
+            found_separator=1
+        elif [ $found_separator -eq 0 ]; then
+            docker_args="$docker_args $arg"
+        else
+            container_cmd="$container_cmd $arg"
+        fi
+    done
     
     log "Starting container from image '${image}' as '${cname}' using ${log_file} to log and args '${docker_args}'"
+    if [ -n "$container_cmd" ]; then
+        log "Container command: ${container_cmd}"
+    fi
+    
     local cid
-    cid=$(docker run -d ${docker_args} --name "$cname" "$image" 2>&1) || {
+    cid=$(docker run -d ${docker_args} --name "$cname" "$image" ${container_cmd} 2>&1) || {
          error "docker run failed: ${cid}"
          return 3
     }
