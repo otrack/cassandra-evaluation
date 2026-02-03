@@ -18,7 +18,9 @@ cockroachdb_start_cluster() {
     local first_node=$(config "node_name")1
     start_container ${image} ${first_node} "nodeID" ${LOGDIR}/cockroachdb_node1.log \
         --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
-        cockroach start --insecure --advertise-addr=${first_node} --join=${first_node} || {
+        -e COCKROACH_INSECURE=true \
+        -e COCKROACH_ADVERTISE_ADDR=${first_node} \
+        -e COCKROACH_JOIN=${first_node} || {
         error "Failed to start first CockroachDB node"
         return 1
     }
@@ -38,7 +40,9 @@ cockroachdb_start_cluster() {
         local container_name=$(config "node_name")${i}
         start_container ${image} ${container_name} "nodeID" ${LOGDIR}/cockroachdb_node${i}.log \
             --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
-            cockroach start --insecure --advertise-addr=${container_name} --join=${first_node} || {
+            -e COCKROACH_INSECURE=true \
+            -e COCKROACH_ADVERTISE_ADDR=${container_name} \
+            -e COCKROACH_JOIN=${first_node} || {
             error "Failed to start CockroachDB node ${i}"
             return 3
         }
