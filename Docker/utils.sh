@@ -75,7 +75,8 @@ start_container() {
     fi
     
     local cid
-    cid=$(docker run -d "${docker_args[@]}" --name "$cname" "$image" "${container_cmd[@]}" 2>&1) || {
+    echo "docker run ${docker_args[@]} --name $cname $image ${container_cmd[@]}"
+    cid=$(docker run ${docker_args[@]} --name $cname $image ${container_cmd[@]} 2>&1) || {
          error "docker run failed: ${cid}"
          return 3
     }

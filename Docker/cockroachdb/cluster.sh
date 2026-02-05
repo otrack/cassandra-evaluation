@@ -17,22 +17,15 @@ cockroachdb_start_cluster() {
     # Start the first node (which initializes the cluster)
     local first_node=$(config "node_name")1
     # Note: Using "--" to separate Docker options from container command
-    # Docker options: --rm, -d, --network, --cap-add, -e flags
-    # Container command: start (with flags passed via environment variables)
-    start_container ${image} ${first_node} "nodeID" ${LOGDIR}/cockroachdb_node1.log \
+    start_container ${image} ${first_node} "initial startup completed" ${LOGDIR}/cockroachdb_node1.log \
         --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
-        -e COCKROACH_INSECURE=true \
-        -e COCKROACH_ADVERTISE_ADDR=${first_node} \
-        -e COCKROACH_JOIN=${first_node} \
-        -- start || {
+        -- start --insecure --join=${first_node} || {
         error "Failed to start first CockroachDB node"
         return 1
     }
     
     # Initialize the cluster
     local first_ip=$(get_container_ip ${first_node})
-    # Wait for node to be ready before initializing cluster
-    sleep 2
     docker exec ${first_node} ./cockroach init --insecure --host=${first_node} || {
         error "Failed to initialize CockroachDB cluster"
         return 2
@@ -45,10 +38,7 @@ cockroachdb_start_cluster() {
         # Note: Using "--" to separate Docker options from container command
         start_container ${image} ${container_name} "nodeID" ${LOGDIR}/cockroachdb_node${i}.log \
             --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
-            -e COCKROACH_INSECURE=true \
-            -e COCKROACH_ADVERTISE_ADDR=${container_name} \
-            -e COCKROACH_JOIN=${first_node} \
-            -- start || {
+            -- start --insecure --join=${first_ip} || {
             error "Failed to start CockroachDB node ${i}"
             return 3
         }
