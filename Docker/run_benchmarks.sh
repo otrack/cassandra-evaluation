@@ -7,6 +7,7 @@ source ${DIR}/cassandra/cluster.sh
 source ${DIR}/cassandra/ycsb.sh
 source ${DIR}/swiftpaxos/cluster.sh
 source ${DIR}/cockroachdb/cluster.sh
+source ${DIR}/cockroachdb/ycsb.sh
 
 start_network() {
     local network_name=$(config network_name)
@@ -104,8 +105,7 @@ run_ycsb() {
 	    true
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
 	then
-	    # CockroachDB - nothing to do for initialization
-	    true
+	    cockroachdb_create_usertable
 	else
 	    # cassandra
 	    # Determine transaction mode
