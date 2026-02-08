@@ -17,23 +17,23 @@ protocols="quorum accord swiftpaxos-paxos cockroachdb"
 nodes=3
 city="Lyon"
 records=1000
-clients=1
-ops_per_client=1000
+threads=1
+ops_per_thread=1000
 
 do_clean_up=0
 for p in ${protocols}
 do
     do_create_and_load=1
-    total=$(( $(echo ${workloads} | wc -w) * $(echo ${clients} | wc -w) ))
+    total=$(( $(echo ${workloads} | wc -w) * $(echo ${threads} | wc -w) ))
     count=0
     for w in ${workloads}
     do
-	for c in ${clients}
+	for c in ${threads}
 	do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/${p}_${nodes}_${w}_${ts}.dat"
-	    run_benchmark ${p} ${c} ${nodes} ${workload_type} ${w} ${records} $((clients * ops_per_client)) ${output_file} ${do_create_and_load} ${do_clean_up}
+	    run_benchmark ${p} ${c} ${nodes} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up}
 	    do_create_and_load=0
 	    count=$((count+1))
 	done
