@@ -17,7 +17,7 @@ workload="ce"
 protocols="accord cockroachdb"
 node_counts="3 5 7"
 records=1000
-threads=$((1000/node_counts))
+threads=1000
 ops_per_thread=1000
 
 # For each protocol and node count combination, we need to:
@@ -29,10 +29,11 @@ for p in ${protocols}
 do
     for nodes in ${node_counts}
     do
+	t=$((threads/nodes))
 	ts=$(date +%Y%m%d%H%M%S%N)
 	output_file="${LOGDIR}/${p}_${nodes}_${workload}_${ts}.dat"
 	# Each node count requires a fresh cluster, so always create and always clean up
-	run_benchmark ${p} ${threads} ${nodes} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} 1 1
+	run_benchmark ${p} ${t} ${nodes} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} 1 1
     done
 done
 
