@@ -128,7 +128,8 @@ def main():
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Throughput of the closed economy workload (read-modify-write transactions) "
-                "as a function of the number of nodes. Each bar represents a protocol.}\n")
+                "as a function of the number of nodes. Each group shows results for a given number of nodes, "
+                "with bars representing different protocols.}\n")
         f.write("  \\label{fig:closed-economy-throughput}\n")
         f.write("\\end{figure}\n")
 
