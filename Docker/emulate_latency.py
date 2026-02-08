@@ -35,29 +35,32 @@ def emulate_latency(num_nodes, node_locations):
     client = docker.from_env()
     network_name = config["network_name"]
 
-    for i in range(num_nodes):
-        src = f'{config["node_name"]}{i + 1}'
-        src_container = client.containers.get(src)
-        exec_command = f"tc qdisc del dev eth0 root"
-        debug(f"{src} {exec_command}")
-        src_container.exec_run(exec_command)
-        exec_command = f"tc qdisc add dev eth0 root handle 1: htb default 1"
-        debug(f"{src} {exec_command}")
-        src_container.exec_run(exec_command)
-        exec_command = f"tc class add dev eth0 parent 1: classid 1:1 htb rate 1000mbit"
-        debug(f"{src} {exec_command}")
-        src_container.exec_run(exec_command)
-
-    # Add specific latencies based on geographical distances
-    for i in range(num_nodes):
-        for j in range(i + 1, num_nodes):
+    try:
+        # Add necessary network classes
+        for i in range(num_nodes):
             src = f'{config["node_name"]}{i + 1}'
-            dst = f'{config["node_name"]}{j + 1}'
-            lat1, lon1 = node_locations[i]
-            lat2, lon2 = node_locations[j]
-            distance = haversine(lat1, lon1, lat2, lon2)
-            latency = estimate_latency(distance)
-            try:
+            src_container = client.containers.get(src)
+            exec_command = f"tc -help"
+            if (a:=src_container.exec_run(exec_command).exit_code) != 0:
+                raise Exception("tc is missnig! "+str(a))
+            exec_command = f"tc qdisc del dev eth0 root"
+            debug(f"{src} {exec_command}")
+            exec_command = f"tc qdisc add dev eth0 root handle 1: htb default 1"
+            debug(f"{src} {exec_command}")
+            src_container.exec_run(exec_command)
+            exec_command = f"tc class add dev eth0 parent 1: classid 1:1 htb rate 1000mbit"
+            debug(f"{src} {exec_command}")
+            src_container.exec_run(exec_command)
+            
+        # Add specific latencies based on geographical distances
+        for i in range(num_nodes):
+            for j in range(i + 1, num_nodes):
+                src = f'{config["node_name"]}{i + 1}'
+                dst = f'{config["node_name"]}{j + 1}'
+                lat1, lon1 = node_locations[i]
+                lat2, lon2 = node_locations[j]
+                distance = haversine(lat1, lon1, lat2, lon2)
+                latency = estimate_latency(distance)
                 src_container = client.containers.get(src)
                 dst_container = client.containers.get(dst)
                 dst_ip = dst_container.attrs['NetworkSettings']['Networks'][network_name]['IPAddress']
@@ -66,7 +69,7 @@ def emulate_latency(num_nodes, node_locations):
                 # Add latency from src to dst
                 exec_command = f"tc class add dev eth0 parent 1:1 classid 1:{j+1}0 htb rate 100mbit"
                 debug(f"{src} {exec_command}")
-                src_container.exec_run(exec_command) 
+                src_container.exec_run(exec_command)
                 exec_command = f"tc qdisc add dev eth0 parent 1:{j+1}0 handle {j+1}0: netem delay {latency}ms"
                 debug(f"{src} {exec_command}")
                 src_container.exec_run(exec_command)
@@ -87,8 +90,9 @@ def emulate_latency(num_nodes, node_locations):
 
                 latency = 2 * latency
                 debug(f"Added {latency:.2f}ms ping latency between '{src}' and '{dst}' (distance: {distance:.2f} km).")
-            except docker.errors.APIError as e:
-                print(f"Error adding latency between '{src}' and '{dst}': {e}")
+                    
+    except docker.errors.APIError as e:
+        print(f"Error adding latency between '{src}' and '{dst}': {e}")
 
     
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ clean_logdir
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
-workloads="c"
+workloads="a"
 protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
 protocols="quorum accord swiftpaxos-paxos"
 protocols="cockroachdb"
