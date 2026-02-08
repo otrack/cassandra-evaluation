@@ -1,18 +1,21 @@
 This repository contains a set of scripts to benchmark Cassandra replication protocols with the Yahoo! Cloud Serving Benchmark (YCSB).
-It also offers a way to compare it against the [SwiftPaxos](https://github.com/imdea-software/swiftpaxos) library which implements a basic replicated key-value store several state-of-the-art protocols such as Paxos, Egalitarian Paxos, and SwiftPaxos.
+It also offers a way to compare it against
+- the [SwiftPaxos](https://github.com/imdea-software/swiftpaxos) library which implements a basic replicated key-value store several state-of-the-art protocols such as Paxos, Egalitarian Paxos, and SwiftPaxos; and 
+- the [cockraochDB](https://github.com/cockroachdb/cockroach) distributed data store.
 
 ## Overview 
 
-The benchmark suite uses the following forks:
+The benchmark suite uses the following repos:
 - [YCSB](https://github.com/otrack/YCSB) (`cassandra5` branch)
 - [Apache Cassandra](https://github.com/otrack/cassandra/tree/testing6) (`testing6` branch)
 - [Cassandra Docker Library](https://github.com/otrack/cassandra-docker-library) 
 - [SwiftPaxos](https://github.com/imdea-software/swiftpaxos) (`container` branch)
+- [CockroachDB](https://github.com/otrack/cockroachdb) (`master` branch)
 
 There are two implementations of the benchmarks, one for Docker and another for Google Cloud Platform (GCP).
 In what follows, we detail the instruction for the Docker implementation.
 
-## Building artifacts
+## Building artifacts (can be skipped)
 
 The instructions that follow work for Java 11+.
 
