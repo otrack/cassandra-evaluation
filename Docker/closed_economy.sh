@@ -15,9 +15,9 @@ clean_logdir
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
 protocols="accord cockroachdb"
-node_counts="3 4 5"
+node_counts="3 5 7"
 records=1000
-threads=16
+threads=$((1000/node_counts))
 ops_per_thread=1000
 
 # For each protocol and node count combination, we need to:
