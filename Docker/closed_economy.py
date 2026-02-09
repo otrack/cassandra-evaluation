@@ -233,8 +233,9 @@ def main():
                 if not latency_vals.empty:
                     avg_latency = float(np.mean(latency_vals))
                     clients_vals = subset['clients_int'].dropna()
-                    threads_per_client = int(clients_vals.max()) if not clients_vals.empty else 1
-                    total_clients = max(1, nodes * max(1, threads_per_client))
+                    clients_per_node = int(clients_vals.max()) if not clients_vals.empty else 1
+                    clients_per_node = max(1, clients_per_node)
+                    total_clients = max(1, nodes * clients_per_node)
                     data[proto][nodes] = (total_clients * 1000.0) / avg_latency if avg_latency > 0 else 0
                 else:
                     # Parse throughput values as a fallback
@@ -247,6 +248,7 @@ def main():
                         except (TypeError, ValueError):
                             continue
                     if tput_vals:
+                        # If only throughput values are available, sum across clients.
                         data[proto][nodes] = float(np.sum(tput_vals))
                     else:
                         data[proto][nodes] = 0
