@@ -17,6 +17,8 @@ import sys
 import pandas as pd
 import numpy as np
 
+MAX_PERCENTILE = 100
+
 
 def usage_and_exit():
     print("Usage: python closed_economy.py results.csv output.tex")
@@ -52,8 +54,9 @@ def load_locations(latencies_path):
     return locations
 
 def row_mean_latency(row):
+    """Compute mean latency (ms) from percentile columns p1..p100 in a DataFrame row."""
     vals = []
-    for i in range(1, 101):
+    for i in range(1, MAX_PERCENTILE + 1):
         key = f"p{i}"
         v = row.get(key, None)
         if pd.isna(v):
@@ -69,6 +72,7 @@ def row_mean_latency(row):
     return float(np.mean(vals))
 
 def estimate_row_throughput(row):
+    """Estimate throughput (ops/sec) from recorded throughput or latency percentiles."""
     tput = None
     try:
         tput = float(row.get('tput', 0))
