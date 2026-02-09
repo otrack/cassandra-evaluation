@@ -54,7 +54,14 @@ def load_locations(latencies_path):
     return locations
 
 def row_mean_latency(row):
-    """Compute mean latency (ms) from percentile columns p1..p100 in a DataFrame row."""
+    """Compute a latency estimate (ms) from percentile columns in a DataFrame row."""
+    median = row.get("p50", None)
+    if not pd.isna(median):
+        if not (isinstance(median, str) and median.strip().lower() == "unknown"):
+            try:
+                return float(median)
+            except (TypeError, ValueError):
+                pass
     vals = []
     for i in range(1, MAX_PERCENTILE + 1):
         key = f"p{i}"
@@ -73,7 +80,6 @@ def row_mean_latency(row):
 
 def estimate_row_throughput(row):
     """Estimate throughput (ops/sec) from recorded throughput or latency percentiles."""
-    tput = None
     try:
         tput = float(row.get('tput', 0))
     except (TypeError, ValueError):
@@ -209,7 +215,7 @@ def main():
                 # Parse throughput values
                 tput_vals = []
                 for val in subset['tput_est']:
-                    if val is None or pd.isna(val):
+                    if pd.isna(val):
                         continue
                     try:
                         tput_vals.append(float(val))
