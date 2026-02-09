@@ -44,7 +44,7 @@ METRIC_MARKS = {
     "best": "o",
     "worst": "x",
 }
-# pgfplots marker styles used for percentile dots.
+# pgfplots marker styles for percentile and extrema metrics (P90/P95/P99/best/worst).
 MIN_OFFSET_STEP = 0.12  # minimum spacing between protocol groups
 OFFSET_TOTAL = 0.9  # total spacing allocated across all protocol groups
 DEFAULT_OFFSET_STEP = 0.2  # fallback spacing when no protocols exist
@@ -329,6 +329,7 @@ def main():
             offset = offsets[proto_idx]
             f.write("      \\addplot+[\n")
             f.write(f"        color={col}, mark=*,\n")
+            f.write("        % mark=* indicates the average latency point for the error bar\n")
             f.write("        error bars/.cd,\n")
             f.write("        y dir=both, y explicit,\n")
             f.write("      ] coordinates {\n")
@@ -359,6 +360,7 @@ def main():
 
         for metric in MARKER_METRICS:
             mark = METRIC_MARKS[metric]
+            f.write("      % Add a single legend entry per metric marker style.\n")
             f.write(f"      \\addlegendimage{{only marks, mark={mark}}}\n")
             f.write(f"      \\addlegendentry{{{METRIC_LABELS[metric]}}}\n\n")
 
