@@ -18,6 +18,7 @@ import pandas as pd
 import numpy as np
 
 MAX_PERCENTILE = 100
+MS_TO_SECONDS = 1000.0
 UNKNOWN_VALUE = "unknown"
 
 
@@ -233,12 +234,12 @@ def main():
                 if not latency_vals.empty:
                     avg_latency = float(np.mean(latency_vals))
                     clients_vals = subset['clients_int'].dropna()
-                    total_clients = int(clients_vals.sum()) if not clients_vals.empty else nodes
+                    total_clients = int(clients_vals.sum()) if not clients_vals.empty else 1
                     if total_clients < 1:
                         total_clients = 1
                     # Use total throughput across all clients for the protocol/node configuration.
-                    # 1000.0 converts milliseconds to seconds.
-                    data[proto][nodes] = (total_clients * 1000.0) / avg_latency if avg_latency > 0 else 0
+                    # MS_TO_SECONDS converts milliseconds to seconds.
+                    data[proto][nodes] = (total_clients * MS_TO_SECONDS) / avg_latency if avg_latency > 0 else 0
                 else:
                     # Parse throughput values as a fallback
                     tput_vals = []
