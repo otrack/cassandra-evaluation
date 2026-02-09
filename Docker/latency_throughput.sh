@@ -19,7 +19,8 @@ nodes=3
 records=1000
 ops_per_thread=1000
 
-# Start with 1 thread and double until we detect a hockey stick
+# Start with 1 thread and double until reaching max_threads
+# The resulting graph demonstrates the hockey stick effect
 # Maximum threads to prevent infinite loop
 max_threads=128
 

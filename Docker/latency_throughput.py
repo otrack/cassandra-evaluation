@@ -6,7 +6,8 @@ This script generates a classical latency vs throughput graph showing:
 - X-axis: Throughput (operations/sec)
 - Y-axis: Latency (milliseconds)
 - One line per protocol showing how latency increases as load increases
-- Demonstrates the "hockey stick" effect where both latency and throughput degrade
+- Demonstrates the "hockey stick" effect where latency increases sharply
+  and throughput plateaus/degrades as the system saturates
 """
 
 import sys
