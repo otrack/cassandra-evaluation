@@ -44,6 +44,7 @@ METRIC_MARKS = {
     "best": "o",
     "worst": "x",
 }
+# pgfplots marker styles used for percentile dots.
 MIN_OFFSET_STEP = 0.12  # minimum spacing between protocol groups
 OFFSET_TOTAL = 0.9  # total spacing allocated across all protocol groups
 DEFAULT_OFFSET_STEP = 0.2  # fallback spacing when no protocols exist
@@ -140,13 +141,11 @@ def estimate_row_latency(row):
         return None
     return np.mean(vals)
 
-def row_best_latency(row):
+def row_best_worst_latency(row):
     values = percentile_values(row)
-    return min(values) if values else None
-
-def row_worst_latency(row):
-    values = percentile_values(row)
-    return max(values) if values else None
+    if not values:
+        return None, None
+    return min(values), max(values)
 
 def compute_e(n, f):
     e = 0
@@ -240,8 +239,9 @@ def main():
     df_rmw['nodes_int'] = df_rmw['nodes'].apply(safe_int)
     df_rmw = df_rmw[df_rmw['nodes_int'].notnull()]
     df_rmw['avg_latency_ms'] = df_rmw.apply(estimate_row_latency, axis=1)
-    df_rmw['best_latency_ms'] = df_rmw.apply(row_best_latency, axis=1)
-    df_rmw['worst_latency_ms'] = df_rmw.apply(row_worst_latency, axis=1)
+    df_rmw[['best_latency_ms', 'worst_latency_ms']] = df_rmw.apply(
+        row_best_worst_latency, axis=1, result_type='expand'
+    )
     for percentile in (90, 95, 99):
         df_rmw[f"p{percentile}_ms"] = df_rmw.apply(
             lambda row, p=percentile: percentile_value(row, p), axis=1
