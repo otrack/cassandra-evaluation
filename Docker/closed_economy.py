@@ -31,8 +31,8 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * c
 
 def estimate_latency(distance_km):
-    speed_of_light_km_per_ms = 204
-    latency_ms = distance_km / speed_of_light_km_per_ms
+    fiber_optic_speed_km_per_ms = 204
+    latency_ms = distance_km / fiber_optic_speed_km_per_ms
     return math.floor(latency_ms)
 
 def load_locations(latencies_path):
