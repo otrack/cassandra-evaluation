@@ -342,6 +342,7 @@ def main():
         ]
         for proto_idx, proto in enumerate(protocols):
             col = color_cycle[proto_idx % len(color_cycle)]
+            first_proto_entry = True
             for node_idx, nodes in enumerate(node_counts):
                 offset = offsets[node_idx]
                 avg_val = data[proto].get(nodes, {}).get("avg")
@@ -358,6 +359,9 @@ def main():
                 f.write(f"        ({x:.2f}, {best_val:.2f})\n")
                 f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
                 f.write("      };\n\n")
+                if first_proto_entry:
+                    f.write(f"      \\addlegendentry{{{proto}}}\n\n")
+                    first_proto_entry = False
                 f.write(f"      \\addplot+[only marks, mark=*, color={col}, forget plot] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
                 f.write("      };\n\n")
