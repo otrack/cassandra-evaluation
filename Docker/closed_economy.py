@@ -35,6 +35,7 @@ def calculate_bar_width(series_count):
     """Return the bar width in centimeters for the given series count."""
     if series_count <= 0:
         return DEFAULT_BAR_WIDTH
+    # Distribute BAR_WIDTH_TOTAL across series, but keep a minimum width for readability.
     return max(MIN_BAR_WIDTH, BAR_WIDTH_TOTAL / series_count)
 
 def haversine(lat1, lon1, lat2, lon2):
