@@ -43,6 +43,7 @@ METRIC_MARKS = {
     "p99": "diamond*",
     "worst": "x",
 }
+# Best latency is shown as the lower end of the vertical range, so no marker entry.
 # pgfplots marker styles for percentile and extrema metrics (P90/P95/P99/best/worst).
 MIN_OFFSET_STEP = 0.12  # minimum spacing between protocol groups
 OFFSET_TOTAL = 0.9  # total spacing allocated across all protocol groups
@@ -376,6 +377,9 @@ def main():
                     f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, forget plot] coordinates {{\n")
                     f.write(f"        ({x:.2f}, {val:.2f})\n")
                     f.write("      };\n\n")
+            if first_proto_entry:
+                f.write(f"      \\addlegendimage{{line, color={col}}}\n")
+                f.write(f"      \\addlegendentry{{{proto}}}\n\n")
 
         for metric in PERCENTILE_AND_EXTREMA_METRICS:
             mark = METRIC_MARKS[metric]
