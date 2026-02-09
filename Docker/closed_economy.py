@@ -233,8 +233,9 @@ def main():
                 if not latency_vals.empty:
                     avg_latency = float(np.mean(latency_vals))
                     clients_vals = subset['clients_int'].dropna()
-                    max_clients_observed = max(int(clients_vals.max()), 1) if not clients_vals.empty else 1
+                    max_clients_observed = int(clients_vals.max()) if not clients_vals.empty else 1
                     total_clients = nodes * max_clients_observed
+                    # Use total throughput across all clients for the protocol/node configuration.
                     data[proto][nodes] = (total_clients * 1000.0) / avg_latency if avg_latency > 0 else 0
                 else:
                     # Parse throughput values as a fallback
