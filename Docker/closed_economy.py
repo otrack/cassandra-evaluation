@@ -51,6 +51,42 @@ def load_locations(latencies_path):
         return []
     return locations
 
+def row_mean_latency(row):
+    vals = []
+    for i in range(1, 101):
+        key = f"p{i}"
+        v = row.get(key, None)
+        if pd.isna(v):
+            continue
+        if isinstance(v, str) and v.strip().lower() == "unknown":
+            continue
+        try:
+            vals.append(float(v))
+        except Exception:
+            continue
+    if not vals:
+        return None
+    return float(np.mean(vals))
+
+def estimate_row_throughput(row):
+    tput = None
+    try:
+        tput = float(row.get('tput', 0))
+    except Exception:
+        tput = None
+    if tput is not None and tput > 0:
+        return tput
+    mean_latency_ms = row_mean_latency(row)
+    if mean_latency_ms is None or mean_latency_ms <= 0:
+        return None
+    try:
+        clients = int(row.get('clients', 1))
+    except Exception:
+        clients = 1
+    if clients <= 0:
+        clients = 1
+    return (clients * 1000.0) / mean_latency_ms
+
 def compute_e(n, f):
     e = 0
     for candidate in range(n + 1):
@@ -142,6 +178,7 @@ def main():
 
     df_rmw['nodes_int'] = df_rmw['nodes'].apply(safe_int)
     df_rmw = df_rmw[df_rmw['nodes_int'].notnull()]
+    df_rmw['tput_est'] = df_rmw.apply(estimate_row_throughput, axis=1)
 
     # Get unique protocols and node counts, sorted
     protocols = sorted(df_rmw['protocol'].unique().tolist())
@@ -167,11 +204,13 @@ def main():
             if not subset.empty:
                 # Parse throughput values
                 tput_vals = []
-                for val in subset['tput']:
+                for val in subset['tput_est']:
+                    if val is None or pd.isna(val):
+                        continue
                     try:
                         tput_vals.append(float(val))
                     except Exception:
-                        pass
+                        continue
                 if tput_vals:
                     data[proto][nodes] = np.mean(tput_vals)
                 else:
