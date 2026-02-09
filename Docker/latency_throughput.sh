@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 # Latency vs Throughput experiment: increases the number of clients by a factor of 2
-# until a "hockey stick" is observed (both latency and throughput degrade compared to prior measure).
-# This produces a classical latency vs throughput graph.
+# (1, 2, 4, 8, ..., up to max_threads) to produce a classical latency vs throughput graph.
+# The graph shows the "hockey stick" effect where both latency and throughput degrade
+# as the system becomes saturated.
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
 

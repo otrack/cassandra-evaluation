@@ -20,7 +20,12 @@ def usage_and_exit():
 
 
 def row_mean_latency(row):
-    """Compute mean latency from p1..p100 percentiles."""
+    """Compute mean latency from p1..p100 percentiles.
+    
+    Note: This is an approximation. We compute the mean of percentile values
+    to get a rough estimate of average latency. This approach is consistent
+    with other plotting scripts in this codebase (e.g., conflict.py).
+    """
     vals = []
     for i in range(1, 101):
         key = f"p{i}"
