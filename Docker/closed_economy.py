@@ -202,7 +202,9 @@ def main():
             return None
 
     df_rmw['nodes_int'] = df_rmw['nodes'].apply(safe_int)
+    df_rmw['clients_int'] = df_rmw['clients'].apply(safe_int)
     df_rmw = df_rmw[df_rmw['nodes_int'].notnull()]
+    df_rmw['latency_ms'] = df_rmw.apply(estimate_row_latency, axis=1)
     df_rmw['tput_est'] = df_rmw.apply(estimate_row_throughput, axis=1)
 
     # Get unique protocols and node counts, sorted
@@ -227,19 +229,27 @@ def main():
         for nodes in node_counts:
             subset = df_rmw[(df_rmw['protocol'] == proto) & (df_rmw['nodes_int'] == nodes)]
             if not subset.empty:
-                # Parse throughput values
-                tput_vals = []
-                for val in subset['tput_est']:
-                    if pd.isna(val):
-                        continue
-                    try:
-                        tput_vals.append(float(val))
-                    except (TypeError, ValueError):
-                        continue
-                if tput_vals:
-                    data[proto][nodes] = np.mean(tput_vals)
+                latency_vals = subset['latency_ms'].dropna()
+                if not latency_vals.empty:
+                    avg_latency = float(np.mean(latency_vals))
+                    clients_vals = subset['clients_int'].dropna()
+                    threads_per_client = int(clients_vals.max()) if not clients_vals.empty else 1
+                    total_clients = max(1, nodes * max(1, threads_per_client))
+                    data[proto][nodes] = (total_clients * 1000.0) / avg_latency if avg_latency > 0 else 0
                 else:
-                    data[proto][nodes] = 0
+                    # Parse throughput values as a fallback
+                    tput_vals = []
+                    for val in subset['tput_est']:
+                        if pd.isna(val):
+                            continue
+                        try:
+                            tput_vals.append(float(val))
+                        except (TypeError, ValueError):
+                            continue
+                    if tput_vals:
+                        data[proto][nodes] = float(np.sum(tput_vals))
+                    else:
+                        data[proto][nodes] = 0
             else:
                 data[proto][nodes] = 0
 
