@@ -17,7 +17,8 @@ import sys
 import pandas as pd
 import numpy as np
 
-PERCENTILE_MAX = 100
+MAX_PERCENTILE_INDEX = 100
+UNKNOWN_VALUE = "unknown"
 
 
 def usage_and_exit():
@@ -54,21 +55,28 @@ def load_locations(latencies_path):
     return locations
 
 def row_latency_estimate(row):
-    """Compute a latency estimate (ms) from percentile columns in a DataFrame row."""
+    """Estimate latency (ms) from percentile columns in a DataFrame row.
+
+    Args:
+        row: Pandas Series/dict containing percentile keys (p1..p100).
+
+    Returns:
+        Estimated latency in milliseconds, or None if no valid percentile data exists.
+    """
     median = row.get("p50", None)
     if not pd.isna(median):
-        if not (isinstance(median, str) and median.strip().lower() == "unknown"):
+        if not (isinstance(median, str) and median.strip().lower() == UNKNOWN_VALUE):
             try:
                 return float(median)
             except (TypeError, ValueError):
                 pass
     vals = []
-    for i in range(1, PERCENTILE_MAX + 1):
+    for i in range(1, MAX_PERCENTILE_INDEX + 1):
         key = f"p{i}"
         v = row.get(key, None)
         if pd.isna(v):
             continue
-        if isinstance(v, str) and v.strip().lower() == "unknown":
+        if isinstance(v, str) and v.strip().lower() == UNKNOWN_VALUE:
             continue
         try:
             vals.append(float(v))
@@ -79,7 +87,14 @@ def row_latency_estimate(row):
     return np.mean(vals)
 
 def estimate_row_throughput(row):
-    """Estimate throughput (ops/sec) from recorded throughput or latency percentiles."""
+    """Estimate throughput (ops/sec) from recorded throughput or latency percentiles.
+
+    Args:
+        row: Pandas Series/dict containing 'tput', percentile keys, and 'clients'.
+
+    Returns:
+        Estimated throughput in ops/sec, or None if estimation is not possible.
+    """
     try:
         tput = float(row.get('tput', 0))
     except (TypeError, ValueError):
