@@ -2,10 +2,10 @@
 """
 Plotting script for the closed economy experiment.
 
-This script generates a grouped bar chart (histogram) showing:
+This script generates a grouped error bar chart showing:
 - X-axis: number of nodes in the system (3, 4, 5)
 - Y-axis: latency in milliseconds
-- One bar group per node count, with bars for each protocol/percentile combination
+- One error bar group per node count and protocol, with dots for avg, tail percentiles, best, and worst
 
 The plot style is similar to Fig. 9 from https://arxiv.org/pdf/2104.01142
 """
@@ -19,9 +19,31 @@ import numpy as np
 
 MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
-METRIC_COLUMNS = {"avg": "avg_latency_ms", "p90": "p90_ms", "p95": "p95_ms", "p99": "p99_ms"}
-METRIC_LABELS = {"avg": "Avg", "p90": "P90", "p95": "P95", "p99": "P99"}
-LATENCY_METRICS = ("avg", "p90", "p95", "p99")
+METRIC_COLUMNS = {
+    "avg": "avg_latency_ms",
+    "p90": "p90_ms",
+    "p95": "p95_ms",
+    "p99": "p99_ms",
+    "best": "best_latency_ms",
+    "worst": "worst_latency_ms",
+}
+METRIC_LABELS = {
+    "avg": "Avg",
+    "p90": "P90",
+    "p95": "P95",
+    "p99": "P99",
+    "best": "Best",
+    "worst": "Worst",
+}
+LATENCY_METRICS = ("avg", "p90", "p95", "p99", "best", "worst")
+MARKER_METRICS = ("p90", "p95", "p99", "best", "worst")
+METRIC_MARKS = {
+    "p90": "triangle*",
+    "p95": "square*",
+    "p99": "diamond*",
+    "best": "o",
+    "worst": "x",
+}
 MIN_BAR_WIDTH = 0.12  # minimum readable bar width scalar (used with cm in output)
 BAR_WIDTH_TOTAL = 0.9  # total bar width scalar allocated across all series in a group
 DEFAULT_BAR_WIDTH = 0.2  # fallback bar width scalar when no series exist
@@ -96,6 +118,14 @@ def percentile_value(row, percentile):
     except (TypeError, ValueError):
         return None
 
+def percentile_values(row):
+    values = []
+    for i in range(1, MAX_PERCENTILE + 1):
+        v = percentile_value(row, i)
+        if v is not None:
+            values.append(v)
+    return values
+
 def estimate_row_latency(row):
     """Estimate mean latency (ms) from percentile columns in a DataFrame row.
 
@@ -105,14 +135,18 @@ def estimate_row_latency(row):
     Returns:
         Estimated latency in milliseconds, or None if no valid percentile data exists.
     """
-    vals = []
-    for i in range(1, MAX_PERCENTILE + 1):
-        v = percentile_value(row, i)
-        if v is not None:
-            vals.append(v)
+    vals = percentile_values(row)
     if not vals:
         return None
     return np.mean(vals)
+
+def row_best_latency(row):
+    values = percentile_values(row)
+    return min(values) if values else None
+
+def row_worst_latency(row):
+    values = percentile_values(row)
+    return max(values) if values else None
 
 def compute_e(n, f):
     e = 0
@@ -206,6 +240,8 @@ def main():
     df_rmw['nodes_int'] = df_rmw['nodes'].apply(safe_int)
     df_rmw = df_rmw[df_rmw['nodes_int'].notnull()]
     df_rmw['avg_latency_ms'] = df_rmw.apply(estimate_row_latency, axis=1)
+    df_rmw['best_latency_ms'] = df_rmw.apply(row_best_latency, axis=1)
+    df_rmw['worst_latency_ms'] = df_rmw.apply(row_worst_latency, axis=1)
     for percentile in (90, 95, 99):
         df_rmw[f"p{percentile}_ms"] = df_rmw.apply(
             lambda row, p=percentile: percentile_value(row, p), axis=1
@@ -263,8 +299,8 @@ def main():
     else:
         ymax = 100
 
-    # Generate TikZ/pgfplots code for grouped bar chart
-    series_count = len(protocols) * len(LATENCY_METRICS)
+    # Generate TikZ/pgfplots code for grouped error bar chart
+    series_count = len(protocols)
     bar_width = calculate_bar_width(series_count)
 
     with open(output_tikz, 'w') as f:
@@ -273,7 +309,6 @@ def main():
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
-        f.write("      ybar,\n")
         f.write(f"      bar width={bar_width:.2f}cm,\n")
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
@@ -281,29 +316,59 @@ def main():
         f.write("      xlabel={Number of nodes},\n")
         f.write("      ylabel={Latency (ms)},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
-        f.write("      symbolic x coords={" + ",".join(str(n) for n in node_counts) + "},\n")
-        f.write("      xtick=data,\n")
+        f.write("      xtick={" + ",".join(str(i) for i in range(len(node_counts))) + "},\n")
+        f.write("      xticklabels={" + ",".join(str(n) for n in node_counts) + "},\n")
         f.write("      legend pos=north east,\n")
         f.write("      legend style={font=\\small},\n")
         f.write("    ]\n\n")
 
-        series_idx = 0
-        for proto in protocols:
-            for metric in LATENCY_METRICS:
-                col = color_cycle[series_idx % len(color_cycle)]
-                series_idx += 1
-                f.write(f"      \\addplot+[fill={col}, draw=black] coordinates {{\n")
-                for nodes in node_counts:
+        offset_step = 0.2
+        offsets = [
+            (idx - (len(protocols) - 1) / 2) * offset_step for idx in range(len(protocols))
+        ]
+        for proto_idx, proto in enumerate(protocols):
+            col = color_cycle[proto_idx % len(color_cycle)]
+            offset = offsets[proto_idx]
+            f.write("      \\addplot+[\n")
+            f.write(f"        color={col}, mark=*,\n")
+            f.write("        error bars/.cd,\n")
+            f.write("        y dir=both, y explicit,\n")
+            f.write("      ] coordinates {\n")
+            for pos, nodes in enumerate(node_counts):
+                avg_val = data[proto].get(nodes, {}).get("avg", 0)
+                best_val = data[proto].get(nodes, {}).get("best", 0)
+                worst_val = data[proto].get(nodes, {}).get("worst", 0)
+                if avg_val <= 0:
+                    continue
+                err_plus = max(0.0, worst_val - avg_val)
+                err_minus = max(0.0, avg_val - best_val)
+                x = pos + offset
+                f.write(
+                    f"        ({x:.2f}, {avg_val:.2f}) += (0, {err_plus:.2f}) -= (0, {err_minus:.2f})\n"
+                )
+            f.write("      };\n")
+            f.write(f"      \\addlegendentry{{{proto}}}\n\n")
+            for metric in MARKER_METRICS:
+                mark = METRIC_MARKS[metric]
+                f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, forget plot] coordinates {{\n")
+                for pos, nodes in enumerate(node_counts):
                     val = data[proto].get(nodes, {}).get(metric, 0)
-                    f.write(f"        ({nodes}, {val:.2f})\n")
-                f.write("      };\n")
-                f.write(f"      \\addlegendentry{{{proto} - {METRIC_LABELS[metric]}}}\n\n")
+                    if val <= 0:
+                        continue
+                    x = pos + offset
+                    f.write(f"        ({x:.2f}, {val:.2f})\n")
+                f.write("      };\n\n")
+
+        for metric in MARKER_METRICS:
+            mark = METRIC_MARKS[metric]
+            f.write(f"      \\addlegendimage{{only marks, mark={mark}}}\n")
+            f.write(f"      \\addlegendentry{{{METRIC_LABELS[metric]}}}\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Closed economy workload latency (read-modify-write transactions) "
                 "as a function of the number of nodes. Each group shows results for a given number of nodes, "
-                "with bars representing the average latency and tail percentiles per protocol.}\n")
+                "with error bars showing best/worst latency and markers for the average and tail percentiles per protocol.}\n")
         f.write("  \\label{fig:closed-economy-latency}\n")
         f.write("\\end{figure}\n")
 
