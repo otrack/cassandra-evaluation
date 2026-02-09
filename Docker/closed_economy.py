@@ -314,7 +314,7 @@ def main():
     else:
         ymax = 100
 
-    # Generate TikZ/pgfplots code for grouped error bar chart
+    # Generate TikZ/pgfplots code for grouped latency range chart
     series_count = len(node_counts)
     offset_step = calculate_offset_step(series_count)
 
@@ -383,7 +383,7 @@ def main():
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Closed economy workload latency (read-modify-write transactions) "
-                "with error bars showing best/worst latency and markers for the average and tail percentiles.}\n")
+                "with vertical ranges showing best/worst latency and markers for the average and tail percentiles.}\n")
         f.write("  \\label{fig:closed-economy-latency}\n")
         f.write("\\end{figure}\n")
 
