@@ -17,7 +17,7 @@ import sys
 import pandas as pd
 import numpy as np
 
-MAX_PERCENTILE_INDEX = 100
+MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
 
 
@@ -54,7 +54,7 @@ def load_locations(latencies_path):
         return []
     return locations
 
-def row_latency_estimate(row):
+def estimate_row_latency(row):
     """Estimate latency (ms) from percentile columns in a DataFrame row.
 
     Args:
@@ -71,7 +71,7 @@ def row_latency_estimate(row):
             except (TypeError, ValueError):
                 pass
     vals = []
-    for i in range(1, MAX_PERCENTILE_INDEX + 1):
+    for i in range(1, MAX_PERCENTILE + 1):
         key = f"p{i}"
         v = row.get(key, None)
         if pd.isna(v):
@@ -101,8 +101,8 @@ def estimate_row_throughput(row):
         tput = None
     if tput is not None and tput > 0:
         return tput
-    mean_latency_ms = row_latency_estimate(row)
-    if mean_latency_ms is None or mean_latency_ms <= 0:
+    estimated_latency_ms = estimate_row_latency(row)
+    if estimated_latency_ms is None or estimated_latency_ms <= 0:
         return None
     try:
         clients = int(row.get('clients', 1))
@@ -110,7 +110,7 @@ def estimate_row_throughput(row):
         clients = 1
     if clients <= 0:
         clients = 1
-    return (clients * 1000.0) / mean_latency_ms
+    return (clients * 1000.0) / estimated_latency_ms
 
 def compute_e(n, f):
     e = 0
