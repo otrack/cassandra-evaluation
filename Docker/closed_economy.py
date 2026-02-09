@@ -120,6 +120,14 @@ def percentile_value(row, percentile):
         return None
 
 def percentile_values(row):
+    """Collect percentile latency values (ms) from a DataFrame row.
+
+    Args:
+        row: Pandas Series/dict containing percentile keys (p1..p100).
+
+    Returns:
+        List of percentile latency values in milliseconds.
+    """
     values = []
     for i in range(1, MAX_PERCENTILE + 1):
         v = percentile_value(row, i)
@@ -142,6 +150,14 @@ def estimate_row_latency(row):
     return np.mean(vals)
 
 def estimate_row_best_worst_latency(row):
+    """Estimate best and worst latency (ms) from percentile columns in a DataFrame row.
+
+    Args:
+        row: Pandas Series/dict containing percentile keys (p1..p100).
+
+    Returns:
+        Tuple of (best_latency_ms, worst_latency_ms), or (None, None) if missing.
+    """
     values = percentile_values(row)
     if not values:
         return None, None
@@ -328,8 +344,8 @@ def main():
             col = color_cycle[proto_idx % len(color_cycle)]
             offset = offsets[proto_idx]
             f.write("      \\addplot+[\n")
+            # mark=* indicates the average latency point for the error bar.
             f.write(f"        color={col}, mark=*,\n")
-            f.write("        % mark=* indicates the average latency point for the error bar\n")
             f.write("        error bars/.cd,\n")
             f.write("        y dir=both, y explicit,\n")
             f.write("      ] coordinates {\n")
