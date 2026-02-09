@@ -358,7 +358,7 @@ def main():
                     continue
                 x = proto_idx + offset
                 # Two coordinates at the same x-position draw a vertical line for best/worst.
-                # Keep this line in the legend to label the protocol color.
+                # Keep the first vertical range in the legend to label the protocol color.
                 f.write(f"      \\addplot+[color={col}] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {best_val:.2f})\n")
                 f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
@@ -377,6 +377,7 @@ def main():
                     f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, forget plot] coordinates {{\n")
                     f.write(f"        ({x:.2f}, {val:.2f})\n")
                     f.write("      };\n\n")
+            # If no valid ranges were plotted for this protocol, still add a legend entry.
             if first_proto_entry:
                 f.write(f"      \\addlegendimage{{line, color={col}}}\n")
                 f.write(f"      \\addlegendentry{{{proto}}}\n\n")
