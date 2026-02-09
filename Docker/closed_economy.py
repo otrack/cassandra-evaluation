@@ -337,7 +337,7 @@ def main():
         f.write("      legend style={font=\\small},\n")
         f.write("    ]\n\n")
 
-        # Center protocol offsets around each node position.
+        # Center node count offsets around each protocol position.
         offsets = [
             (idx - (len(node_counts) - 1) / 2) * offset_step for idx in range(len(node_counts))
         ]
