@@ -4,8 +4,8 @@ Plotting script for the closed economy experiment.
 
 This script generates a grouped bar chart (histogram) showing:
 - X-axis: number of nodes in the system (3, 4, 5)
-- Y-axis: number of transactions (throughput in ops/sec)
-- One bar group per node count, with bars for each protocol (accord, cockroachdb)
+- Y-axis: latency in milliseconds
+- One bar group per node count, with bars for each protocol/percentile combination
 
 The plot style is similar to Fig. 9 from https://arxiv.org/pdf/2104.01142
 """
@@ -18,7 +18,6 @@ import pandas as pd
 import numpy as np
 
 MAX_PERCENTILE = 100
-MS_TO_SECONDS = 1000.0
 UNKNOWN_VALUE = "unknown"
 
 
@@ -55,8 +54,21 @@ def load_locations(latencies_path):
         return []
     return locations
 
+def percentile_value(row, percentile):
+    """Return a percentile latency value (ms) from a DataFrame row."""
+    key = f"p{percentile}"
+    v = row.get(key, None)
+    if pd.isna(v):
+        return None
+    if isinstance(v, str) and v.strip().lower() == UNKNOWN_VALUE:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
 def estimate_row_latency(row):
-    """Estimate latency (ms) from percentile columns in a DataFrame row.
+    """Estimate mean latency (ms) from percentile columns in a DataFrame row.
 
     Args:
         row: Pandas Series/dict containing percentile keys (p1..p100).
@@ -64,54 +76,14 @@ def estimate_row_latency(row):
     Returns:
         Estimated latency in milliseconds, or None if no valid percentile data exists.
     """
-    median = row.get("p50", None)
-    if not pd.isna(median):
-        if not (isinstance(median, str) and median.strip().lower() == UNKNOWN_VALUE):
-            try:
-                return float(median)
-            except (TypeError, ValueError):
-                pass
     vals = []
     for i in range(1, MAX_PERCENTILE + 1):
-        key = f"p{i}"
-        v = row.get(key, None)
-        if pd.isna(v):
-            continue
-        if isinstance(v, str) and v.strip().lower() == UNKNOWN_VALUE:
-            continue
-        try:
-            vals.append(float(v))
-        except (TypeError, ValueError):
-            continue
+        v = percentile_value(row, i)
+        if v is not None:
+            vals.append(v)
     if not vals:
         return None
     return np.mean(vals)
-
-def estimate_row_throughput(row):
-    """Estimate throughput (ops/sec) from recorded throughput or latency percentiles.
-
-    Args:
-        row: Pandas Series/dict containing 'tput', percentile keys, and 'clients'.
-
-    Returns:
-        Estimated throughput in ops/sec, or None if estimation is not possible.
-    """
-    try:
-        tput = float(row.get('tput', 0))
-    except (TypeError, ValueError):
-        tput = None
-    if tput is not None and tput > 0:
-        return tput
-    estimated_latency_ms = estimate_row_latency(row)
-    if estimated_latency_ms is None or estimated_latency_ms <= 0:
-        return None
-    try:
-        clients = int(row.get('clients', 1))
-    except (TypeError, ValueError):
-        clients = 1
-    if clients <= 0:
-        clients = 1
-    return (clients * 1000.0) / estimated_latency_ms
 
 def compute_e(n, f):
     e = 0
@@ -203,10 +175,12 @@ def main():
             return None
 
     df_rmw['nodes_int'] = df_rmw['nodes'].apply(safe_int)
-    df_rmw['clients_int'] = df_rmw['clients'].apply(safe_int)
     df_rmw = df_rmw[df_rmw['nodes_int'].notnull()]
-    df_rmw['latency_ms'] = df_rmw.apply(estimate_row_latency, axis=1)
-    df_rmw['tput_est'] = df_rmw.apply(estimate_row_throughput, axis=1)
+    df_rmw['avg_latency_ms'] = df_rmw.apply(estimate_row_latency, axis=1)
+    for percentile in (90, 95, 99):
+        df_rmw[f"p{percentile}_ms"] = df_rmw.apply(
+            lambda row, p=percentile: percentile_value(row, p), axis=1
+        )
 
     # Get unique protocols and node counts, sorted
     protocols = sorted(df_rmw['protocol'].unique().tolist())
@@ -222,42 +196,20 @@ def main():
                 if best_latency is not None and worst_latency is not None:
                     accord_latencies.append((nodes, best_latency, worst_latency))
 
-    # Compute average throughput per protocol and node count
-    # Throughput is in the 'tput' column (ops/sec)
+    # Compute average latency per protocol and node count
     data = {}
     for proto in protocols:
         data[proto] = {}
         for nodes in node_counts:
             subset = df_rmw[(df_rmw['protocol'] == proto) & (df_rmw['nodes_int'] == nodes)]
             if not subset.empty:
-                latency_vals = subset['latency_ms'].dropna()
-                if not latency_vals.empty:
-                    avg_latency = float(np.mean(latency_vals))
-                    clients_vals = subset['clients_int'].dropna()
-                    total_clients = int(clients_vals.sum()) if not clients_vals.empty else 1
-                    if total_clients < 1:
-                        total_clients = 1
-                    # Use total throughput across all clients for the protocol/node configuration.
-                    # MS_TO_SECONDS converts milliseconds to seconds.
-                    latency_seconds = avg_latency / MS_TO_SECONDS if avg_latency > 0 else 0
-                    data[proto][nodes] = (total_clients / latency_seconds) if latency_seconds > 0 else 0
-                else:
-                    # Parse throughput values as a fallback
-                    tput_vals = []
-                    for val in subset['tput_est']:
-                        if pd.isna(val):
-                            continue
-                        try:
-                            tput_vals.append(float(val))
-                        except (TypeError, ValueError):
-                            continue
-                    if tput_vals:
-                        # tput_est is captured per client row in the CSV; summing approximates total throughput.
-                        data[proto][nodes] = float(np.sum(tput_vals))
-                    else:
-                        data[proto][nodes] = 0
+                data[proto][nodes] = {}
+                for metric in ("avg", "p90", "p95", "p99"):
+                    col = "avg_latency_ms" if metric == "avg" else f"{metric}_ms"
+                    vals = subset[col].dropna()
+                    data[proto][nodes][metric] = float(np.mean(vals)) if not vals.empty else 0
             else:
-                data[proto][nodes] = 0
+                data[proto][nodes] = {metric: 0 for metric in ("avg", "p90", "p95", "p99")}
 
     # Prepare colors for protocols
     color_cycle = [
@@ -273,15 +225,18 @@ def main():
     all_vals = []
     for proto in protocols:
         for nodes in node_counts:
-            if data[proto].get(nodes, 0) > 0:
-                all_vals.append(data[proto][nodes])
+            for metric in ("avg", "p90", "p95", "p99"):
+                val = data[proto].get(nodes, {}).get(metric, 0)
+                if val > 0:
+                    all_vals.append(val)
     if all_vals:
         ymax = max(all_vals) * 1.2
     else:
         ymax = 100
 
     # Generate TikZ/pgfplots code for grouped bar chart
-    bar_width = 0.8 / len(protocols)  # width per bar
+    series_count = len(protocols) * 4
+    bar_width = 0.8 / series_count if series_count > 0 else 0.2
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
@@ -290,12 +245,12 @@ def main():
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
         f.write("      ybar,\n")
-        f.write("      bar width=0.4cm,\n")
+        f.write(f"      bar width={bar_width:.2f}cm,\n")
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
         f.write("      xlabel={Number of nodes},\n")
-        f.write("      ylabel={Throughput (transactions/sec)},\n")
+        f.write("      ylabel={Latency (ms)},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
         f.write("      symbolic x coords={" + ",".join(str(n) for n in node_counts) + "},\n")
         f.write("      xtick=data,\n")
@@ -303,21 +258,25 @@ def main():
         f.write("      legend style={font=\\small},\n")
         f.write("    ]\n\n")
 
-        for idx, proto in enumerate(protocols):
-            col = color_cycle[idx % len(color_cycle)]
-            f.write(f"      \\addplot+[fill={col}, draw=black] coordinates {{\n")
-            for nodes in node_counts:
-                val = data[proto].get(nodes, 0)
-                f.write(f"        ({nodes}, {val:.2f})\n")
-            f.write("      };\n")
-            f.write(f"      \\addlegendentry{{{proto}}}\n\n")
+        metric_labels = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
+        series_idx = 0
+        for proto in protocols:
+            for metric in ("avg", "p90", "p95", "p99"):
+                col = color_cycle[series_idx % len(color_cycle)]
+                series_idx += 1
+                f.write(f"      \\addplot+[fill={col}, draw=black] coordinates {{\n")
+                for nodes in node_counts:
+                    val = data[proto].get(nodes, {}).get(metric, 0)
+                    f.write(f"        ({nodes}, {val:.2f})\n")
+                f.write("      };\n")
+                f.write(f"      \\addlegendentry{{{proto} {metric_labels[metric]}}}\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
-        f.write("  \\caption{Throughput of the closed economy workload (read-modify-write transactions) "
+        f.write("  \\caption{Closed economy workload latency (read-modify-write transactions) "
                 "as a function of the number of nodes. Each group shows results for a given number of nodes, "
-                "with bars representing different protocols.}\n")
-        f.write("  \\label{fig:closed-economy-throughput}\n")
+                "with bars representing the average latency and tail percentiles per protocol.}\n")
+        f.write("  \\label{fig:closed-economy-latency}\n")
         f.write("\\end{figure}\n")
 
         if accord_latencies:
