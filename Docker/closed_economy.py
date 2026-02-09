@@ -17,7 +17,7 @@ import sys
 import pandas as pd
 import numpy as np
 
-MAX_PERCENTILE = 100
+PERCENTILE_MAX = 100
 
 
 def usage_and_exit():
@@ -53,7 +53,7 @@ def load_locations(latencies_path):
         return []
     return locations
 
-def row_mean_latency(row):
+def row_latency_estimate(row):
     """Compute a latency estimate (ms) from percentile columns in a DataFrame row."""
     median = row.get("p50", None)
     if not pd.isna(median):
@@ -63,7 +63,7 @@ def row_mean_latency(row):
             except (TypeError, ValueError):
                 pass
     vals = []
-    for i in range(1, MAX_PERCENTILE + 1):
+    for i in range(1, PERCENTILE_MAX + 1):
         key = f"p{i}"
         v = row.get(key, None)
         if pd.isna(v):
@@ -76,7 +76,7 @@ def row_mean_latency(row):
             continue
     if not vals:
         return None
-    return float(np.mean(vals))
+    return np.mean(vals)
 
 def estimate_row_throughput(row):
     """Estimate throughput (ops/sec) from recorded throughput or latency percentiles."""
@@ -86,7 +86,7 @@ def estimate_row_throughput(row):
         tput = None
     if tput is not None and tput > 0:
         return tput
-    mean_latency_ms = row_mean_latency(row)
+    mean_latency_ms = row_latency_estimate(row)
     if mean_latency_ms is None or mean_latency_ms <= 0:
         return None
     try:
