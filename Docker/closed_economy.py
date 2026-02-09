@@ -20,7 +20,7 @@ import numpy as np
 MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
 METRIC_COLUMNS = {"avg": "avg_latency_ms", "p90": "p90_ms", "p95": "p95_ms", "p99": "p99_ms"}
-METRIC_LABELS = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
+METRIC_LABELS = {"avg": "Avg", "p90": "P90", "p95": "P95", "p99": "P99"}
 LATENCY_METRICS = tuple(METRIC_COLUMNS.keys())
 MIN_BAR_WIDTH = 0.12  # minimum readable bar width scalar (used with cm in output)
 BAR_WIDTH_TOTAL = 0.9  # total bar width scalar allocated across all series in a group
@@ -43,7 +43,7 @@ def calculate_bar_width(series_count):
     """
     if series_count <= 0:
         return DEFAULT_BAR_WIDTH
-    # Distribute BAR_WIDTH_TOTAL across series, but keep a minimum width for readability.
+    # Distribute BAR_WIDTH_TOTAL across series while keeping a minimum width for readability.
     return max(MIN_BAR_WIDTH, BAR_WIDTH_TOTAL / series_count)
 
 def haversine(lat1, lon1, lat2, lon2):
