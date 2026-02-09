@@ -44,7 +44,7 @@ METRIC_MARKS = {
     "worst": "x",
 }
 # Best latency is shown as the lower end of the vertical range, so no marker entry.
-# pgfplots marker styles for percentile and extrema metrics (P90/P95/P99/best/worst).
+# pgfplots marker styles for percentile and extrema metrics (P90/P95/P99/worst).
 MIN_OFFSET_STEP = 0.12  # minimum spacing between protocol groups
 OFFSET_TOTAL = 0.9  # total spacing allocated across all protocol groups
 DEFAULT_OFFSET_STEP = 0.2  # fallback spacing when no protocols exist
@@ -344,7 +344,7 @@ def main():
         ]
         for proto_idx, proto in enumerate(protocols):
             col = color_cycle[proto_idx % len(color_cycle)]
-            first_proto_entry = True  # add a single legend entry per protocol
+            first_protocol_entry = True  # add a single legend entry per protocol
             for node_idx, nodes in enumerate(node_counts):
                 offset = offsets[node_idx]
                 avg_val = data[proto].get(nodes, {}).get("avg")
@@ -363,9 +363,9 @@ def main():
                 f.write(f"        ({x:.2f}, {best_val:.2f})\n")
                 f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
                 f.write("      };\n\n")
-                if first_proto_entry:
+                if first_protocol_entry:
                     f.write(f"      \\addlegendentry{{{proto}}}\n\n")
-                    first_proto_entry = False
+                    first_protocol_entry = False
                 f.write(f"      \\addplot+[only marks, mark=*, color={col}, forget plot] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
                 f.write("      };\n\n")
@@ -378,7 +378,7 @@ def main():
                     f.write(f"        ({x:.2f}, {val:.2f})\n")
                     f.write("      };\n\n")
             # If no valid ranges were plotted for this protocol, still add a legend entry.
-            if first_proto_entry:
+            if first_protocol_entry:
                 f.write(f"      \\addlegendimage{{line, color={col}}}\n")
                 f.write(f"      \\addlegendentry{{{proto}}}\n\n")
 
