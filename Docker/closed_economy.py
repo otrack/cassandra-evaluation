@@ -36,7 +36,7 @@ METRIC_LABELS = {
     "worst": "Worst",
 }
 LATENCY_METRICS = ("avg", "p90", "p95", "p99", "best", "worst")
-MARKER_METRICS = ("p90", "p95", "p99", "worst")
+PERCENTILE_EXTREME_METRICS = ("p90", "p95", "p99", "worst")
 METRIC_MARKS = {
     "p90": "triangle*",
     "p95": "square*",
@@ -315,6 +315,7 @@ def main():
         ymax = 100
 
     # Generate TikZ/pgfplots code for grouped latency range chart
+    # Group by protocol on the x-axis with offsets per node count.
     series_count = len(node_counts)
     offset_step = calculate_offset_step(series_count)
 
@@ -342,7 +343,7 @@ def main():
         ]
         for proto_idx, proto in enumerate(protocols):
             col = color_cycle[proto_idx % len(color_cycle)]
-            first_proto_entry = True
+            first_proto_entry = True  # add a single legend entry per protocol
             for node_idx, nodes in enumerate(node_counts):
                 offset = offsets[node_idx]
                 avg_val = data[proto].get(nodes, {}).get("avg")
@@ -365,7 +366,7 @@ def main():
                 f.write(f"      \\addplot+[only marks, mark=*, color={col}, forget plot] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
                 f.write("      };\n\n")
-                for metric in MARKER_METRICS:
+                for metric in PERCENTILE_EXTREME_METRICS:
                     mark = METRIC_MARKS[metric]
                     val = data[proto].get(nodes, {}).get(metric)
                     if val is None:
@@ -374,7 +375,7 @@ def main():
                     f.write(f"        ({x:.2f}, {val:.2f})\n")
                     f.write("      };\n\n")
 
-        for metric in MARKER_METRICS:
+        for metric in PERCENTILE_EXTREME_METRICS:
             mark = METRIC_MARKS[metric]
             f.write("      % Add a single legend entry per metric marker style.\n")
             f.write(f"      \\addlegendimage{{only marks, mark={mark}}}\n")
