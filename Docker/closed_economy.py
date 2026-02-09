@@ -21,7 +21,7 @@ MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
 METRIC_COLUMNS = {"avg": "avg_latency_ms", "p90": "p90_ms", "p95": "p95_ms", "p99": "p99_ms"}
 METRIC_LABELS = {"avg": "Avg", "p90": "P90", "p95": "P95", "p99": "P99"}
-LATENCY_METRICS = tuple(METRIC_COLUMNS.keys())
+LATENCY_METRICS = ("avg", "p90", "p95", "p99")
 MIN_BAR_WIDTH = 0.12  # minimum readable bar width scalar (used with cm in output)
 BAR_WIDTH_TOTAL = 0.9  # total bar width scalar allocated across all series in a group
 DEFAULT_BAR_WIDTH = 0.2  # fallback bar width scalar when no series exist
@@ -76,7 +76,15 @@ def load_locations(latencies_path):
     return locations
 
 def percentile_value(row, percentile):
-    """Return a percentile latency value (ms) from a DataFrame row."""
+    """Return a percentile latency value (ms) from a DataFrame row.
+
+    Args:
+        row: Pandas Series/dict containing percentile keys (p1..p100).
+        percentile: Percentile to extract (e.g., 90 for p90).
+
+    Returns:
+        Float percentile latency in milliseconds, or None when missing/invalid.
+    """
     key = f"p{percentile}"
     v = row.get(key, None)
     if pd.isna(v):
