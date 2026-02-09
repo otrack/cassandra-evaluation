@@ -337,6 +337,7 @@ def main():
         f.write("      legend style={font=\\small},\n")
         f.write("    ]\n\n")
 
+        # Center protocol offsets around each node position.
         offsets = [
             (idx - (len(protocols) - 1) / 2) * offset_step for idx in range(len(protocols))
         ]
@@ -355,6 +356,7 @@ def main():
                 worst_val = data[proto].get(nodes, {}).get("worst")
                 if avg_val is None or best_val is None or worst_val is None:
                     continue
+                # Only compare bounds once we know all values are present.
                 # Skip inconsistent data where bounds do not enclose the average.
                 if not (best_val <= avg_val <= worst_val):
                     continue
