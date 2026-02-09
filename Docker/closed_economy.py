@@ -22,9 +22,9 @@ UNKNOWN_VALUE = "unknown"
 METRIC_COLUMNS = {"avg": "avg_latency_ms", "p90": "p90_ms", "p95": "p95_ms", "p99": "p99_ms"}
 METRIC_LABELS = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
 LATENCY_METRICS = tuple(METRIC_COLUMNS.keys())
-MIN_BAR_WIDTH = 0.12  # centimeters minimum readable bar width
-BAR_WIDTH_TOTAL = 0.9  # centimeters allocated across all series in a group
-DEFAULT_BAR_WIDTH = 0.2  # centimeters when no series exist
+MIN_BAR_WIDTH = 0.12  # minimum readable bar width scalar (used with cm in output)
+BAR_WIDTH_TOTAL = 0.9  # total bar width scalar allocated across all series in a group
+DEFAULT_BAR_WIDTH = 0.2  # fallback bar width scalar when no series exist
 
 
 def usage_and_exit():
@@ -32,13 +32,14 @@ def usage_and_exit():
     sys.exit(1)
 
 def calculate_bar_width(series_count):
-    """Return the bar width in centimeters for the given series count.
+    """Return the bar width scalar for the given series count.
 
     Args:
         series_count: Number of bar series in each node group.
 
     Returns:
-        Bar width in centimeters; defaults to DEFAULT_BAR_WIDTH when series_count <= 0.
+        Bar width scalar used with cm units in the pgfplots output; defaults to
+        DEFAULT_BAR_WIDTH when series_count <= 0.
     """
     if series_count <= 0:
         return DEFAULT_BAR_WIDTH
