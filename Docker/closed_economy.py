@@ -19,17 +19,23 @@ import numpy as np
 
 MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
-LATENCY_METRICS = ("avg", "p90", "p95", "p99")
-METRIC_LABELS = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
 METRIC_COLUMNS = {"avg": "avg_latency_ms", "p90": "p90_ms", "p95": "p95_ms", "p99": "p99_ms"}
-MIN_BAR_WIDTH = 0.12
-BAR_WIDTH_TOTAL = 0.9
-DEFAULT_BAR_WIDTH = 0.2
+METRIC_LABELS = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
+LATENCY_METRICS = tuple(METRIC_COLUMNS.keys())
+MIN_BAR_WIDTH = 0.12  # centimeters
+BAR_WIDTH_TOTAL = 0.9  # centimeters for all series in a group
+DEFAULT_BAR_WIDTH = 0.2  # centimeters when no series exist
 
 
 def usage_and_exit():
     print("Usage: python closed_economy.py results.csv output.tex")
     sys.exit(1)
+
+def calculate_bar_width(series_count):
+    """Return the bar width in centimeters for the given series count."""
+    if series_count <= 0:
+        return DEFAULT_BAR_WIDTH
+    return max(MIN_BAR_WIDTH, BAR_WIDTH_TOTAL / series_count)
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371
@@ -242,7 +248,7 @@ def main():
 
     # Generate TikZ/pgfplots code for grouped bar chart
     series_count = len(protocols) * len(LATENCY_METRICS)
-    bar_width = max(MIN_BAR_WIDTH, BAR_WIDTH_TOTAL / series_count) if series_count > 0 else DEFAULT_BAR_WIDTH
+    bar_width = calculate_bar_width(series_count)
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
