@@ -19,6 +19,8 @@ import numpy as np
 
 MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
+LATENCY_METRICS = ("avg", "p90", "p95", "p99")
+METRIC_LABELS = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
 
 
 def usage_and_exit():
@@ -204,12 +206,12 @@ def main():
             subset = df_rmw[(df_rmw['protocol'] == proto) & (df_rmw['nodes_int'] == nodes)]
             if not subset.empty:
                 data[proto][nodes] = {}
-                for metric in ("avg", "p90", "p95", "p99"):
+                for metric in LATENCY_METRICS:
                     col = "avg_latency_ms" if metric == "avg" else f"{metric}_ms"
                     vals = subset[col].dropna()
                     data[proto][nodes][metric] = float(np.mean(vals)) if not vals.empty else 0
             else:
-                data[proto][nodes] = {metric: 0 for metric in ("avg", "p90", "p95", "p99")}
+                data[proto][nodes] = {metric: 0 for metric in LATENCY_METRICS}
 
     # Prepare colors for protocols
     color_cycle = [
@@ -225,7 +227,7 @@ def main():
     all_vals = []
     for proto in protocols:
         for nodes in node_counts:
-            for metric in ("avg", "p90", "p95", "p99"):
+            for metric in LATENCY_METRICS:
                 val = data[proto].get(nodes, {}).get(metric, 0)
                 if val > 0:
                     all_vals.append(val)
@@ -235,8 +237,8 @@ def main():
         ymax = 100
 
     # Generate TikZ/pgfplots code for grouped bar chart
-    series_count = len(protocols) * 4
-    bar_width = 0.8 / series_count if series_count > 0 else 0.2
+    series_count = len(protocols) * len(LATENCY_METRICS)
+    bar_width = max(0.12, 0.9 / series_count) if series_count > 0 else 0.2
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
@@ -258,10 +260,9 @@ def main():
         f.write("      legend style={font=\\small},\n")
         f.write("    ]\n\n")
 
-        metric_labels = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
         series_idx = 0
         for proto in protocols:
-            for metric in ("avg", "p90", "p95", "p99"):
+            for metric in LATENCY_METRICS:
                 col = color_cycle[series_idx % len(color_cycle)]
                 series_idx += 1
                 f.write(f"      \\addplot+[fill={col}, draw=black] coordinates {{\n")
@@ -269,7 +270,7 @@ def main():
                     val = data[proto].get(nodes, {}).get(metric, 0)
                     f.write(f"        ({nodes}, {val:.2f})\n")
                 f.write("      };\n")
-                f.write(f"      \\addlegendentry{{{proto} {metric_labels[metric]}}}\n\n")
+                f.write(f"      \\addlegendentry{{{proto} {METRIC_LABELS[metric]}}}\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
