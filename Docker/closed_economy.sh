@@ -18,7 +18,7 @@ protocols="accord cockroachdb"
 node_counts="3 5 7"
 records=100000
 total_threads=1
-ops_per_thread=1000
+ops_per_thread=200
 
 # For each protocol and node count combination, we need to:
 # 1. Create a new cluster (do_create_and_load=1)

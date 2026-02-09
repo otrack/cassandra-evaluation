@@ -64,7 +64,7 @@ for file in "$@"; do
         tput=$(awk -v t="$tput" 'BEGIN { printf "%.2f", t }')
     fi
 
-    for op in read insert update scan readmodifywrite; do
+    for op in read insert update scan readmodifywrite tx-readmodifywrite; do
         op_upper=$(echo "$op" | awk '{print toupper($0)}')
         row="$protocol,$nodes,$workload,$conflict_rate,$city,$op,$clients,$tput"
 

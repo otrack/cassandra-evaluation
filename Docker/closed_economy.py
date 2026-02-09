@@ -125,13 +125,14 @@ def main():
 
     df = pd.read_csv(results_csv)
 
-    # Filter for readmodifywrite operations (the transaction operation in closed economy)
-    df_rmw = df[df['op'] == 'readmodifywrite'].copy()
+    # Filter for tx-readmodifywrite operations (the transaction operation in closed economy)
+    df_rmw = df[df['op'] == 'tx-readmodifywrite'].copy()
 
-    # If no readmodifywrite data, fall back to all data
+    # If no tx-readmodifywrite data, fall back to all data
     if df_rmw.empty:
-        df_rmw = df.copy()
-
+        print(f"Invalid data")
+        exit(1)
+        
     # Parse nodes as integers
     def safe_int(x):
         try:
