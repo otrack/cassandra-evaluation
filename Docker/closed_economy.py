@@ -142,11 +142,11 @@ def estimate_row_latency(row):
 
 def row_best_latency(row):
     values = percentile_values(row)
-    return min(values) if values and len(values) > 0 else None
+    return min(values) if values else None
 
 def row_worst_latency(row):
     values = percentile_values(row)
-    return max(values) if values and len(values) > 0 else None
+    return max(values) if values else None
 
 def compute_e(n, f):
     e = 0
