@@ -22,8 +22,8 @@ UNKNOWN_VALUE = "unknown"
 METRIC_COLUMNS = {"avg": "avg_latency_ms", "p90": "p90_ms", "p95": "p95_ms", "p99": "p99_ms"}
 METRIC_LABELS = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
 LATENCY_METRICS = tuple(METRIC_COLUMNS.keys())
-MIN_BAR_WIDTH = 0.12  # centimeters
-BAR_WIDTH_TOTAL = 0.9  # centimeters allocated across all series in a group (pgfplots bar width uses cm)
+MIN_BAR_WIDTH = 0.12  # centimeters (explicit units used in pgfplots bar width)
+BAR_WIDTH_TOTAL = 0.9  # centimeters allocated across all series in a group
 DEFAULT_BAR_WIDTH = 0.2  # centimeters when no series exist
 
 
@@ -280,7 +280,7 @@ def main():
                     val = data[proto].get(nodes, {}).get(metric, 0)
                     f.write(f"        ({nodes}, {val:.2f})\n")
                 f.write("      };\n")
-                f.write(f"      \\addlegendentry{{{proto} {METRIC_LABELS[metric]}}}\n\n")
+                f.write(f"      \\addlegendentry{{{proto} - {METRIC_LABELS[metric]}}}\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
