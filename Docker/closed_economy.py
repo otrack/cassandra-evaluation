@@ -126,7 +126,7 @@ def percentile_values(row):
         row: Pandas Series/dict containing percentile keys (p1..p100).
 
     Returns:
-        List of percentile latency values in milliseconds.
+        List of non-None percentile latency values in milliseconds.
     """
     values = []
     for i in range(1, MAX_PERCENTILE + 1):
@@ -149,7 +149,7 @@ def estimate_row_latency(row):
         return None
     return np.mean(vals)
 
-def estimate_row_best_worst_latency(row):
+def get_row_best_worst_latency(row):
     """Estimate best and worst latency (ms) from percentile columns in a DataFrame row.
 
     Args:
@@ -256,7 +256,7 @@ def main():
     df_rmw = df_rmw[df_rmw['nodes_int'].notnull()]
     df_rmw['avg_latency_ms'] = df_rmw.apply(estimate_row_latency, axis=1)
     df_rmw[['best_latency_ms', 'worst_latency_ms']] = df_rmw.apply(
-        estimate_row_best_worst_latency, axis=1, result_type='expand'
+        get_row_best_worst_latency, axis=1, result_type='expand'
     )
     for percentile in (90, 95, 99):
         df_rmw[f"p{percentile}_ms"] = df_rmw.apply(
