@@ -21,6 +21,7 @@ MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
 LATENCY_METRICS = ("avg", "p90", "p95", "p99")
 METRIC_LABELS = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
+METRIC_COLUMNS = {"avg": "avg_latency_ms", "p90": "p90_ms", "p95": "p95_ms", "p99": "p99_ms"}
 MIN_BAR_WIDTH = 0.12
 BAR_WIDTH_TOTAL = 0.9
 DEFAULT_BAR_WIDTH = 0.2
@@ -210,7 +211,7 @@ def main():
             if not subset.empty:
                 data[proto][nodes] = {}
                 for metric in LATENCY_METRICS:
-                    col = "avg_latency_ms" if metric == "avg" else f"{metric}_ms"
+                    col = METRIC_COLUMNS[metric]
                     vals = subset[col].dropna()
                     data[proto][nodes][metric] = float(np.mean(vals)) if not vals.empty else 0
             else:
