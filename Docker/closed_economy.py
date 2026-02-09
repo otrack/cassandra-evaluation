@@ -36,7 +36,7 @@ METRIC_LABELS = {
     "worst": "Worst",
 }
 LATENCY_METRICS = ("avg", "p90", "p95", "p99", "best", "worst")
-PERCENTILE_AND_EXTREME_METRICS = ("p90", "p95", "p99", "worst")
+PERCENTILE_AND_WORST_METRICS = ("p90", "p95", "p99", "worst")
 METRIC_MARKS = {
     "p90": "triangle*",
     "p95": "square*",
@@ -357,6 +357,7 @@ def main():
                     continue
                 x = proto_idx + offset
                 # Two coordinates at the same x-position draw a vertical line for best/worst.
+                # Keep this line in the legend to label the protocol color.
                 f.write(f"      \\addplot+[color={col}] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {best_val:.2f})\n")
                 f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
@@ -367,7 +368,7 @@ def main():
                 f.write(f"      \\addplot+[only marks, mark=*, color={col}, forget plot] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
                 f.write("      };\n\n")
-                for metric in PERCENTILE_AND_EXTREME_METRICS:
+                for metric in PERCENTILE_AND_WORST_METRICS:
                     mark = METRIC_MARKS[metric]
                     val = data[proto].get(nodes, {}).get(metric)
                     if val is None:
@@ -376,7 +377,7 @@ def main():
                     f.write(f"        ({x:.2f}, {val:.2f})\n")
                     f.write("      };\n\n")
 
-        for metric in PERCENTILE_AND_EXTREME_METRICS:
+        for metric in PERCENTILE_AND_WORST_METRICS:
             mark = METRIC_MARKS[metric]
             f.write("      % Add a single legend entry per metric marker style.\n")
             f.write(f"      \\addlegendimage{{only marks, mark={mark}}}\n")
