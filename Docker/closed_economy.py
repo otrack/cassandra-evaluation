@@ -36,12 +36,11 @@ METRIC_LABELS = {
     "worst": "Worst",
 }
 LATENCY_METRICS = ("avg", "p90", "p95", "p99", "best", "worst")
-MARKER_METRICS = ("p90", "p95", "p99", "best", "worst")
+MARKER_METRICS = ("p90", "p95", "p99", "worst")
 METRIC_MARKS = {
     "p90": "triangle*",
     "p95": "square*",
     "p99": "diamond*",
-    "best": "o",
     "worst": "x",
 }
 # pgfplots marker styles for percentile and extrema metrics (P90/P95/P99/best/worst).
@@ -316,7 +315,7 @@ def main():
         ymax = 100
 
     # Generate TikZ/pgfplots code for grouped error bar chart
-    series_count = len(protocols)
+    series_count = len(node_counts)
     offset_step = calculate_offset_step(series_count)
 
     with open(output_tikz, 'w') as f:
@@ -328,29 +327,23 @@ def main():
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
-        f.write("      xlabel={Number of nodes},\n")
+        f.write("      xlabel={Protocol},\n")
         f.write("      ylabel={Latency (ms)},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
-        f.write("      xtick={" + ",".join(str(i) for i in range(len(node_counts))) + "},\n")
-        f.write("      xticklabels={" + ",".join(str(n) for n in node_counts) + "},\n")
+        f.write("      xtick={" + ",".join(str(i) for i in range(len(protocols))) + "},\n")
+        f.write("      xticklabels={" + ",".join(protocols) + "},\n")
         f.write("      legend pos=north east,\n")
         f.write("      legend style={font=\\small},\n")
         f.write("    ]\n\n")
 
         # Center protocol offsets around each node position.
         offsets = [
-            (idx - (len(protocols) - 1) / 2) * offset_step for idx in range(len(protocols))
+            (idx - (len(node_counts) - 1) / 2) * offset_step for idx in range(len(node_counts))
         ]
         for proto_idx, proto in enumerate(protocols):
             col = color_cycle[proto_idx % len(color_cycle)]
-            offset = offsets[proto_idx]
-            f.write("      \\addplot+[\n")
-            # mark=* indicates the average latency point for the error bar.
-            f.write(f"        color={col}, mark=*,\n")
-            f.write("        error bars/.cd,\n")
-            f.write("        y dir=both, y explicit,\n")
-            f.write("      ] coordinates {\n")
-            for pos, nodes in enumerate(node_counts):
+            for node_idx, nodes in enumerate(node_counts):
+                offset = offsets[node_idx]
                 avg_val = data[proto].get(nodes, {}).get("avg")
                 best_val = data[proto].get(nodes, {}).get("best")
                 worst_val = data[proto].get(nodes, {}).get("worst")
@@ -360,24 +353,22 @@ def main():
                 # Skip inconsistent data where bounds do not enclose the average.
                 if not (best_val <= avg_val <= worst_val):
                     continue
-                err_plus = worst_val - avg_val
-                err_minus = avg_val - best_val
-                x = pos + offset
-                f.write(
-                    f"        ({x:.2f}, {avg_val:.2f}) += (0, {err_plus:.2f}) -= (0, {err_minus:.2f})\n"
-                )
-            f.write("      };\n")
-            f.write(f"      \\addlegendentry{{{proto}}}\n\n")
-            for metric in MARKER_METRICS:
-                mark = METRIC_MARKS[metric]
-                f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, forget plot] coordinates {{\n")
-                for pos, nodes in enumerate(node_counts):
+                x = proto_idx + offset
+                f.write(f"      \\addplot+[color={col}] coordinates {{\n")
+                f.write(f"        ({x:.2f}, {best_val:.2f})\n")
+                f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
+                f.write("      };\n\n")
+                f.write(f"      \\addplot+[only marks, mark=*, color={col}, forget plot] coordinates {{\n")
+                f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
+                f.write("      };\n\n")
+                for metric in MARKER_METRICS:
+                    mark = METRIC_MARKS[metric]
                     val = data[proto].get(nodes, {}).get(metric)
                     if val is None:
                         continue
-                    x = pos + offset
+                    f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, forget plot] coordinates {{\n")
                     f.write(f"        ({x:.2f}, {val:.2f})\n")
-                f.write("      };\n\n")
+                    f.write("      };\n\n")
 
         for metric in MARKER_METRICS:
             mark = METRIC_MARKS[metric]
@@ -388,8 +379,7 @@ def main():
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Closed economy workload latency (read-modify-write transactions) "
-                "as a function of the number of nodes. Each group shows results for a given number of nodes, "
-                "with error bars showing best/worst latency and markers for the average and tail percentiles per protocol.}\n")
+                "with error bars showing best/worst latency and markers for the average and tail percentiles.}\n")
         f.write("  \\label{fig:closed-economy-latency}\n")
         f.write("\\end{figure}\n")
 
