@@ -21,6 +21,9 @@ MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
 LATENCY_METRICS = ("avg", "p90", "p95", "p99")
 METRIC_LABELS = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
+MIN_BAR_WIDTH = 0.12
+BAR_WIDTH_TOTAL = 0.9
+DEFAULT_BAR_WIDTH = 0.2
 
 
 def usage_and_exit():
@@ -238,7 +241,7 @@ def main():
 
     # Generate TikZ/pgfplots code for grouped bar chart
     series_count = len(protocols) * len(LATENCY_METRICS)
-    bar_width = max(0.12, 0.9 / series_count) if series_count > 0 else 0.2
+    bar_width = max(MIN_BAR_WIDTH, BAR_WIDTH_TOTAL / series_count) if series_count > 0 else DEFAULT_BAR_WIDTH
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
