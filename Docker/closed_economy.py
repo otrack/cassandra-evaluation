@@ -339,6 +339,7 @@ def main():
                 worst_val = data[proto].get(nodes, {}).get("worst")
                 if avg_val is None or best_val is None or worst_val is None:
                     continue
+                # Skip inconsistent data where bounds do not enclose the average.
                 if not (best_val <= avg_val <= worst_val):
                     continue
                 err_plus = worst_val - avg_val
