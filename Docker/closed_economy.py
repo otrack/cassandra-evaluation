@@ -384,7 +384,8 @@ def main():
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Closed economy workload latency (read-modify-write transactions) "
-                "with vertical ranges showing best/worst latency and markers for the average and tail percentiles.}\n")
+                "as a function of protocol with node-count offsets, with vertical ranges showing best/worst "
+                "latency and markers for the average and tail percentiles.}\n")
         f.write("  \\label{fig:closed-economy-latency}\n")
         f.write("\\end{figure}\n")
 
