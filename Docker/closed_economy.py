@@ -44,7 +44,7 @@ def load_locations(latencies_path):
                 try:
                     lat = float(row['lat'])
                     lon = float(row['lon'])
-                except Exception:
+                except (KeyError, TypeError, ValueError):
                     continue
                 locations.append((lat, lon))
     except FileNotFoundError:
@@ -62,7 +62,7 @@ def row_mean_latency(row):
             continue
         try:
             vals.append(float(v))
-        except Exception:
+        except (TypeError, ValueError):
             continue
     if not vals:
         return None
@@ -72,7 +72,7 @@ def estimate_row_throughput(row):
     tput = None
     try:
         tput = float(row.get('tput', 0))
-    except Exception:
+    except (TypeError, ValueError):
         tput = None
     if tput is not None and tput > 0:
         return tput
@@ -81,7 +81,7 @@ def estimate_row_throughput(row):
         return None
     try:
         clients = int(row.get('clients', 1))
-    except Exception:
+    except (TypeError, ValueError):
         clients = 1
     if clients <= 0:
         clients = 1
@@ -173,7 +173,7 @@ def main():
     def safe_int(x):
         try:
             return int(x)
-        except Exception:
+        except (TypeError, ValueError):
             return None
 
     df_rmw['nodes_int'] = df_rmw['nodes'].apply(safe_int)
@@ -209,7 +209,7 @@ def main():
                         continue
                     try:
                         tput_vals.append(float(val))
-                    except Exception:
+                    except (TypeError, ValueError):
                         continue
                 if tput_vals:
                     data[proto][nodes] = np.mean(tput_vals)
