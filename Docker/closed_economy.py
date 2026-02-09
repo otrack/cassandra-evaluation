@@ -23,7 +23,7 @@ METRIC_COLUMNS = {"avg": "avg_latency_ms", "p90": "p90_ms", "p95": "p95_ms", "p9
 METRIC_LABELS = {"avg": "avg", "p90": "P90", "p95": "P95", "p99": "P99"}
 LATENCY_METRICS = tuple(METRIC_COLUMNS.keys())
 MIN_BAR_WIDTH = 0.12  # centimeters
-BAR_WIDTH_TOTAL = 0.9  # centimeters for all series in a group
+BAR_WIDTH_TOTAL = 0.9  # centimeters allocated across all series in a group (pgfplots bar width uses cm)
 DEFAULT_BAR_WIDTH = 0.2  # centimeters when no series exist
 
 
