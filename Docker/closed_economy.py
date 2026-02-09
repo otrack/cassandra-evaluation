@@ -239,7 +239,8 @@ def main():
                         total_clients = 1
                     # Use total throughput across all clients for the protocol/node configuration.
                     # MS_TO_SECONDS converts milliseconds to seconds.
-                    data[proto][nodes] = (total_clients * MS_TO_SECONDS) / avg_latency if avg_latency > 0 else 0
+                    latency_seconds = avg_latency / MS_TO_SECONDS if avg_latency > 0 else 0
+                    data[proto][nodes] = (total_clients / latency_seconds) if latency_seconds > 0 else 0
                 else:
                     # Parse throughput values as a fallback
                     tput_vals = []
