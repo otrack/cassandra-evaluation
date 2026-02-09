@@ -36,7 +36,7 @@ METRIC_LABELS = {
     "worst": "Worst",
 }
 LATENCY_METRICS = ("avg", "p90", "p95", "p99", "best", "worst")
-PERCENTILE_AND_EXTREMA_METRICS = ("p90", "p95", "p99", "worst")
+MARKER_METRICS = ("p90", "p95", "p99", "worst")
 METRIC_MARKS = {
     "p90": "triangle*",
     "p95": "square*",
@@ -358,7 +358,7 @@ def main():
                     continue
                 x = proto_idx + offset
                 # Two coordinates at the same x-position draw a vertical line for best/worst.
-                # Keep the first vertical range in the legend to label the protocol color.
+                # Keep the first vertical range per protocol in the legend to label the protocol color.
                 f.write(f"      \\addplot+[color={col}] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {best_val:.2f})\n")
                 f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
@@ -369,7 +369,7 @@ def main():
                 f.write(f"      \\addplot+[only marks, mark=*, color={col}, forget plot] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
                 f.write("      };\n\n")
-                for metric in PERCENTILE_AND_EXTREMA_METRICS:
+                for metric in MARKER_METRICS:
                     mark = METRIC_MARKS[metric]
                     val = data[proto].get(nodes, {}).get(metric)
                     if val is None:
@@ -379,10 +379,10 @@ def main():
                     f.write("      };\n\n")
             # If no valid ranges were plotted for this protocol, still add a legend entry.
             if first_protocol_entry:
-                f.write(f"      \\addlegendimage{{line, color={col}}}\n")
+                f.write(f"      \\addlegendimage{{line legend, color={col}}}\n")
                 f.write(f"      \\addlegendentry{{{proto}}}\n\n")
 
-        for metric in PERCENTILE_AND_EXTREMA_METRICS:
+        for metric in MARKER_METRICS:
             mark = METRIC_MARKS[metric]
             f.write("      % Add a single legend entry per metric marker style.\n")
             f.write(f"      \\addlegendimage{{only marks, mark={mark}}}\n")
