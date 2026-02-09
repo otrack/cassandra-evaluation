@@ -272,9 +272,9 @@ def main():
                 for metric in LATENCY_METRICS:
                     col = METRIC_COLUMNS[metric]
                     vals = subset[col].dropna()
-                    data[proto][nodes][metric] = float(np.mean(vals)) if not vals.empty else 0
+                    data[proto][nodes][metric] = float(np.mean(vals)) if not vals.empty else None
             else:
-                data[proto][nodes] = {metric: 0 for metric in LATENCY_METRICS}
+                data[proto][nodes] = {metric: None for metric in LATENCY_METRICS}
 
     # Prepare colors for protocols
     color_cycle = [
@@ -291,8 +291,8 @@ def main():
     for proto in protocols:
         for nodes in node_counts:
             for metric in LATENCY_METRICS:
-                val = data[proto].get(nodes, {}).get(metric, 0)
-                if val > 0:
+                val = data[proto].get(nodes, {}).get(metric)
+                if val is not None:
                     all_vals.append(val)
     if all_vals:
         ymax = max(all_vals) * 1.2
@@ -334,13 +334,15 @@ def main():
             f.write("        y dir=both, y explicit,\n")
             f.write("      ] coordinates {\n")
             for pos, nodes in enumerate(node_counts):
-                avg_val = data[proto].get(nodes, {}).get("avg", 0)
-                best_val = data[proto].get(nodes, {}).get("best", 0)
-                worst_val = data[proto].get(nodes, {}).get("worst", 0)
-                if avg_val <= 0 or best_val <= 0 or worst_val <= 0:
+                avg_val = data[proto].get(nodes, {}).get("avg")
+                best_val = data[proto].get(nodes, {}).get("best")
+                worst_val = data[proto].get(nodes, {}).get("worst")
+                if avg_val is None or best_val is None or worst_val is None:
                     continue
-                err_plus = max(0.0, worst_val - avg_val)
-                err_minus = max(0.0, avg_val - best_val)
+                if not (best_val <= avg_val <= worst_val):
+                    continue
+                err_plus = worst_val - avg_val
+                err_minus = avg_val - best_val
                 x = pos + offset
                 f.write(
                     f"        ({x:.2f}, {avg_val:.2f}) += (0, {err_plus:.2f}) -= (0, {err_minus:.2f})\n"
@@ -351,8 +353,8 @@ def main():
                 mark = METRIC_MARKS[metric]
                 f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, forget plot] coordinates {{\n")
                 for pos, nodes in enumerate(node_counts):
-                    val = data[proto].get(nodes, {}).get(metric, 0)
-                    if val <= 0:
+                    val = data[proto].get(nodes, {}).get(metric)
+                    if val is None:
                         continue
                     x = pos + offset
                     f.write(f"        ({x:.2f}, {val:.2f})\n")
