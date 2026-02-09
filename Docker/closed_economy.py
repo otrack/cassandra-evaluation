@@ -44,29 +44,29 @@ METRIC_MARKS = {
     "best": "o",
     "worst": "x",
 }
-MIN_BAR_WIDTH = 0.12  # minimum readable bar width scalar (used with cm in output)
-BAR_WIDTH_TOTAL = 0.9  # total bar width scalar allocated across all series in a group
-DEFAULT_BAR_WIDTH = 0.2  # fallback bar width scalar when no series exist
+MIN_OFFSET_STEP = 0.12  # minimum spacing between protocol groups
+OFFSET_TOTAL = 0.9  # total spacing allocated across all protocol groups
+DEFAULT_OFFSET_STEP = 0.2  # fallback spacing when no protocols exist
 
 
 def usage_and_exit():
     print("Usage: python closed_economy.py results.csv output.tex")
     sys.exit(1)
 
-def calculate_bar_width(series_count):
-    """Return the bar width scalar for the given series count.
+def calculate_offset_step(series_count):
+    """Return the x-offset step for the given protocol count.
 
     Args:
-        series_count: Number of bar series in each node group.
+        series_count: Number of protocol series in each node group.
 
     Returns:
-        Bar width scalar used with cm units in the pgfplots output; defaults to
-        DEFAULT_BAR_WIDTH when series_count <= 0.
+        Offset step scalar for spacing protocol series; defaults to DEFAULT_OFFSET_STEP
+        when series_count <= 0.
     """
     if series_count <= 0:
-        return DEFAULT_BAR_WIDTH
-    # Distribute BAR_WIDTH_TOTAL across series while keeping a minimum width for readability.
-    return max(MIN_BAR_WIDTH, BAR_WIDTH_TOTAL / series_count)
+        return DEFAULT_OFFSET_STEP
+    # Distribute OFFSET_TOTAL across protocols while keeping a minimum spacing.
+    return max(MIN_OFFSET_STEP, OFFSET_TOTAL / series_count)
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371
@@ -142,11 +142,11 @@ def estimate_row_latency(row):
 
 def row_best_latency(row):
     values = percentile_values(row)
-    return min(values) if values else None
+    return min(values) if values and len(values) > 0 else None
 
 def row_worst_latency(row):
     values = percentile_values(row)
-    return max(values) if values else None
+    return max(values) if values and len(values) > 0 else None
 
 def compute_e(n, f):
     e = 0
@@ -301,7 +301,7 @@ def main():
 
     # Generate TikZ/pgfplots code for grouped error bar chart
     series_count = len(protocols)
-    bar_width = calculate_bar_width(series_count)
+    offset_step = calculate_offset_step(series_count)
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
@@ -309,7 +309,6 @@ def main():
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
-        f.write(f"      bar width={bar_width:.2f}cm,\n")
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
@@ -322,7 +321,6 @@ def main():
         f.write("      legend style={font=\\small},\n")
         f.write("    ]\n\n")
 
-        offset_step = 0.2
         offsets = [
             (idx - (len(protocols) - 1) / 2) * offset_step for idx in range(len(protocols))
         ]
