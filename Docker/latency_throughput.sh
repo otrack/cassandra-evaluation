@@ -29,7 +29,7 @@ for p in ${protocols}
 do
     do_create_and_load=1
     threads=1
-    
+
     while [ ${threads} -le ${max_threads} ]
     do
         ts=$(date +%Y%m%d%H%M%S%N)

@@ -190,6 +190,5 @@ def main():
 
     print(f"Generated {output_tikz}")
 
-
 if __name__ == "__main__":
     main()
