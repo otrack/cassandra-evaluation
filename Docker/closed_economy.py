@@ -10,6 +10,9 @@ This script generates a grouped bar chart (histogram) showing:
 The plot style is similar to Fig. 9 from https://arxiv.org/pdf/2104.01142
 """
 
+import csv
+import math
+import os
 import sys
 import pandas as pd
 import numpy as np
@@ -19,6 +22,99 @@ def usage_and_exit():
     print("Usage: python closed_economy.py results.csv output.tex")
     sys.exit(1)
 
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+def estimate_latency(distance_km):
+    speed_of_light_km_per_ms = 204
+    latency_ms = distance_km / speed_of_light_km_per_ms
+    return math.floor(latency_ms)
+
+def load_locations(latencies_path):
+    locations = []
+    try:
+        with open(latencies_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                try:
+                    lat = float(row['lat'])
+                    lon = float(row['lon'])
+                except Exception:
+                    continue
+                locations.append((lat, lon))
+    except FileNotFoundError:
+        return []
+    return locations
+
+def compute_e(n, f):
+    e = 0
+    for candidate in range(n + 1):
+        if n >= max(2 * candidate + f - 1, 2 * f + 1):
+            e = candidate
+    return e
+
+def round_trip_to_quorum(locations, quorum_size):
+    n = len(locations)
+    if n == 0:
+        return []
+    rtts = []
+    for i in range(n):
+        dists = []
+        for j in range(n):
+            if i == j:
+                continue
+            lat1, lon1 = locations[i]
+            lat2, lon2 = locations[j]
+            dists.append(haversine(lat1, lon1, lat2, lon2))
+        if not dists:
+            rtts.append(0.0)
+            continue
+        dists.sort()
+        needed = max(1, quorum_size - 1)
+        selected = dists[:min(needed, len(dists))]
+        rtts.append(2 * estimate_latency(max(selected)))
+    return rtts
+
+def round_trip_to_nearest_nodes(locations, count):
+    n = len(locations)
+    if n == 0:
+        return []
+    rtts = []
+    for i in range(n):
+        dists = []
+        for j in range(n):
+            if i == j:
+                continue
+            lat1, lon1 = locations[i]
+            lat2, lon2 = locations[j]
+            dists.append(haversine(lat1, lon1, lat2, lon2))
+        if not dists:
+            rtts.append(0.0)
+            continue
+        dists.sort()
+        selected = dists[:min(count, len(dists))]
+        rtts.append(2 * estimate_latency(max(selected)))
+    return rtts
+
+def accord_latency_bounds(locations):
+    n = len(locations)
+    if n == 0:
+        return None, None
+    f = (n - 1) // 2
+    e = compute_e(n, f)
+    fast_quorum = max(1, n - e)
+    slow_quorum = max(1, n - f)
+    fast_rtts = round_trip_to_quorum(locations, fast_quorum)
+    slow_rtts = round_trip_to_quorum(locations, slow_quorum)
+    execute_rtts = round_trip_to_nearest_nodes(locations, 2)
+    best_vals = [fast_rtts[i] + execute_rtts[i] for i in range(n)]
+    worst_vals = [3 * slow_rtts[i] + execute_rtts[i] for i in range(n)]
+    return float(np.mean(best_vals)), float(np.mean(worst_vals))
 
 def main():
     if len(sys.argv) < 3:
@@ -49,6 +145,16 @@ def main():
     # Get unique protocols and node counts, sorted
     protocols = sorted(df_rmw['protocol'].unique().tolist())
     node_counts = sorted(df_rmw['nodes_int'].unique().tolist())
+
+    latencies_path = os.path.join(os.path.dirname(__file__), "latencies.csv")
+    locations = load_locations(latencies_path)
+    accord_latencies = []
+    if locations:
+        for nodes in node_counts:
+            if nodes <= len(locations):
+                best_latency, worst_latency = accord_latency_bounds(locations[:nodes])
+                if best_latency is not None and worst_latency is not None:
+                    accord_latencies.append((nodes, best_latency, worst_latency))
 
     # Compute average throughput per protocol and node count
     # Throughput is in the 'tput' column (ops/sec)
@@ -132,6 +238,17 @@ def main():
                 "with bars representing different protocols.}\n")
         f.write("  \\label{fig:closed-economy-throughput}\n")
         f.write("\\end{figure}\n")
+
+        if accord_latencies:
+            f.write("\\medskip\n")
+            f.write("\\begin{tabular}{lrr}\n")
+            f.write("  \\hline\n")
+            f.write("  Nodes & Accord best-case latency (ms) & Accord worst-case latency (ms) \\\\\n")
+            f.write("  \\hline\n")
+            for nodes, best_latency, worst_latency in accord_latencies:
+                f.write(f"  {nodes} & {best_latency:.2f} & {worst_latency:.2f} \\\\\n")
+            f.write("  \\hline\n")
+            f.write("\\end{tabular}\n")
 
     print(f"Generated {output_tikz}")
 
