@@ -141,7 +141,7 @@ def estimate_row_latency(row):
         return None
     return np.mean(vals)
 
-def row_best_worst_latency(row):
+def estimate_row_best_worst_latency(row):
     values = percentile_values(row)
     if not values:
         return None, None
@@ -240,7 +240,7 @@ def main():
     df_rmw = df_rmw[df_rmw['nodes_int'].notnull()]
     df_rmw['avg_latency_ms'] = df_rmw.apply(estimate_row_latency, axis=1)
     df_rmw[['best_latency_ms', 'worst_latency_ms']] = df_rmw.apply(
-        row_best_worst_latency, axis=1, result_type='expand'
+        estimate_row_best_worst_latency, axis=1, result_type='expand'
     )
     for percentile in (90, 95, 99):
         df_rmw[f"p{percentile}_ms"] = df_rmw.apply(
@@ -337,7 +337,7 @@ def main():
                 avg_val = data[proto].get(nodes, {}).get("avg", 0)
                 best_val = data[proto].get(nodes, {}).get("best", 0)
                 worst_val = data[proto].get(nodes, {}).get("worst", 0)
-                if avg_val <= 0:
+                if avg_val <= 0 or best_val <= 0 or worst_val <= 0:
                     continue
                 err_plus = max(0.0, worst_val - avg_val)
                 err_minus = max(0.0, avg_val - best_val)
