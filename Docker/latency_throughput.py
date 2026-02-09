@@ -183,7 +183,8 @@ def main():
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Latency vs Throughput: Average operation latency as a function of throughput. ")
         f.write("Each curve represents a protocol; the number of clients increases by a factor of 2 ")
-        f.write("(1, 2, 4, 8, ...) until both latency and throughput degrade (hockey stick effect).}\n")
+        f.write("(1, 2, 4, 8, ...) demonstrating the hockey stick effect where latency increases sharply ")
+        f.write("while throughput plateaus/degrades as the system saturates.}\n")
         f.write("  \\label{fig:latency-throughput}\n")
         f.write("\\end{figure}\n")
 
