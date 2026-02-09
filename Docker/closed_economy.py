@@ -234,8 +234,9 @@ def main():
                     avg_latency = float(np.mean(latency_vals))
                     clients_vals = subset['clients_int'].dropna()
                     max_clients_observed = int(clients_vals.max()) if not clients_vals.empty else 1
-                    max_clients_observed = max(1, max_clients_observed)
-                    total_clients = max(1, nodes * max_clients_observed)
+                    if max_clients_observed < 1:
+                        max_clients_observed = 1
+                    total_clients = nodes * max_clients_observed
                     data[proto][nodes] = (total_clients * 1000.0) / avg_latency if avg_latency > 0 else 0
                 else:
                     # Parse throughput values as a fallback
@@ -248,7 +249,7 @@ def main():
                         except (TypeError, ValueError):
                             continue
                     if tput_vals:
-                        # If only per-row throughput values are available, sum to approximate total throughput.
+                        # If only per-client throughput values are available, sum to approximate total throughput.
                         data[proto][nodes] = float(np.sum(tput_vals))
                     else:
                         data[proto][nodes] = 0
