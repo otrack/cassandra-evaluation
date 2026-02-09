@@ -14,23 +14,23 @@ thetas=$(seq -f "%.1f" 0 0.1 1.0)
 protocols="quorum accord swiftpaxos-paxos cockroachdb"
 nodes=3
 records=1000
-clients=1
-ops_per_client=1000
+threads=1
+ops_per_thread=1000
 
 do_clean_up=0
 for p in ${protocols}
 do
     do_create_and_load=1
-    total=$(( $(echo ${thetas} | wc -w) * $(echo ${clients} | wc -w) ))
+    total=$(( $(echo ${thetas} | wc -w) * $(echo ${threads} | wc -w) ))
     count=0
     for t in ${thetas}
     do
-	for c in ${clients}
+	for c in ${threads}
 	do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/${p}_${nodes}_a_${ts}.dat"
-	    run_benchmark ${p} ${c} ${nodes} ${workload_type} a ${records} $((clients * ops_per_client)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0
+	    run_benchmark ${p} ${c} ${nodes} ${workload_type} a ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0
 	    do_create_and_load=0
 	    count=$((count+1))
 	done

@@ -7,7 +7,7 @@ cassandra_create_keyspace() {
     local node_count=$2
     local container=$(config "node_name")${node_count}
     drop_keyspace_command="DROP KEYSPACE IF EXISTS ycsb;"
-    create_keyspace_command="CREATE KEYSPACE IF NOT EXISTS ycsb WITH replication = {'class': 'SimpleStrategy', 'replication_factor': $node_count};"
+    create_keyspace_command="CREATE KEYSPACE IF NOT EXISTS ycsb WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 3};"
     
     # Drop the keyspace if it exists
     docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$drop_keyspace_command"
