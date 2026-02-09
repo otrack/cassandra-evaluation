@@ -33,30 +33,21 @@ do
         ts=$(date +%Y%m%d%H%M%S%N)
         output_file="${LOGDIR}/${p}_${nodes}_${workload}_${ts}.dat"
         
-        # Only clean up after last protocol's last run
-        if [ "${p}" = "$(echo ${protocols} | awk '{print $NF}')" ] && [ ${threads} -eq ${max_threads} ]; then
+        # Clean up after the last iteration of each protocol's thread sequence
+        # This ensures we start fresh for the next protocol
+        do_clean_up=0
+        next_threads=$((threads * 2))
+        if [ ${next_threads} -gt ${max_threads} ]; then
             do_clean_up=1
         fi
         
-        run_benchmark ${p} ${threads} ${nodes} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0
+        run_benchmark ${p} ${threads} ${nodes} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up}
         do_create_and_load=0
         
         # Double the number of threads for next iteration
-        threads=$((threads * 2))
+        threads=${next_threads}
     done
-    
-    # Clean up cluster after each protocol to start fresh for the next one
-    pref=cassandra
-    if printf '%s\n' "$p" | grep -wF -q -- "swiftpaxos"; then
-        pref=swiftpaxos
-    elif printf '%s\n' "$p" | grep -wF -q -- "cockroachdb"; then
-        pref=cockroachdb
-    fi
-    ${pref}_cleanup_cluster ${nodes}
 done
-
-# Clean up network at the end
-stop_network
 
 debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/latency_throughput.csv
