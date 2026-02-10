@@ -36,12 +36,12 @@ METRIC_LABELS = {
     "worst": "Worst",
 }
 LATENCY_METRICS = ("avg", "p90", "p95", "p99", "best", "worst")
-MARKER_METRICS = ("p90", "p95", "p99", "worst")
+MARKER_METRICS = ("avg", "p90", "p95", "p99")
 METRIC_MARKS = {
+    "avg": "*",
     "p90": "triangle*",
     "p95": "square*",
     "p99": "diamond*",
-    "worst": "x",
 }
 # Best latency is shown as the lower end of the vertical range, so no marker entry.
 # pgfplots marker styles for percentile and extrema metrics (P90/P95/P99/worst).
@@ -294,12 +294,8 @@ def main():
 
     # Prepare colors for protocols
     color_cycle = [
-        "blue!80!black",
-        "red!80!black",
-        "green!60!black",
-        "orange!80!black",
-        "purple!80!black",
-        "cyan!80!black",
+        "blue",
+        "red",
     ]
 
     # Compute y-axis limits
@@ -323,9 +319,6 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
-        f.write("  \\caption{Closed economy workload latency (read-modify-write transactions) "
-                "as a function of protocol with node-count offsets, with vertical ranges showing best/worst "
-                "latency and markers for the average and tail percentiles.}\n")
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
@@ -337,8 +330,7 @@ def main():
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
         f.write("      xtick={" + ",".join(str(i) for i in range(len(protocols))) + "},\n")
         f.write("      xticklabels={" + ",".join(protocols) + "},\n")
-        f.write("      legend pos=north east,\n")
-        f.write("      legend style={font=\\small},\n")
+        f.write("      legend style={at={(.75,1.2)}, legend columns=4, font=\\small},\n")
         f.write("    ]\n\n")
 
         # Center node count offsets around each protocol position.
@@ -347,7 +339,7 @@ def main():
         ]
         for proto_idx, proto in enumerate(protocols):
             col = color_cycle[proto_idx % len(color_cycle)]
-            first_protocol_entry = True  # add a single legend entry per protocol
+            first_protocol_entry = False  # add a single legend entry per protocol
             for node_idx, nodes in enumerate(node_counts):
                 offset = offsets[node_idx]
                 avg_val = data[proto].get(nodes, {}).get("avg")
@@ -362,14 +354,14 @@ def main():
                 x = proto_idx + offset
                 # Two coordinates at the same x-position draw a vertical line for best/worst.
                 # Keep the first vertical range per protocol in the legend to label the protocol color.
-                f.write(f"      \\addplot+[color={col}] coordinates {{\n")
+                f.write(f"      \\addplot+[mark=-, color={col}, solid] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {best_val:.2f})\n")
                 f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
                 f.write("      };\n\n")
                 if first_protocol_entry:
                     f.write(f"      \\addlegendentry{{{proto}}}\n\n")
                     first_protocol_entry = False
-                f.write(f"      \\addplot+[only marks, mark=*, color={col}, forget plot] coordinates {{\n")
+                f.write(f"      \\addplot+[only marks, mark=*, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
                 f.write("      };\n\n")
                 for metric in MARKER_METRICS:
@@ -377,7 +369,7 @@ def main():
                     val = data[proto].get(nodes, {}).get(metric)
                     if val is None:
                         continue
-                    f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, forget plot] coordinates {{\n")
+                    f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
                     f.write(f"        ({x:.2f}, {val:.2f})\n")
                     f.write("      };\n\n")
             # If no valid ranges were plotted for this protocol, still add a legend entry.
@@ -385,15 +377,17 @@ def main():
                 f.write(f"      \\addlegendimage{{line legend, color={col}}}\n")
                 f.write(f"      \\addlegendentry{{{proto}}}\n\n")
 
-        for metric in MARKER_METRICS:
-            mark = METRIC_MARKS[metric]
-            f.write("      % Add a single legend entry per metric marker style.\n")
-            f.write(f"      \\addlegendimage{{only marks, mark={mark}}}\n")
-            f.write(f"      \\addlegendentry{{{METRIC_LABELS[metric]}}}\n\n")
+        # for metric in MARKER_METRICS:
+        #     mark = METRIC_MARKS[metric]
+        #     f.write("      % Add a single legend entry per metric marker style.\n")
+        #     f.write(f"      \\addlegendimage{{only marks, mark={mark}, fill=black, draw=black, mark size=3pt, line width=1pt}}\n")
+        #     f.write(f"      \\addlegendentry{{{METRIC_LABELS[metric]}}}\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\label{fig:closed-economy-latency}\n")
+        f.write("  \\caption{Closed economy workload latency as a function of the protocol. For each protocol, from left to right, 3, 5 and 7 nodes. "
+                "The markers indicate the average ($\\CIRCLE$), P90 ($\\blacktriangle$), P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles.}\n")
         f.write("\\end{figure}\n")
 
         if accord_latencies:

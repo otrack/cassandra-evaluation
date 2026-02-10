@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 
-# Closed Economy experiment: runs the closed economy workload in YCSB.
-# This workload models a banking scenario where transactions transfer money between accounts.
-# Only transaction-supporting protocols are used: accord and cockroachdb.
-# The number of nodes varies from 3 to 5.
+# Closed Economy experiment (aka., YCSB-T).
+# This workload models a banking scenario similar to TPC-B where transactions transfer money between accounts.
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
 
@@ -19,11 +17,6 @@ node_counts="3 5 7"
 records=100000
 total_threads=1
 ops_per_thread=200
-
-# For each protocol and node count combination, we need to:
-# 1. Create a new cluster (do_create_and_load=1)
-# 2. Run the workload
-# 3. Clean up (do_clean_up=1) before moving to next node count (different topology)
 
 for p in ${protocols}
 do
@@ -50,6 +43,8 @@ pdflatex -jobname=closed_economy -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\
+ \usepackage{amssymb}\
+ \usepackage{wasysym}\
  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
  \usetikzlibrary{shapes,arrows}\
  \usepgflibrary{shapes.symbols}\
