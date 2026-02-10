@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 
-# Closed Economy experiment: runs the closed economy workload in YCSB.
-# This workload models a banking scenario where transactions transfer money between accounts.
-# Only transaction-supporting protocols are used: accord and cockroachdb.
-# The number of nodes varies from 3 to 5.
+# Closed Economy experiment (aka., YCSB-T).
+# This workload models a banking scenario similar to TPC-B where transactions transfer money between accounts.
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
 
@@ -16,24 +14,22 @@ workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
 protocols="accord cockroachdb"
 node_counts="3 5 7"
-records=1000
-threads=1
-ops_per_thread=1000
-
-# For each protocol and node count combination, we need to:
-# 1. Create a new cluster (do_create_and_load=1)
-# 2. Run the workload
-# 3. Clean up (do_clean_up=1) before moving to next node count (different topology)
+records=100000
+total_threads=1
+ops_per_thread=200
 
 for p in ${protocols}
 do
     for nodes in ${node_counts}
     do
-	t=${threads} # $((threads/nodes))
+	t=$((total_threads / nodes))
+	if [ ${t} -lt 1 ]; then
+	    t=1
+	fi
 	ts=$(date +%Y%m%d%H%M%S%N)
 	output_file="${LOGDIR}/${p}_${nodes}_${workload}_${ts}.dat"
 	# Each node count requires a fresh cluster, so always create and always clean up
-	run_benchmark ${p} ${t} ${nodes} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} 1 1
+	run_benchmark ${p} ${t} ${nodes} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1
     done
 done
 
@@ -47,6 +43,8 @@ pdflatex -jobname=closed_economy -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\
+ \usepackage{amssymb}\
+ \usepackage{wasysym}\
  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
  \usetikzlibrary{shapes,arrows}\
  \usepgflibrary{shapes.symbols}\

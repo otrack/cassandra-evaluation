@@ -81,6 +81,11 @@ run_ycsb() {
     local threads=${10}
     local container_name=${11}
     local nearby_database=${12}
+    local ycsb_threads=${threads}
+
+    if [ "$action" == "load" ]; then
+        ycsb_threads=1
+    fi
     
     # capture any extra arguments (13th onward) and prepare a safely quoted string
     shift 12
@@ -166,7 +171,7 @@ YCSB_BINDING=${ycsb_client}\n\
 YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
 YCSB_RECORDCOUNT=${recordcount}\n\
 YCSB_OPERATIONCOUNT=${operationcount}\n\
-YCSB_THREADS=${nthreads}\n\
+YCSB_THREADS=${ycsb_threads}\n\
 YCSB_OPTS=-s -p workload=${workload_type} ${debug} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
     
     start_container ${ycsb_image} ${container_name} "Starting test" ${output_file} ${docker_args}
