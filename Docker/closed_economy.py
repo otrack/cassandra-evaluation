@@ -323,6 +323,9 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        f.write("  \\caption{Closed economy workload latency (read-modify-write transactions) "
+                "as a function of protocol with node-count offsets, with vertical ranges showing best/worst "
+                "latency and markers for the average and tail percentiles.}\n")
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
@@ -390,9 +393,6 @@ def main():
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
-        f.write("  \\caption{Closed economy workload latency (read-modify-write transactions) "
-                "as a function of protocol with node-count offsets, with vertical ranges showing best/worst "
-                "latency and markers for the average and tail percentiles.}\n")
         f.write("  \\label{fig:closed-economy-latency}\n")
         f.write("\\end{figure}\n")
 
