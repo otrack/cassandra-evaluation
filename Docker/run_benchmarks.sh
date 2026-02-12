@@ -191,6 +191,8 @@ run_benchmark() {
 	exit 1
     fi
 
+    init_logdir
+
     log "run_benchmark using args: $@"
     
     protocol=$1

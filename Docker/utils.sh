@@ -32,6 +32,10 @@ error() {
     echo -e >&2 "["$(date +%s:%N)"] \033[31m${message}\033[0m"
 }
 
+init_logdir() {
+    mkdir -p ${LOGDIR};
+}
+
 clean_logdir() {
     rm -Rf ${LOGDIR}/*
 }
