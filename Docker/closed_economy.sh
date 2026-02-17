@@ -13,8 +13,9 @@ clean_logdir
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
 protocols="accord cockroachdb"
-node_counts="3 5 7"
-records=100000
+protocols="accord"
+node_counts="3"
+records=1000
 total_threads=1
 ops_per_thread=200
 

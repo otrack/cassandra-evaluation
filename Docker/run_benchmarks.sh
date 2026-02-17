@@ -165,8 +165,9 @@ run_ycsb() {
 
     local debug=""
     # comment out to have debug on
-    # debug="JAVA_OPTS=\"-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\"" 
-    echo -e "YCSB_COMMAND=${action}\n\
+    local debug="-p debug=true"
+    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\n\
+YCSB_COMMAND=${action}\n\
 YCSB_BINDING=${ycsb_client}\n\
 YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
 YCSB_RECORDCOUNT=${recordcount}\n\
