@@ -13,9 +13,10 @@ workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
 workloads="a"
 protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
-protocols="quorum accord swiftpaxos-paxos cockroachdb"
+protocols="accord swiftpaxos-paxos"
 nodes=3
-city="Lyon"
+cities="Lyon" # can be "None"
+plot_average=true
 records=1000
 threads=1
 ops_per_thread=1000
@@ -37,14 +38,18 @@ do
 	    do_create_and_load=0
 	    count=$((count+1))
 	done
-    done    
+    done
 done
 
 debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/cdf.csv
 
 debug "Plotting..."
-python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${city} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
+if [ "$plot_average" = true ]; then
+    python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${cities} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex --average
+else
+    python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${cities} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
+fi
 
 pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
