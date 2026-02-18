@@ -206,7 +206,7 @@ def main():
                     break
             if ok:
                 use_locations = True
-                
+
         if use_locations:
             latlon = []
             for r in rows[1:1+num_nodes]:
@@ -261,17 +261,23 @@ def main():
         replica_means = []
         replica_labels = []
 
-    # Prepare an escaped label for the third entry (data replica) to include in the caption
-    data_replica_caption = ""
+    # Prepare a caption showing all cities present in the results
+    data_cities_caption = ""
     try:
-        if len(replica_labels) >= 3:
-            # take the third entry (index 2)
-            raw_label = replica_labels[2]
-            # minimal LaTeX escaping for common special chars (backslash, underscore, percent)
-            safe = raw_label.replace("\\", "\\textbackslash{}").replace("_", "\\_").replace("%", "\\%")
-            data_replica_caption = f" Data replica location: \\texttt{{{safe}}}."
+        if 'city' in df_valid.columns:
+            # Get all unique cities from the valid data
+            cities = sorted(df_valid['city'].unique().tolist())
+            # Escape city names
+            safe_cities = []
+            for city in cities:
+                if pd.notna(city):
+                    safe = str(city).replace("\\", "\\textbackslash{}").replace("_", "\\_").replace("%", "\\%")
+                    safe_cities.append(safe)
+            if safe_cities:
+                cities_str = ", ".join(safe_cities)
+                data_cities_caption = f" Data locations: \\texttt{{{cities_str}}}."
     except Exception:
-        data_replica_caption = ""
+        data_cities_caption = ""
 
     # Write TikZ/pgfplots file
     with open(output_tikz, "w") as f:
@@ -316,8 +322,7 @@ def main():
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Average operation latency as a function of the ConflictWorkload parameter \\texttt{conflict.theta}. Each curve is a protocol; x-axis is the conflict rate (0 to 1), y-axis is average latency in ms.")
-        # append the data replica info if available
-        f.write(data_replica_caption)
+        f.write(data_cities_caption)
         f.write("}\n")
         f.write("  \\label{fig:conflict-latency}\n")
         f.write("\\end{figure}\n")
