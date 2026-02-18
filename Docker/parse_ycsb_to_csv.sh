@@ -43,7 +43,7 @@ for file in "$@"; do
     fi
 
     # Extract clients (threads) from the file
-    clients=$(grep -E 'Threads:|threadcount' "$file" | head -1 | grep -oE '[0-9]+')
+    clients=$(awk '{for(i=1;i<=NF;i++) if($i=="-threads") {print $(i+1); exit}}' $file)
     if [ -z "$clients" ]; then
         clients=$(grep -oE '\-threads[ =][0-9]+' "$file" | head -1 | grep -oE '[0-9]+')
     fi
