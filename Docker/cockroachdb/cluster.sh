@@ -11,6 +11,8 @@ cockroachdb_start_cluster() {
     local protocol=$2
     local image=$(config cockroachdb_image)
     local network=$(config "network_name")
+    local resource_limits
+    resource_limits=$(get_resource_limits)
     
     log "Starting CockroachDB cluster with ${node_count} node(s)..."
     
@@ -18,7 +20,7 @@ cockroachdb_start_cluster() {
     local first_node=$(config "node_name")1
     # Note: Using "--" to separate Docker options from container command
     start_container ${image} ${first_node} "initial startup completed" ${LOGDIR}/cockroachdb_node1.log \
-        --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
+        --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
         -- start --insecure --join=${first_node} || {
         error "Failed to start first CockroachDB node"
         return 1
@@ -37,7 +39,7 @@ cockroachdb_start_cluster() {
         local container_name=$(config "node_name")${i}
         # Note: Using "--" to separate Docker options from container command
         start_container ${image} ${container_name} "nodeID" ${LOGDIR}/cockroachdb_node${i}.log \
-            --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW \
+            --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
             -- start --insecure --join=${first_ip} || {
             error "Failed to start CockroachDB node ${i}"
             return 3

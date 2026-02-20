@@ -232,6 +232,38 @@ stop_container_after_delay() {
     ) &
 }
 
+get_resource_limits() {
+    local machine
+    machine=$(config machine)
+
+    if [ -z "$machine" ]; then
+        echo ""
+        return 0
+    fi
+
+    local gcp_csv="${DIR}/gcp.csv"
+    if [ ! -f "$gcp_csv" ]; then
+        error "gcp.csv not found: ${gcp_csv}"
+        echo ""
+        return 1
+    fi
+
+    local row
+    row=$(awk -F',' -v name="$machine" 'NR>1 && $1==name {print $0; exit}' "$gcp_csv")
+    if [ -z "$row" ]; then
+        error "Machine type '${machine}' not found in gcp.csv"
+        echo ""
+        return 1
+    fi
+
+    local vcpus memory_gb memory_mb
+    vcpus=$(echo "$row" | cut -d',' -f2)
+    memory_gb=$(echo "$row" | cut -d',' -f3)
+    memory_mb=$(awk "BEGIN { printf \"%d\", ${memory_gb} * 1024 }")
+
+    echo "--cpus ${vcpus} --memory ${memory_mb}m"
+}
+
 get_location() {
   local k="$1"
   local file="${2:-latencies.csv}"
