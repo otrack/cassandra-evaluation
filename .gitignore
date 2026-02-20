@@ -104,3 +104,6 @@ venv.bak/
 *.swp
 *.swo
 *~
+
+Docker/results/
+Docker/logs/

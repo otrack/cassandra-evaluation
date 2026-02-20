@@ -34,7 +34,7 @@ do
 	    do_create_and_load=0
 	    count=$((count+1))
 	done
-    done    
+    done
 done
 
 debug "Parsing results..."
