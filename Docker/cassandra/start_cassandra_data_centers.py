@@ -35,7 +35,6 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
 
     # Determine resource limits from gcp.csv if machine type is specified
     nano_cpus = None
-    mem_limit_value = config["xmx"]
     machine = config.get("machine", "")
     if machine:
         try:
@@ -61,7 +60,6 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 name=container_name,
                 network=network_name,
                 auto_remove=True,
-                mem_limit=mem_limit_value,
                 environment={
                     "JVM_OPTS" : " -Xms2g -Xmx"+config["xmx"], 
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
@@ -75,6 +73,8 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
             )
             if nano_cpus is not None:
                 run_kwargs['nano_cpus'] = nano_cpus
+            if mem_limit_value is not None:
+                run_kwargs['memory'] = mem_limit_value,
             container = client.containers.run(**run_kwargs)
             containers.append(container)            
             debug(f"Starting container '{container_name}' in data center '{dc_name}'.")
