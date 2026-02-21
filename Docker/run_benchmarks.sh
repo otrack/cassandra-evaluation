@@ -106,8 +106,13 @@ run_ycsb() {
 
 	if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
 	then
-	    # nothing to do
-	    true
+	    local leaderless="false"
+	    local fast="false"
+	    if printf '%s\n' "$protocol" | grep -wF -q -- "epaxos";
+	    then
+		leaderless="true"
+		fast="true"
+	    fi
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
 	then
 	    cockroachdb_create_usertable
@@ -127,14 +132,16 @@ run_ycsb() {
 	fi
     fi
 
-    local ycsb_image=$(config ycsb_image)    
+    local ycsb_image=$(config ycsb_image)
     
     local ycsb_client="swiftpaxos"
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
     then
 	extra_opts_str+=" -p maddr=${hosts} \
 -p mport=${port} \
--p verbose=false"
+-p verbose=false \
+-p leaderless=${leaderless} \
+-p fast=${fast}"
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
     then
 	# CockroachDB using JDBC (PostgreSQL wire protocol)
@@ -163,10 +170,8 @@ run_ycsb() {
 -p cassandra.readconsistencylevel=$consistency_level"
     fi
 
-    local debug=""
-    # comment out to have debug on
-    # local debug="-p debug=true"
-    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\n\
+    # adjust debug level below
+    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=info\n\
 YCSB_COMMAND=${action}\n\
 YCSB_BINDING=${ycsb_client}\n\
 YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\

@@ -1,4 +1,4 @@
-import docker, sys, time, math, re, csv
+import docker, sys, time, math, re, csv, os
 from datetime import datetime
 
 def debug(msg):
@@ -32,6 +32,21 @@ def wait_for_log(container, log_pattern, timeout=300):
 def create_cassandra_cluster(num_nodes, cassandra_image):
     client = docker.from_env()
     network_name = config["network_name"]
+
+    # Determine resource limits from gcp.csv if machine type is specified
+    nano_cpus = None
+    machine = config.get("machine", "")
+    if machine:
+        try:
+            with open(os.path.join(os.path.dirname(__file__), '..', 'gcp.csv'), 'r') as gcp_file:
+                gcp_reader = csv.DictReader(gcp_file)
+                for gcp_row in gcp_reader:
+                    if gcp_row['name'] == machine:
+                        nano_cpus = int(float(gcp_row['vcpus']) * 1e9)
+                        mem_limit = int(gcp_row['memory']) * 1024 * 1024 * 1024
+                        break
+        except FileNotFoundError:
+            debug(f"gcp.csv not found, no resource limits applied for machine '{machine}'")
     
     # Start the Cassandra nodes
     containers = []
@@ -40,14 +55,13 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
         container_name = f'{config["node_name"]}{i}'
         _, _, dc_name = locations[i-1]
         try:
-            container = client.containers.run(
+            run_kwargs = dict(
                 image=cassandra_image,
                 name=container_name,
                 network=network_name,
                 auto_remove=True,
-                mem_limit=config["xmx"],
                 environment={
-                    "JVM_OPTS" : " -Xms2g -Xmx"+config["xmx"], 
+                    "JVM_OPTS" : " -Xms2g -Xmx"+config["cassandra_xmx"], 
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
                     "CASSANDRA_DC": dc_name,
@@ -57,6 +71,11 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 ports={ '9042/tcp': ('127.0.0.1', (3333+i)), '5005/tcp': ('127.0.0.1', (5005+i)) },
                 detach=True
             )
+            if nano_cpus is not None:
+                run_kwargs['nano_cpus'] = nano_cpus
+            if mem_limit is not None:
+                run_kwargs['mem_limit'] = mem_limit
+            container = client.containers.run(**run_kwargs)
             containers.append(container)            
             debug(f"Starting container '{container_name}' in data center '{dc_name}'.")
             if not wait_for_log(container, log_pattern):
