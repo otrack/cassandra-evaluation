@@ -43,7 +43,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 for gcp_row in gcp_reader:
                     if gcp_row['name'] == machine:
                         nano_cpus = int(float(gcp_row['vcpus']) * 1e9)
-                        mem_limit_value = int(float(gcp_row['memory']) * 1024 * 1024 * 1024)
+                        mem_limit = int(gcp_row['memory']) * 1024 * 1024 * 1024
                         break
         except FileNotFoundError:
             debug(f"gcp.csv not found, no resource limits applied for machine '{machine}'")
@@ -61,7 +61,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 network=network_name,
                 auto_remove=True,
                 environment={
-                    "JVM_OPTS" : " -Xms2g -Xmx"+config["xmx"], 
+                    "JVM_OPTS" : " -Xms2g -Xmx"+config["cassandra_xmx"], 
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
                     "CASSANDRA_DC": dc_name,
@@ -73,8 +73,8 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
             )
             if nano_cpus is not None:
                 run_kwargs['nano_cpus'] = nano_cpus
-            if mem_limit_value is not None:
-                run_kwargs['memory'] = mem_limit_value,
+            if mem_limit is not None:
+                run_kwargs['mem_limit'] = mem_limit
             container = client.containers.run(**run_kwargs)
             containers.append(container)            
             debug(f"Starting container '{container_name}' in data center '{dc_name}'.")

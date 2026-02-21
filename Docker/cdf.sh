@@ -11,11 +11,10 @@ clean_logdir
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
-workloads="a"
 protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
-protocols="quorum accord swiftpaxos-paxos cockroachdb"
+protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
 nodes=3
-city="Lyon"
+city="Hanoi"
 records=1000
 threads=1
 ops_per_thread=1000
