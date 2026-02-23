@@ -3,10 +3,11 @@
 Fault-tolerance experiment plotter.
 
 Parses YCSB -s status output lines from log files produced by fault-tolerance.sh
-and generates a throughput-over-time TikZ/pgfplots figure.
+and generates a throughput-over-time TikZ/pgfplots figure with one curve per protocol.
 
 Usage:
-    python3 fault_tolerance.py <logdir> <protocol> <duration_s> <slowdown_s> <crash_s> <output.tex>
+    python3 fault_tolerance.py <logdir> <protocol1> [protocol2 ...] \
+        <duration_s> <slowdown_s> <slowdown_end_s> <crash_s> <output.tex>
 """
 
 import sys
@@ -42,42 +43,51 @@ def parse_status_lines(logfile):
 
 
 def main():
-    if len(sys.argv) != 7:
+    # Expect: logdir protocol1 [protocol2 ...] duration_s slowdown_s slowdown_end_s crash_s output.tex
+    if len(sys.argv) < 8:
         print(
             "Usage: fault_tolerance.py "
-            "<logdir> <protocol> <duration_s> <slowdown_s> <crash_s> <output.tex>"
+            "<logdir> <protocol1> [protocol2 ...] "
+            "<duration_s> <slowdown_s> <slowdown_end_s> <crash_s> <output.tex>"
         )
         sys.exit(1)
 
     logdir = sys.argv[1]
-    protocol = sys.argv[2]
-    duration_s = int(sys.argv[3])
-    slowdown_s = int(sys.argv[4])
-    crash_s = int(sys.argv[5])
-    output_tex = sys.argv[6]
+    protocols = sys.argv[2:-5]
+    duration_s = int(sys.argv[-5])
+    slowdown_s = int(sys.argv[-4])
+    slowdown_end_s = int(sys.argv[-3])
+    crash_s = int(sys.argv[-2])
+    output_tex = sys.argv[-1]
 
-    # Find all .dat files produced for this protocol
-    dat_files = glob.glob(os.path.join(logdir, f"{protocol}_*.dat"))
+    color_cycle = [
+        "red", "blue", "green!50!black", "cyan!80!black",
+        "magenta!80!black", "yellow!80!black", "black"
+    ]
 
-    if not dat_files:
-        print(f"No .dat files found for protocol '{protocol}' in {logdir}")
+    # Collect per-protocol aggregated throughput series
+    protocol_data = {}
+    for protocol in protocols:
+        dat_files = glob.glob(os.path.join(logdir, f"{protocol}_*.dat"))
+        if not dat_files:
+            print(f"Warning: no .dat files found for protocol '{protocol}' in {logdir}")
+            continue
+        throughput_by_time = defaultdict(float)
+        for f in dat_files:
+            for elapsed, ops in parse_status_lines(f):
+                throughput_by_time[elapsed] += ops
+        if throughput_by_time:
+            times = sorted(throughput_by_time.keys())
+            protocol_data[protocol] = (times, [throughput_by_time[t] for t in times])
+
+    if not protocol_data:
+        print("No YCSB status lines found in any log files. Cannot plot.")
         sys.exit(0)
 
-    # Aggregate throughput (sum across all clients) per elapsed-second bucket
-    throughput_by_time = defaultdict(float)
-    for f in dat_files:
-        for elapsed, ops in parse_status_lines(f):
-            throughput_by_time[elapsed] += ops
-
-    if not throughput_by_time:
-        print("No YCSB status lines found in log files. Cannot plot.")
-        sys.exit(0)
-
-    times = sorted(throughput_by_time.keys())
-    throughputs = [throughput_by_time[t] for t in times]
-
-    ymax = max(throughputs) * 1.15
-    xmax = max(times[-1], duration_s)
+    all_throughputs = [v for _, tputs in protocol_data.values() for v in tputs]
+    all_times = [t for times, _ in protocol_data.values() for t in times]
+    ymax = max(all_throughputs) * 1.15
+    xmax = max(max(all_times), duration_s)
 
     with open(output_tex, "w") as f:
         f.write("\\begin{figure}[htbp]\n")
@@ -94,19 +104,31 @@ def main():
         f.write("      legend style={font=\\small},\n")
         f.write("    ]\n\n")
 
-        # Throughput curve
-        f.write("      \\addplot[blue, thick, mark=none] table {\n")
-        for t, tput in zip(times, throughputs):
-            f.write(f"        {t} {tput:.2f}\n")
-        f.write("      };\n")
-        f.write(f"      \\addlegendentry{{{protocol}}}\n\n")
+        # One throughput curve per protocol
+        for idx, protocol in enumerate(protocols):
+            if protocol not in protocol_data:
+                continue
+            col = color_cycle[idx % len(color_cycle)]
+            times, throughputs = protocol_data[protocol]
+            f.write(f"      \\addplot[{col}, thick, mark=none] table {{\n")
+            for t, tput in zip(times, throughputs):
+                f.write(f"        {t} {tput:.2f}\n")
+            f.write("      };\n")
+            f.write(f"      \\addlegendentry{{{protocol}}}\n\n")
 
-        # Vertical line: slowdown event (X/4)
+        # Vertical line: slowdown start (X/4)
         f.write(
-            f"      \\addplot[red, dashed, thick] "
+            f"      \\addplot[orange, dashed, thick] "
             f"coordinates {{({slowdown_s},0) ({slowdown_s},{ymax:.2f})}};\n"
         )
-        f.write("      \\addlegendentry{slowdown (+400\\,ms)}\n\n")
+        f.write("      \\addlegendentry{slowdown start}\n\n")
+
+        # Vertical line: slowdown end (X/4+X/8)
+        f.write(
+            f"      \\addplot[orange!50!black, dashed, thick] "
+            f"coordinates {{({slowdown_end_s},0) ({slowdown_end_s},{ymax:.2f})}};\n"
+        )
+        f.write("      \\addlegendentry{slowdown end}\n\n")
 
         # Vertical line: crash event (3X/4)
         f.write(
@@ -117,12 +139,14 @@ def main():
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
+        protocols_str = ", ".join(protocols)
         f.write(
             "  \\caption{Aggregated YCSB throughput over time "
-            f"({protocol}, {duration_s // 60}\\,min experiment). "
+            f"({protocols_str}, {duration_s // 60}\\,min experiment). "
             f"At $t={slowdown_s}$\\,s a 400\\,ms latency is added to the first node "
-            f"(red dashed line). At $t={crash_s}$\\,s the first node is killed "
-            "(black dashed line).}\n"
+            f"(bright orange dashed line); the slowdown is removed at $t={slowdown_end_s}$\\,s "
+            f"(dark orange dashed line). "
+            f"At $t={crash_s}$\\,s the first node is killed (black dashed line).}}\n"
         )
         f.write("  \\label{fig:fault-tolerance}\n")
         f.write("\\end{figure}\n")
