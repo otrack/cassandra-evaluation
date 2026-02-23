@@ -10,15 +10,15 @@ source ${DIR}/run_benchmarks.sh
 clean_logdir
 
 workload_type="site.ycsb.workloads.CoreWorkload"
-workloads="a b c d"
+workloads="a"
 protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
 protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
 nodes=3
-cities="None" # can be "None"
+cities="Hanoi Lyon NewYork" # can be "None"
 plot_average=true
 records=1000
 threads=1
-ops_per_thread=1000
+ops_per_thread=100000
 
 do_clean_up=0
 for p in ${protocols}

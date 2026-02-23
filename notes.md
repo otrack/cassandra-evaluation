@@ -102,3 +102,38 @@ In detail, you should
 (i) compute the average latency over the n clients,
 (ii) also include the main percentiles (e.g., P90, P95, and P99) in the plot.
 This should replace the bar which is currently displayed, while keeping a histogram-like plot.
+
+# 20.02 - copilot
+
+Add the capability to bound the resources of the database containers in a manner of a public cloud platform when using containers.
+More precisely, under /Docker, you should:
+- create a file called gcp.csv with the following columns: name, vcpus, memory.
+Each entry in this file should correspond to the resources provided by the Google Cloud Platform for a given machine type at the cloud provider. 
+For instance, n1-standard corresponds to 4 vCPUs and 15GB RAM.
+Use the data made publicly available by GCP to populate this file.
+- in run_benchmark.sh, addd a parameter to limit the cpu and memory resources of a database container.
+To define such limits, use the machine type as provided in the entry "machine=" in the file exp.config.
+If no such information is provided, then there is no limit for the container.
+
+# 20.02 
+
+possible improvements
+- YCSB: swap among N instead of 2
+- performance breakdown for Accord and CRDB
+- add a fault-tolerance exp.
+
+# 22.02 - copilot
+
+The goal of this work is to add a fault-tolerance experiment.
+This experiment should mimic the one appearing in Section 6.2 (Figure 6) in the paper entitled "CockroachDB: The Resilient Geo-DistributedSQL Database", published at SIGMOD'20 (industry track).
+In detail,
+- the experiment is similar to the already existing ones (e.g., cdf.sh, conflict.sh), relying on the same tool to start/stop a cluster and a bunch of YCSB clients
+- the experiment should last X (configurable) minutes during which two events occurs.
+The first event happens at time X/4.
+It is a slowdown of database-node1 by adding 400ms of latency to reach the other databases (implemented using the tc tool).
+The second event happens at time 3X/4.
+The site database-node1 crashes (by executing a docker kill command.)
+- the plot output by the experiment is as follows:
+the x axis is a timeline
+the y axis is the aggregated throughput of the YCSB client (as observed with the -s command in YCSB)
+- the experiment is available in a new script called fault-tolerance.sh
