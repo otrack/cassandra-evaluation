@@ -43,7 +43,7 @@ for file in "$@"; do
     fi
 
     # Extract clients (threads) from the file
-    clients=$(grep -E 'Threads:|threadcount' "$file" | head -1 | grep -oE '[0-9]+')
+    clients=$(awk '{for(i=1;i<=NF;i++) if($i=="-threads") {print $(i+1); exit}}' $file)
     if [ -z "$clients" ]; then
         clients=$(grep -oE '\-threads[ =][0-9]+' "$file" | head -1 | grep -oE '[0-9]+')
     fi
@@ -64,7 +64,7 @@ for file in "$@"; do
         tput=$(awk -v t="$tput" 'BEGIN { printf "%.2f", t }')
     fi
 
-    for op in read insert update scan readmodifywrite; do
+    for op in read insert update scan readmodifywrite tx-readmodifywrite; do
         op_upper=$(echo "$op" | awk '{print toupper($0)}')
         row="$protocol,$nodes,$workload,$conflict_rate,$city,$op,$clients,$tput"
 

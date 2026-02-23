@@ -11,7 +11,8 @@ clean_logdir
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
 thetas=$(seq -f "%.1f" 0 0.1 1.0)
-protocols="quorum accord swiftpaxos-paxos cockroachdb"
+protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
+# protocols="swiftpaxos-epaxos"
 nodes=3
 records=1000
 threads=1
@@ -34,14 +35,14 @@ do
 	    do_create_and_load=0
 	    count=$((count+1))
 	done
-    done    
+    done
 done
 
 debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/conflict.csv
 
 debug "Plotting..."
-python ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv a 3 ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
+python3 ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv a 3 ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
 
 pdflatex -jobname=conflict -output-directory=${RESULTSDIR} \
 "\documentclass{article}\

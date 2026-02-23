@@ -81,6 +81,11 @@ run_ycsb() {
     local threads=${10}
     local container_name=${11}
     local nearby_database=${12}
+    local ycsb_threads=${threads}
+
+    if [ "$action" == "load" ]; then
+        ycsb_threads=1
+    fi
     
     # capture any extra arguments (13th onward) and prepare a safely quoted string
     shift 12
@@ -94,11 +99,10 @@ run_ycsb() {
     fi
     log ${extra_opts_str[@]}
 
-    local docker_args="--rm -d --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
+    local docker_args="--rm -d --security-opt apparmor=unconfined --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
     
     if [ "$action" == "load" ];
     then
-
 	if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
 	then
 	    # nothing to do
@@ -122,14 +126,23 @@ run_ycsb() {
 	fi
     fi
 
-    local ycsb_image=$(config ycsb_image)    
+    local ycsb_image=$(config ycsb_image)
     
     local ycsb_client="swiftpaxos"
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
-    then
+    then       
+	local leaderless="false"
+	local fast="false"
+	if printf '%s\n' "$protocol" | grep -wF -q -- "epaxos";
+	then
+	    leaderless="true"
+	    fast="false"
+	fi	
 	extra_opts_str+=" -p maddr=${hosts} \
 -p mport=${port} \
--p verbose=false"
+-p verbose=false \
+-p leaderless=${leaderless} \
+-p fast=${fast}"
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
     then
 	# CockroachDB using JDBC (PostgreSQL wire protocol)
@@ -158,15 +171,14 @@ run_ycsb() {
 -p cassandra.readconsistencylevel=$consistency_level"
     fi
 
-    local debug=""
-    # comment out to have debug on
-    # debug="JAVA_OPTS=\"-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\"" 
-    echo -e "YCSB_COMMAND=${action}\n\
+    # adjust debug level below
+    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=info\n\
+YCSB_COMMAND=${action}\n\
 YCSB_BINDING=${ycsb_client}\n\
 YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
 YCSB_RECORDCOUNT=${recordcount}\n\
 YCSB_OPERATIONCOUNT=${operationcount}\n\
-YCSB_THREADS=${nthreads}\n\
+YCSB_THREADS=${ycsb_threads}\n\
 YCSB_OPTS=-s -p workload=${workload_type} ${debug} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
     
     start_container ${ycsb_image} ${container_name} "Starting test" ${output_file} ${docker_args}
@@ -185,6 +197,8 @@ run_benchmark() {
 	echo "Example: $0 ONE 10 3 site.ycsb.workloads.CoreWorkload a 1 1 1 1"
 	exit 1
     fi
+
+    init_logdir
 
     log "run_benchmark using args: $@"
     
