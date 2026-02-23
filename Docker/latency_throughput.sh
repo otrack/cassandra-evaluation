@@ -12,9 +12,10 @@ source ${DIR}/run_benchmarks.sh
 
 clean_logdir
 
-workload_type="site.ycsb.workloads.CoreWorkload"
+workload_type="site.ycsb.workloads.ConflictWorkload"
+theta=0.02
 workload="a"
-protocols="quorum accord swiftpaxos-paxos cockroachdb"
+protocols="accord swiftpaxos-paxos cockroachdb"
 nodes=3
 records=1000
 ops_per_thread=1000
@@ -43,7 +44,7 @@ do
             do_clean_up=1
         fi
         
-        run_benchmark ${p} ${threads} ${nodes} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up}
+        run_benchmark ${p} ${threads} ${nodes} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0
         do_create_and_load=0
         
         # Double the number of threads for next iteration
@@ -55,7 +56,7 @@ debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/latency_throughput.csv
 
 debug "Plotting..."
-python ${DIR}/latency_throughput.py ${RESULTSDIR}/latency_throughput.csv ${RESULTSDIR}/latency_throughput.tex
+python3 ${DIR}/latency_throughput.py ${RESULTSDIR}/latency_throughput.csv ${RESULTSDIR}/latency_throughput.tex
 
 pdflatex -jobname=latency_throughput -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
