@@ -99,20 +99,14 @@ run_ycsb() {
     fi
     log ${extra_opts_str[@]}
 
-    local docker_args="--rm -d --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
+    local docker_args="--rm -d --security-opt apparmor=unconfined --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
     
     if [ "$action" == "load" ];
     then
-
 	if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
 	then
-	    local leaderless="false"
-	    local fast="false"
-	    if printf '%s\n' "$protocol" | grep -wF -q -- "epaxos";
-	    then
-		leaderless="true"
-		fast="true"
-	    fi
+	    # nothing to do
+	    true
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
 	then
 	    cockroachdb_create_usertable
@@ -136,7 +130,14 @@ run_ycsb() {
     
     local ycsb_client="swiftpaxos"
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
-    then
+    then       
+	local leaderless="false"
+	local fast="false"
+	if printf '%s\n' "$protocol" | grep -wF -q -- "epaxos";
+	then
+	    leaderless="true"
+	    fast="false"
+	fi	
 	extra_opts_str+=" -p maddr=${hosts} \
 -p mport=${port} \
 -p verbose=false \
