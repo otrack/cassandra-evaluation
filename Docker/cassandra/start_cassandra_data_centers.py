@@ -35,6 +35,8 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
 
     # Determine resource limits from gcp.csv if machine type is specified
     nano_cpus = None
+    mem_limit = None
+    cassandra_xmx = "4g"  # default fallback
     machine = config.get("machine", "")
     if machine:
         try:
@@ -43,7 +45,9 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 for gcp_row in gcp_reader:
                     if gcp_row['name'] == machine:
                         nano_cpus = int(float(gcp_row['vcpus']) * 1e9)
-                        mem_limit = int(gcp_row['memory']) * 1024 * 1024 * 1024
+                        memory_gb = float(gcp_row['memory'])
+                        mem_limit = int(memory_gb * 1024 * 1024 * 1024)
+                        cassandra_xmx = f"{math.floor(memory_gb * 3 / 4)}g"
                         break
         except FileNotFoundError:
             debug(f"gcp.csv not found, no resource limits applied for machine '{machine}'")
@@ -62,7 +66,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 auto_remove=True,
                 security_opt=["apparmor=unconfined"],
                 environment={
-                    "JVM_OPTS" : " -Xms2g -Xmx"+config["cassandra_xmx"], 
+                    "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx, 
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
                     "CASSANDRA_DC": dc_name,
