@@ -42,7 +42,7 @@ debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/conflict.csv
 
 debug "Plotting..."
-python ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv a 3 ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
+python3 ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv a 3 ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
 
 pdflatex -jobname=conflict -output-directory=${RESULTSDIR} \
 "\documentclass{article}\

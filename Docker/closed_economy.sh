@@ -37,7 +37,7 @@ debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/closed_economy.csv
 
 debug "Plotting..."
-python ${DIR}/closed_economy.py ${RESULTSDIR}/closed_economy.csv ${RESULTSDIR}/closed_economy.tex
+python3 ${DIR}/closed_economy.py ${RESULTSDIR}/closed_economy.csv ${RESULTSDIR}/closed_economy.tex
 
 pdflatex -jobname=closed_economy -output-directory=${RESULTSDIR} \
 "\documentclass{article}\

@@ -45,9 +45,9 @@ ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/cdf.csv
 
 debug "Plotting..."
 if [ "$plot_average" = true ]; then
-    python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${cities} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex --average
+    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${cities} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex --average
 else
-    python ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${cities} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
+    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${cities} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
 fi
 
 pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
