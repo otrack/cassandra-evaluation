@@ -137,3 +137,12 @@ The site database-node1 crashes (by executing a docker kill command.)
 the x axis is a timeline
 the y axis is the aggregated throughput of the YCSB client (as observed with the -s command in YCSB)
 - the experiment is available in a new script called fault-tolerance.sh
+
+# 22.02 - copilot
+
+-> draft, not used
+
+The two events, slowdown and failure, should not impact database-node1 (and ycsb-1) but instead the location where the leader is.
+This implies that before injecting the event, the script should look for the leader.
+In the case of cockroachdb, it requires to look into 
+For swiftpaxos-paxos, this information can be found in the log, as the library output a message "I am the leader".

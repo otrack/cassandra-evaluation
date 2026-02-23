@@ -17,11 +17,12 @@ clean_logdir
 # Configuration
 duration_minutes=${DURATION_MINUTES:-4}    # X: total duration in minutes (configurable)
 protocols="accord cockroachdb"
-nodes=3
-workload_type="site.ycsb.workloads.CoreWorkload"
+nodes=5
+workload_type="site.ycsb.workloads.ConflictWorkload"
+theta=0.02
 workload="a"
 records=1000
-threads=4
+threads=1
 status_interval=5   # YCSB -s reporting interval in seconds
 
 duration_s=$((duration_minutes * 60))
@@ -30,8 +31,8 @@ slowdown_end_s=$((slowdown_s + duration_s / 8))
 crash_s=$((3 * duration_s / 4))
 
 log "Fault-tolerance experiment: ${duration_minutes}min total"
-log "  Slowdown (+400ms latency on node1) from ${slowdown_s}s to ${slowdown_end_s}s"
-log "  Crash (docker kill node1) at ${crash_s}s"
+log "  Slowdown (+400ms latency on database-node1) from ${slowdown_s}s to ${slowdown_end_s}s"
+log "  Crash (docker kill database-node1 and ycsb-1) at ${crash_s}s"
 
 for protocol in ${protocols}; do
     ts=$(date +%Y%m%d%H%M%S%N)
@@ -80,7 +81,8 @@ for protocol in ${protocols}; do
             "${records}" 999999999 "${protocol}" \
             "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
             -p maxexecutiontime=${duration_s} \
-            -p status.interval=${status_interval}
+            -p status.interval=${status_interval} \
+	    -p conflict.theta=${theta}
     done
 
     # Event 1: at X/4, add 400ms latency to database-node1 outbound traffic
@@ -102,12 +104,12 @@ for protocol in ${protocols}; do
     ) &
     event1b_pid=$!
 
-    # Event 2: at 3X/4, kill database-node1
+    # Event 2: at 3X/4, kill database-node1 and ycsb-1
     (
         sleep ${crash_s}
         node1=$(config "node_name")1
-        log "Event 2 @ ${crash_s}s: Killing ${node1}"
-        docker kill "${node1}"
+        log "Event 2 @ ${crash_s}s: Killing ${node1} and ycsb-1"
+        docker kill "${node1}" "ycsb-1"
     ) &
     event2_pid=$!
 
@@ -118,7 +120,7 @@ for protocol in ${protocols}; do
 
     wait ${event1_pid} ${event1b_pid} ${event2_pid} 2>/dev/null || true
 
-    # Cleanup - node1 may already be gone (docker kill + --rm)
+    # Cleanup - database-node1 may already be gone (docker kill + --rm)
     for i in $(seq 1 ${node_count}); do
         docker stop "$(config 'node_name')${i}" 2>/dev/null || true
     done
