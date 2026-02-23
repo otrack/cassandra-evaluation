@@ -60,6 +60,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 name=container_name,
                 network=network_name,
                 auto_remove=True,
+                security_opt=["apparmor=unconfined"],
                 environment={
                     "JVM_OPTS" : " -Xms2g -Xmx"+config["cassandra_xmx"], 
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
