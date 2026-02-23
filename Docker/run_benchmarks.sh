@@ -99,7 +99,7 @@ run_ycsb() {
     fi
     log ${extra_opts_str[@]}
 
-    local docker_args="--rm -d --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
+    local docker_args="--rm -d -security-opt apparmor=unconfined --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
     
     if [ "$action" == "load" ];
     then
