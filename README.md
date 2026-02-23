@@ -66,9 +66,11 @@ WAN is simulated thanks to the Linux traffic shapping tool (tc).
 Replicas and clients are running in Docker containers.
 The client share the same network interface as the nearby replica.
 
-There are two benchmarks:
+There are several benchmarks:
 - `cdf.sh` computes the CDF of the latency distribution at one replica across several (standard) YCSB workloads.
 - `conflict.sh` is plotting the average latency across all clients when changing a fixed conflict rate for updates.
+- `closed_economy.sh` runs a closed economy workload (banking transactions) on transaction-supporting protocols.
+- `latency_throughput.sh` generates a classical latency vs throughput graph by increasing the number of clients by a factor of 2 (1, 2, 4, 8, ..., up to 128) to demonstrate the hockey stick effect (where latency increases and throughput plateaus/degrades as the system saturates).
 The results of the benchmarks are PDF plots created under `results/`.
 The logs of a benchmark execution are created under `logs/`.
 Please be careful that any new invocation of a benchmark cleans up the logs of the previous runs.

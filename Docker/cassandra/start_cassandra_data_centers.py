@@ -85,7 +85,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
         except docker.errors.APIError as e:
             debug(f"Error starting container '{container_name}': {e}")
 
-    debug(f"Started {num_nodes} Cassandra nodes in the cluster with specified latencies.")
+    debug(f"Started {num_nodes} Cassandra nodes.")
     
 if __name__ == "__main__":
     if len(sys.argv) != 3:

@@ -17,7 +17,7 @@ clean_logdir
 # Configuration
 duration_minutes=${DURATION_MINUTES:-4}    # X: total duration in minutes (configurable)
 protocols="accord cockroachdb"
-nodes=5
+nodes=3
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.02
 workload="a"
@@ -82,7 +82,9 @@ for protocol in ${protocols}; do
             "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
             -p maxexecutiontime=${duration_s} \
             -p status.interval=${status_interval} \
-	    -p conflict.theta=${theta}
+	    -p conflict.theta=${theta} \
+	    -p updateproportion=1.0 \
+	    -p readproportion=0.0
     done
 
     # Event 1: at X/4, add 400ms latency to database-node1 outbound traffic
