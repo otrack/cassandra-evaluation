@@ -157,3 +157,10 @@ The two events, slowdown and failure, should not impact database-node1 (and ycsb
 This implies that before injecting the event, the script should look for the leader.
 In the case of cockroachdb, it requires to look into 
 For swiftpaxos-paxos, this information can be found in the log, as the library output a message "I am the leader".
+
+# 24.02 - copilot
+
+Do the following improvement to Docker/cdf.py: 
+Replace the vertical line in gray representing the optimum with a small dash on the x axis at the right value. 
+Below the dash, write a small "Q" in gray. Do this for all the sub-figures in the figure. 
+In the caption of the figure, replace "optimum" with "closest quorum".
