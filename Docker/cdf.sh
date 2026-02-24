@@ -18,7 +18,7 @@ cities="Hanoi Lyon NewYork" # can be ""
 plot_average=true
 records=100000
 threads=1
-ops_per_thread=10000
+ops_per_thread=1000
 
 do_clean_up=0
 for p in ${protocols}
