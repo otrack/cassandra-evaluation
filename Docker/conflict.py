@@ -261,6 +261,9 @@ def main():
         replica_means = []
         replica_labels = []
 
+    # Compute avg_optimum once, used in axis options and caption
+    avg_optimum = sum(replica_means) / len(replica_means) if replica_means else None
+
     # Prepare a caption showing all cities present in the results
     data_cities_caption = ""
     try:
@@ -295,6 +298,10 @@ def main():
         f.write("      xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=1},\n")
         f.write("      legend pos=outer north east,\n")
         f.write("      cycle list name=color list,\n")
+        if avg_optimum is not None:
+            f.write(f"      extra y ticks={{{avg_optimum:.2f}}},\n")
+            f.write(f"      extra y tick labels={{Q}},\n")
+            f.write(f"      extra y tick style={{tick style={{gray, thick}}, tick label style={{gray, font=\\small, anchor=north}}}},\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
@@ -308,21 +315,13 @@ def main():
             f.write("      };\n")
             f.write(f"      \\addlegendentry{{{proto}}}\n\n")
 
-        # Draw a single horizontal dashed gray line for the average theoretical optimum across all locations
-        if replica_means:
-            avg_optimum = sum(replica_means) / len(replica_means)
-            # draw a horizontal line from x=0 to x=1 at the average optimum value
-            f.write(f"      \\addplot+[gray, dashed, thick] table {{\n")
-            f.write(f"        0.00 {avg_optimum:.2f}\n")
-            f.write(f"        1.00 {avg_optimum:.2f}\n")
-            f.write("      };\n")
-            f.write("      \\addlegendentry{optimum}\n\n")
-
         # include data replica location in caption (third entry in latencies.csv if present)
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Average operation latency as a function of the ConflictWorkload parameter \\texttt{conflict.theta}. Each curve is a protocol; x-axis is the conflict rate (0 to 1), y-axis is average latency in ms.")
         f.write(data_cities_caption)
+        if avg_optimum is not None:
+            f.write(" Q: closest quorum.")
         f.write("}\n")
         f.write("  \\label{fig:conflict-latency}\n")
         f.write("\\end{figure}\n")
