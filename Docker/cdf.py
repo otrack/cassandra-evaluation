@@ -313,6 +313,10 @@ def main():
                         f.write("          yticklabels={{}},\n")
                     if wl_index == 0:
                         f.write(f"          title={{{op}}},\n")
+                    if avg_optimum is not None:
+                        f.write(f"          extra x ticks={{{avg_optimum:.2f}}},\n")
+                        f.write(f"          extra x tick labels={{Q}},\n")
+                        f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
                     f.write("        ]\n")
 
                     if not avg_latencies_dict:
@@ -332,10 +336,6 @@ def main():
                             pct = i/99
                             f.write(f"          {val} {pct}\n")
                         f.write("          };\n")
-
-                    # Draw vertical gray line for the average optimum (across all cities)
-                    if avg_optimum is not None:
-                        f.write(f"          \\draw[gray, thick] (axis cs:{avg_optimum:.2f},0) -- (axis cs:{avg_optimum:.2f},-0.1);\n")
 
         # Then, plot city rows
         if not no_cities:
@@ -360,6 +360,10 @@ def main():
                             f.write("          xlabel={{Latency (ms)}},\n")
                         if wl_index == 0 and city_index == 0 and not include_average:
                             f.write(f"          title={{{op}}},\n")
+                        if city in city_optimums:
+                            f.write(f"          extra x ticks={{{city_optimums[city]:.2f}}},\n")
+                            f.write(f"          extra x tick labels={{Q}},\n")
+                            f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
                         f.write("        ]\n")
 
                         for proto_idx, proto in enumerate(protocol_order):
@@ -378,10 +382,6 @@ def main():
                                 pct = i/99
                                 f.write(f"          {val} {pct}\n")
                             f.write("          };\n")
-
-                        # Draw vertical gray line for the theoretical optimum (for listed city)
-                        if city in city_optimums:
-                            f.write(f"          \\draw[gray, thick] (axis cs:{city_optimums[city]:.2f},0) -- (axis cs:{city_optimums[city]:.2f},1);\n")
 
         f.write("      \\end{groupplot}\n")
         f.write("    \\end{tikzpicture}\n")
@@ -405,7 +405,7 @@ def main():
         # Add reference to the gray optimum line in the caption
         if city_optimums or avg_optimum:
             f.write(". ")
-            f.write(r"\protect\tikz \protect\draw[thick, gray] (0,0) -- +(0.8,0);~{optimum}")
+            f.write(r"\textcolor{gray}{Q}~{closest quorum}")
         f.write("    \\label{fig:workload-cdf}}\n")
         f.write("\\end{figure}\n")
 
