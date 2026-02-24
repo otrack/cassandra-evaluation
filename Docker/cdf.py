@@ -316,8 +316,7 @@ def main():
                     if avg_optimum is not None:
                         f.write(f"          extra x ticks={{{avg_optimum:.2f}}},\n")
                         f.write(f"          extra x tick labels={{Q}},\n")
-                        f.write(f"          extra x tick style={{gray, tick align=outside}},\n")
-                        f.write(f"          extra x tick label style={{gray, font=\\tiny}},\n")
+                        f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
                     f.write("        ]\n")
 
                     if not avg_latencies_dict:
@@ -364,8 +363,7 @@ def main():
                         if city in city_optimums:
                             f.write(f"          extra x ticks={{{city_optimums[city]:.2f}}},\n")
                             f.write(f"          extra x tick labels={{Q}},\n")
-                            f.write(f"          extra x tick style={{gray, tick align=outside}},\n")
-                            f.write(f"          extra x tick label style={{gray, font=\\tiny}},\n")
+                            f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
                         f.write("        ]\n")
 
                         for proto_idx, proto in enumerate(protocol_order):
