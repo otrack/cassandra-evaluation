@@ -308,11 +308,9 @@ def main():
                         if no_cities:
                             f.write(f"          ylabel={{{workload}}},\n")
                         else:
-                            f.write(f"          ylabel={{average ({workload})}},\n")
+                            f.write(f"          ylabel={{average}},\n")
                     else:
                         f.write("          yticklabels={{}},\n")
-                    if wl_index == n_wl - 1:
-                        f.write("          xlabel={{Latency (ms)}},\n")
                     if wl_index == 0:
                         f.write(f"          title={{{op}}},\n")
                     f.write("        ]\n")
@@ -337,7 +335,7 @@ def main():
 
                     # Draw vertical gray line for the average optimum (across all cities)
                     if avg_optimum is not None:
-                        f.write(f"          \\draw[gray, thick] (axis cs:{avg_optimum:.2f},0) -- (axis cs:{avg_optimum:.2f},1);\n")
+                        f.write(f"          \\draw[gray, thick] (axis cs:{avg_optimum:.2f},0) -- (axis cs:{avg_optimum:.2f},-0.1);\n")
 
         # Then, plot city rows
         if not no_cities:
@@ -355,7 +353,7 @@ def main():
                             if actual_n_cities == 1 and not include_average:
                                 f.write(f"          ylabel={{{workload}}},\n")
                             else:
-                                f.write(f"          ylabel={{{city} ({workload})}},\n")
+                                f.write(f"          ylabel={{{city}}},\n")
                         else:
                             f.write("          yticklabels={{}},\n")
                         if city_index == n_cities - 1 and wl_index == n_wl - 1:
@@ -390,12 +388,13 @@ def main():
 
         # --- Caption with color swatches ---
         cities_escaped = ", ".join([escape_latex(c) for c in actual_cities])
+        workloads_escaped = ", ".join([escape_latex(w.upper()) for w in workloads])
         if include_average and no_cities:
-            caption_start = f"CDF of average operation latencies for different YCSB workloads and replication protocols."
+            caption_start = f"CDF of average operation latencies for YCSB {(workloads_escaped)}."
         elif include_average:
-            caption_start = f"CDF of operation latencies for different YCSB workloads and replication protocols at {cities_escaped} (and average)."
+            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} at {cities_escaped} (and average)."
         else:
-            caption_start = f"CDF of operation latencies for different YCSB workloads and replication protocols at {cities_escaped}."
+            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} at {cities_escaped}."
 
         f.write(f"    \\caption{{{caption_start} ")
         for proto_idx, proto in enumerate(protocol_order):

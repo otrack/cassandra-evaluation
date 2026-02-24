@@ -103,6 +103,17 @@ In detail, you should
 (ii) also include the main percentiles (e.g., P90, P95, and P99) in the plot.
 This should replace the bar which is currently displayed, while keeping a histogram-like plot.
 
+# 17.02 - copilot
+
+In the Casssandra implementation, this is not a two-phase transaction which is being used. I want something in the vein of the following code: https://github.com/pmcfadin/awesome-accord/blob/main/examples/inventory/transaction.cql.  Notice that cecause there is no support for this in the latest Java driver, the corresponding CQL query has to be written by hand.
+
+# 17.02 - copilot
+
+In the JDBC client, one should also use a two-phase transaction where possible. To implement this, modify the jdbc module as follows:
+- add a createTransfertStatement to DefaultDBFlavor which returns null
+- in the JDBC client use the this statement if it is not null and otherwise rely on the default implementation provided in site.ycsb.DB
+- add a CockroachDBFlavor class, child of DefaultDBFlavor and in this class add a two-phase transaction which relies on the syntax offered by CockroachDB. (For this, you might use 
+
 # 20.02 - copilot
 
 Add the capability to bound the resources of the database containers in a manner of a public cloud platform when using containers.
