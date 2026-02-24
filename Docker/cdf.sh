@@ -13,10 +13,11 @@ workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a"
 protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swiftpaxos"
 protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
+protocols="accord"
 nodes=3
 cities="Hanoi Lyon NewYork" # can be ""
 plot_average=true
-records=100000
+records=1000
 threads=1
 ops_per_thread=1000
 

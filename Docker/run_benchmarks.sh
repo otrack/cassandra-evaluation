@@ -84,7 +84,7 @@ run_ycsb() {
     local ycsb_threads=${threads}
 
     if [ "$action" == "load" ]; then
-        ycsb_threads=1
+        ycsb_threads=16
     fi
     
     # capture any extra arguments (13th onward) and prepare a safely quoted string
