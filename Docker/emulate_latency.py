@@ -37,6 +37,10 @@ def emulate_latency(num_nodes, node_locations):
 
     try:
         # Add necessary network classes
+        # Use prio qdisc as root: band 1 is default (no delay), bands 2..num_nodes+1 carry
+        # per-destination netem delay. This avoids the HTB + netem incompatibility that
+        # causes "htb: netem qdisc is non-work-conserving?" kernel warnings.
+        priomap = " ".join(["0"] * 16)
         for i in range(num_nodes):
             src = f'{config["node_name"]}{i + 1}'
             src_container = client.containers.get(src)
@@ -45,10 +49,8 @@ def emulate_latency(num_nodes, node_locations):
                 raise Exception("tc is missnig! "+str(a))
             exec_command = f"tc qdisc del dev eth0 root"
             debug(f"{src} {exec_command}")
-            exec_command = f"tc qdisc add dev eth0 root handle 1: htb default 1"
-            debug(f"{src} {exec_command}")
             src_container.exec_run(exec_command)
-            exec_command = f"tc class add dev eth0 parent 1: classid 1:1 htb rate 1000mbit"
+            exec_command = f"tc qdisc add dev eth0 root handle 1: prio bands {num_nodes + 1} priomap {priomap}"
             debug(f"{src} {exec_command}")
             src_container.exec_run(exec_command)
             
@@ -65,26 +67,25 @@ def emulate_latency(num_nodes, node_locations):
                 dst_container = client.containers.get(dst)
                 dst_ip = dst_container.attrs['NetworkSettings']['Networks'][network_name]['IPAddress']
                 src_ip = src_container.attrs['NetworkSettings']['Networks'][network_name]['IPAddress']
-                
+
+                # Band assignment: node k (1-indexed) uses prio band k+1, so that band 1
+                # remains the unmodified default band.
+                dst_band = j + 2
+                src_band = i + 2
+
                 # Add latency from src to dst
-                exec_command = f"tc class add dev eth0 parent 1:1 classid 1:{j+1}0 htb rate 100mbit"
+                exec_command = f"tc qdisc add dev eth0 parent 1:{dst_band} handle {dst_band}0: netem delay {latency}ms"
                 debug(f"{src} {exec_command}")
                 src_container.exec_run(exec_command)
-                exec_command = f"tc qdisc add dev eth0 parent 1:{j+1}0 handle {j+1}0: netem delay {latency}ms"
-                debug(f"{src} {exec_command}")
-                src_container.exec_run(exec_command)
-                exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{j+1}0"
+                exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{dst_band}"
                 debug(f"{src} {exec_command}")
                 src_container.exec_run(exec_command)
                 
                 # Add latency from dst to src
-                exec_command = f"tc class add dev eth0 parent 1:1 classid 1:{i+1}0 htb rate 100mbit"
+                exec_command = f"tc qdisc add dev eth0 parent 1:{src_band} handle {src_band}0: netem delay {latency}ms"
                 debug(f"{dst} {exec_command}")
                 dst_container.exec_run(exec_command)
-                exec_command = f"tc qdisc add dev eth0 parent 1:{i+1}0 handle {i+1}0: netem delay {latency}ms"
-                debug(f"{dst} {exec_command}")
-                dst_container.exec_run(exec_command)
-                exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{i+1}0"
+                exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{src_band}"
                 debug(f"{dst} {exec_command}")
                 dst_container.exec_run(exec_command)
 
