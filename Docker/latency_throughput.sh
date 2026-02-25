@@ -16,10 +16,11 @@ workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.02
 workload="a"
 protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
+protocols="accord"
 nodes=3
 replication_factor=${nodes}
 records=1000
-ops_per_thread=1000
+ops_per_thread=100
 
 # Start with 1 thread and double until reaching max_threads
 # The resulting graph demonstrates the hockey stick effect
