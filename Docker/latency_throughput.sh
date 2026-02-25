@@ -17,6 +17,7 @@ theta=0.02
 workload="a"
 protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
 nodes=3
+replication_factor=${nodes}
 records=1000
 ops_per_thread=1000
 
@@ -44,7 +45,7 @@ do
             do_clean_up=1
         fi
         
-        run_benchmark ${p} ${threads} ${nodes} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0
+        run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0
         do_create_and_load=0
         
         # Double the number of threads for next iteration

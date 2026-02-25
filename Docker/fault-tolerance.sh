@@ -69,7 +69,7 @@ for protocol in ${protocols}; do
         "${records}" "${records}" "${protocol}" "${replication_factor}" \
         "${output_file%.dat}.load" "1" "ycsb" "${nearby_database}"
     wait_container "ycsb"
-
+    
     # Emulate WAN latency
     log "Emulating latency for ${node_count} node(s)..."
     emulate_latency "${node_count}"
