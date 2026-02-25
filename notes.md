@@ -164,3 +164,115 @@ Do the following improvement to Docker/cdf.py:
 Replace the vertical line in gray representing the optimum with a small dash on the x axis at the right value. 
 Below the dash, write a small "Q" in gray. Do this for all the sub-figures in the figure. 
 In the caption of the figure, replace "optimum" with "closest quorum".
+
+# 25.02
+
+disable data durability
+
+a few bugs:
+
+1. 
+INFO  [AccordExecutor[5,2]] 2026-02-25T06:57:09,371 ShardDurability.java:263 - Successfully completed 1/3 cycle of durability scheduling covering range 1b255f4d-ef25-40a6-0000-000000000012:(-Inf,-2305843009213693955]. Completed in 88327s (vs 112s target).
+
+This looks _very_ long. 
+The experiment did not run in 88327s.
+
+2. 
+ERROR [AccordScheduled:1] 2026-02-25T07:14:12,579 JVMStabilityInspector.java:72 - Exception in thread Thread[AccordScheduled:1,5,AccordScheduled]
+java.lang.RuntimeException: Timed out waiting for epoch when processing message from 1 to Node{2} message (from:/10.100.15.2:7000, type:IMMEDIATE verb:ACCORD_PRE_ACCEPT_REQ)
+	at org.apache.cassandra.service.accord.AccordVerbHandler.lambda$doVerb$0(AccordVerbHandler.java:73)
+	at accord.utils.async.AsyncResults$AbstractResult.notify(AsyncResults.java:87)
+	at accord.utils.async.AsyncResults$AbstractResult.trySetResult(AsyncResults.java:118)
+	at accord.utils.async.AsyncResults$AbstractResult.tryFailure(AsyncResults.java:131)
+	at accord.utils.async.AsyncResults$SettableResult.tryFailure(AsyncResults.java:226)
+	at accord.topology.TopologyManager$FutureEpoch.timeout(TopologyManager.java:573)
+	at accord.impl.AbstractTimeouts$Stripe$Registered.onExpire(AbstractTimeouts.java:104)
+	at accord.impl.AbstractTimeouts$Stripe.unlock(AbstractTimeouts.java:196)
+	at accord.impl.AbstractTimeouts.maybeNotify(AbstractTimeouts.java:269)
+	at org.apache.cassandra.concurrent.ExecutionFailure$1.run(ExecutionFailure.java:138)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(Unknown Source)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at io.netty.util.concurrent.FastThreadLocalRunnable.run(FastThreadLocalRunnable.java:30)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: accord.coordinate.EpochTimeout: Timeout waiting for epoch 19
+	at accord.coordinate.EpochTimeout.timeout(EpochTimeout.java:31)
+	... 12 common frames omitted
+
+ERROR [MetadataFetchLogStage:1] 2026-02-25T07:14:04,849 JVMStabilityInspector.java:72 - Exception in thread Thread[MetadataFetchLogStage:1,5,MetadataFetchLogStage]
+java.lang.IllegalStateException: null
+	at accord.utils.Invariants.createIllegalState(Invariants.java:76)
+	at accord.utils.Invariants.illegalState(Invariants.java:81)
+	at accord.utils.Invariants.illegalState(Invariants.java:96)
+	at accord.utils.Invariants.require(Invariants.java:236)
+	at accord.topology.TopologyManager$Epochs.<init>(TopologyManager.java:296)
+	at accord.topology.TopologyManager.onTopologyUpdate(TopologyManager.java:748)
+	at accord.local.Node.onTopologyUpdateInternal(Node.java:351)
+	at accord.local.Node.onTopologyUpdate(Node.java:371)
+	at accord.impl.AbstractConfigurationService.reportTopology(AbstractConfigurationService.java:435)
+	at org.apache.cassandra.service.accord.AccordConfigurationService.reportTopology(AccordConfigurationService.java:448)
+	at accord.impl.AbstractConfigurationService.reportTopology(AbstractConfigurationService.java:446)
+	at accord.topology.TopologyManager$TopologyRange.forEach(TopologyManager.java:937)
+	at org.apache.cassandra.service.accord.AccordConfigurationService.lambda$fetchTopologyAsync$9(AccordConfigurationService.java:429)
+	at org.apache.cassandra.utils.concurrent.ListenerList$CallbackBiConsumerListener.run(ListenerList.java:267)
+	at org.apache.cassandra.concurrent.ImmediateExecutor.execute(ImmediateExecutor.java:140)
+	at org.apache.cassandra.utils.concurrent.ListenerList.safeExecute(ListenerList.java:190)
+	at org.apache.cassandra.utils.concurrent.ListenerList.notifyListener(ListenerList.java:181)
+	at org.apache.cassandra.utils.concurrent.ListenerList$CallbackBiConsumerListener.notifySelf(ListenerList.java:274)
+	at org.apache.cassandra.utils.concurrent.ListenerList.lambda$notifyExclusive$0(ListenerList.java:148)
+	at org.apache.cassandra.utils.concurrent.IntrusiveStack.forEach(IntrusiveStack.java:242)
+	at org.apache.cassandra.utils.concurrent.IntrusiveStack.forEach(IntrusiveStack.java:235)
+	at org.apache.cassandra.utils.concurrent.IntrusiveStack.forEach(IntrusiveStack.java:225)
+	at org.apache.cassandra.utils.concurrent.ListenerList.notifyExclusive(ListenerList.java:148)
+	at org.apache.cassandra.utils.concurrent.ListenerList.notify(ListenerList.java:113)
+	at org.apache.cassandra.utils.concurrent.AsyncFuture.trySet(AsyncFuture.java:103)
+	at org.apache.cassandra.utils.concurrent.AbstractFuture.lambda$map$0(AbstractFuture.java:342)
+	at org.apache.cassandra.concurrent.ImmediateExecutor.execute(ImmediateExecutor.java:140)
+	at org.apache.cassandra.utils.concurrent.ListenerList.safeExecute(ListenerList.java:190)
+	at org.apache.cassandra.utils.concurrent.ListenerList.notifyListener(ListenerList.java:181)
+	at org.apache.cassandra.utils.concurrent.ListenerList$RunnableWithExecutor.notifySelf(ListenerList.java:369)
+	at org.apache.cassandra.utils.concurrent.ListenerList.lambda$notifyExclusive$0(ListenerList.java:148)
+	at org.apache.cassandra.utils.concurrent.IntrusiveStack.forEach(IntrusiveStack.java:242)
+	at org.apache.cassandra.utils.concurrent.IntrusiveStack.forEach(IntrusiveStack.java:235)
+	at org.apache.cassandra.utils.concurrent.IntrusiveStack.forEach(IntrusiveStack.java:225)
+	at org.apache.cassandra.utils.concurrent.ListenerList.notifyExclusive(ListenerList.java:148)
+	at org.apache.cassandra.utils.concurrent.ListenerList.notify(ListenerList.java:113)
+	at org.apache.cassandra.utils.concurrent.AsyncFuture.trySet(AsyncFuture.java:103)
+	at org.apache.cassandra.utils.concurrent.AbstractFuture.trySuccess(AbstractFuture.java:144)
+	at org.apache.cassandra.utils.concurrent.AsyncPromise.trySuccess(AsyncPromise.java:117)
+	at org.apache.cassandra.net.MessageDelivery.lambda$sendWithRetries$1(MessageDelivery.java:99)
+	at org.apache.cassandra.net.MessageDelivery$1Request.onResponse(MessageDelivery.java:170)
+	at org.apache.cassandra.net.ResponseVerbHandler.doVerb(ResponseVerbHandler.java:88)
+	at org.apache.cassandra.net.InboundSink.lambda$new$0(InboundSink.java:103)
+	at org.apache.cassandra.net.InboundSink.accept(InboundSink.java:123)
+	at org.apache.cassandra.net.InboundSink.accept(InboundSink.java:52)
+	at org.apache.cassandra.net.InboundMessageHandler$ProcessMessage.run(InboundMessageHandler.java:457)
+	at org.apache.cassandra.concurrent.ExecutionFailure$1.run(ExecutionFailure.java:138)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at io.netty.util.concurrent.FastThreadLocalRunnable.run(FastThreadLocalRunnable.java:30)
+	at java.base/java.lang.Thread.run(Unknown Source)
+
+
+# 25.02 - copilot
+
+The emulation is outputing suspicious kernel events:
+
+2026-02-25T08:41:03+01:00 homer kernel: htb: netem qdisc 20: is non-work-conserving?
+2026-02-25T08:41:03+01:00 homer kernel: htb: too many events!
+2026-02-25T08:41:03+01:00 homer kernel: htb: netem qdisc 30: is non-work-conserving?
+2026-02-25T08:41:04+01:00 homer kernel: htb: netem qdisc 30: is non-work-conserving?
+2026-02-25T08:41:04+01:00 homer kernel: htb: too many events!
+2026-02-25T08:41:04+01:00 homer kernel: htb: netem qdisc 10: is non-work-conserving?
+2026-02-25T08:41:04+01:00 homer kernel: htb: netem qdisc 10: is non-work-conserving?
+2026-02-25T08:41:04+01:00 homer kernel: htb: too many events!
+2026-02-25T08:41:04+01:00 homer kernel: htb: netem qdisc 20: is non-work-conserving?
+
+Investigate the cause and propose a fix, by changing the current traffic shaping rules to do network emulation.
+In particular,
+- remove the 100mbit rate limit in the htb root class
+- possibly use tbf in lieu of htb
+The end goal is to mimick cross-DC links between the different locations.
+These connections are usually high-latency but do not have bandwidth limits.
