@@ -65,7 +65,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 network=network_name,
                 auto_remove=True,
                 security_opt=["apparmor=unconfined"],
-                ulimit="memlock=-1-1", # Unlimited soft/hard memory locks
+                ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                 environment={
                     "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx, 
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
