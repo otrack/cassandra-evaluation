@@ -14,6 +14,7 @@ workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
 protocols="accord cockroachdb"
 node_counts="3 5 7"
+replication_factor=3
 records=1000
 total_threads=1
 ops_per_thread=200
@@ -29,7 +30,7 @@ do
 	ts=$(date +%Y%m%d%H%M%S%N)
 	output_file="${LOGDIR}/${p}_${nodes}_${workload}_${ts}.dat"
 	# Each node count requires a fresh cluster, so always create and always clean up
-	run_benchmark ${p} ${t} ${nodes} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1
+	run_benchmark ${p} ${t} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1
     done
 done
 

@@ -13,6 +13,7 @@ workload_type="site.ycsb.workloads.ConflictWorkload"
 thetas=$(seq -f "%.1f" 0 0.1 1.0)
 protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
 nodes=3
+replication_factor=${nodes}
 records=1000
 threads=1
 ops_per_thread=1000
@@ -30,7 +31,7 @@ do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/${p}_${nodes}_a_${ts}.dat"
-	    run_benchmark ${p} ${c} ${nodes} ${workload_type} a ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0
+	    run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} a ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0
 	    do_create_and_load=0
 	    count=$((count+1))
 	done

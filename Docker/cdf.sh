@@ -15,6 +15,7 @@ protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-swi
 protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
 protocols="accord"
 nodes=3
+replication_factor=${nodes}
 cities="Hanoi Lyon NewYork" # can be ""
 plot_average=true
 records=1000
@@ -34,7 +35,7 @@ do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/${p}_${nodes}_${w}_${ts}.dat"
-	    run_benchmark ${p} ${c} ${nodes} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up}
+	    run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up}
 	    do_create_and_load=0
 	    count=$((count+1))
 	done

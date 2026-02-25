@@ -63,9 +63,9 @@ emulate_latency() {
 }
 
 run_ycsb() {
-    if [ $# -lt 12 ]; then
-	echo "Usage: $0 <action> <workload_type> <workload> <hosts> <port> <recordcount> <operation_count> <protocol> <output_file> <threads> <container_name> <network_adapter> [extra_ycsb_options]"
-	echo "Example: $0 load site.ycsb.CoreWorkload a 127.0.0.1,127.0.0.2 8080 1 1 QUORUM results.txt 100 ycsb database-node1"
+    if [ $# -lt 13 ]; then
+	echo "Usage: $0 <action> <workload_type> <workload> <hosts> <port> <recordcount> <operation_count> <protocol> <replication_factor> <output_file> <threads> <container_name> <network_adapter> [extra_ycsb_options]"
+	echo "Example: $0 load site.ycsb.CoreWorkload a 127.0.0.1,127.0.0.2 8080 1 1 swiftpaxos-paxos 3 results.txt 100 ycsb database-node1"
 	exit 1
     fi
 
@@ -77,10 +77,11 @@ run_ycsb() {
     local recordcount=$6
     local operationcount=$7
     local protocol=$8
-    local output_file=$9
-    local threads=${10}
-    local container_name=${11}
-    local nearby_database=${12}
+    local replication_factor=$9
+    local output_file=${10}
+    local threads=${11}
+    local container_name=${12}
+    local nearby_database=${13}
     local ycsb_threads=${threads}
 
     if [ "$action" == "load" ]; then
@@ -88,7 +89,7 @@ run_ycsb() {
     fi
     
     # capture any extra arguments (13th onward) and prepare a safely quoted string
-    shift 12
+    shift 13
     local extra_opts=( "$@" )
     local extra_opts_str=""
     if [ ${#extra_opts[@]} -gt 0 ]; then
@@ -109,9 +110,8 @@ run_ycsb() {
 	    true
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
 	then
-	    cockroachdb_create_usertable
+	    cockroachdb_create_usertable 10 "$replication_factor"
 	else
-	    # cassandra
 	    # Determine transaction mode
 	    local transaction_mode="bruh"
 	    if [ "$protocol" == "accord" ]; then 
@@ -119,7 +119,7 @@ run_ycsb() {
 	    fi
 
 	    # Create the keyspace if it doesn't exist
-	    cassandra_create_keyspace 3600 "$node_count"
+	    cassandra_create_keyspace 3600 "$node_count" "$replication_factor"
 
 	    # Create the usertable if it doesn't exist
 	    cassandra_create_usertable 3600 "$transaction_mode" "$node_count"
@@ -192,8 +192,8 @@ YCSB_OPTS=-s -p workload=${workload_type} ${debug} -p workload=${workload_type} 
 }
 
 run_benchmark() {    
-    if [ $# -lt 10 ]; then
-	echo "Usage: $0 <protocol> <number_of_threads> <node_count> <workload_type> <workload> <record_count> <operation_count> <output_file> <do_create_and_load> <do_clean_up>"
+    if [ $# -lt 11 ]; then
+	echo "Usage: $0 <protocol> <number_of_threads> <node_count> <replication_factor> <workload_type> <workload> <record_count> <operation_count> <output_file> <do_create_and_load> <do_clean_up>"
 	echo "Example: $0 ONE 10 3 site.ycsb.workloads.CoreWorkload a 1 1 1 1"
 	exit 1
     fi
@@ -205,16 +205,17 @@ run_benchmark() {
     protocol=$1
     nthreads=$2
     node_count=$3
-    workload_type=$4
-    workload=$5
-    record_count=$6
-    operation_count=$7
-    output_file=$8
-    do_create_and_load=$9
-    do_clean_up=${10}
+    replication_factor=$4
+    workload_type=$5
+    workload=$6
+    record_count=$7
+    operation_count=$8
+    output_file=$9
+    do_create_and_load=${10}
+    do_clean_up=${11}
 
-    if [ $# -gt 10 ]; then
-	EXTRA_YCSB_OPTS=( "${@:11}" )
+    if [ $# -gt 11 ]; then
+	EXTRA_YCSB_OPTS=( "${@:12}" )
     else
 	EXTRA_YCSB_OPTS=()
     fi
@@ -249,7 +250,7 @@ run_benchmark() {
 	fi
 
 	nearby_database=$(config "node_name")1
-	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file%.dat}.load" "$nthreads" "ycsb" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
+	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}.load" "$nthreads" "ycsb" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
 	wait_container "ycsb"
 
 	log "Emulating latency for ${node_count} node(s)..."
@@ -279,7 +280,7 @@ run_benchmark() {
 	    EXTRA_YCSB_OPTS2+=("conflict.shift=$(( (record_count / node_count) * (i - 1) ))")
 	fi
 
-	run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}"
+	run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}"
     done
     
     for i in $(seq 1 1 ${node_count});
@@ -293,8 +294,3 @@ run_benchmark() {
 	stop_network
     fi
 }
-
-# Example usage
-# run_benchmark paxos 1 3 site.ycsb.workloads.CoreWorkload a 1000 1000 /tmp/log 1 0
-# run_benchmark swiftpaxos-paxos 1 3 site.ycsb.workloads.CoreWorkload a 1000 1000 /tmp/log 1 1
-# run_benchmark swiftpaxos-paxos 12 3 site.ycsb.workloads.CoreWorkload a 1000 100 /tmp/log 1 1

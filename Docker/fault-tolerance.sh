@@ -17,7 +17,8 @@ clean_logdir
 # Configuration
 duration_minutes=${DURATION_MINUTES:-4}    # X: total duration in minutes (configurable)
 protocols="accord cockroachdb"
-nodes=3
+nodes=5
+replication_factor=${nodes}
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.02
 workload="a"
@@ -65,7 +66,7 @@ for protocol in ${protocols}; do
     # Load YCSB data
     nearby_database=$(config "node_name")1
     run_ycsb "load" "${workload_type}" "${workload}" "${hosts}" "${port}" \
-        "${records}" "${records}" "${protocol}" \
+        "${records}" "${records}" "${protocol}" "${replication_factor}" \
         "${output_file%.dat}.load" "1" "ycsb" "${nearby_database}"
     wait_container "ycsb"
 
@@ -78,7 +79,7 @@ for protocol in ${protocols}; do
         nearby_database=$(config "node_name")${i}
         location=$(get_location $i ${DIR}/latencies.csv)
         run_ycsb "run" "${workload_type}" "${workload}" "${hosts}" "${port}" \
-            "${records}" 999999999 "${protocol}" \
+            "${records}" 999999999 "${protocol}" "${replication_factor}" \
             "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
             -p maxexecutiontime=${duration_s} \
             -p status.interval=${status_interval} \
