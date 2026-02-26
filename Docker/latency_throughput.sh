@@ -40,14 +40,14 @@ do
         
         # Clean up after the last iteration of each protocol's thread sequence
         # This ensures we start fresh for the next protocol
-        do_clean_up=0
+        do_clean_up=1
         next_threads=$((threads * 2))
         if [ ${next_threads} -gt ${max_threads} ]; then
             do_clean_up=1
         fi
         
         run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0
-        do_create_and_load=0
+        # do_create_and_load=0
         
         # Double the number of threads for next iteration
         threads=${next_threads}
