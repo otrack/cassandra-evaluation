@@ -6,21 +6,6 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 
 source ${DIR}/utils.sh
 
-# Helper to get correct English ordinal
-ordinal_suffix() {
-    n=$1
-    if (( n % 100 >= 11 && n % 100 <= 13 )); then
-        echo "${n}th"
-    else
-        case $((n % 10)) in
-            1) echo "${n}st" ;;
-            2) echo "${n}nd" ;;
-            3) echo "${n}rd" ;;
-            *) echo "${n}th" ;;
-        esac
-    fi
-}
-
 # Output concise header
 header="protocol,nodes,workload,conflict_rate,city,op,clients,tput"
 for p in $(seq 1 100); do
@@ -28,67 +13,113 @@ for p in $(seq 1 100); do
 done
 echo "$header"
 
-for file in "$@"; do
+# Process a single file, outputting CSV rows
+process_file() {
+    local file="$1"
+    local filename
     filename=$(basename "$file")
 
     # Parse filename: <protocol>_<nodes>_<workload>_<timestamp>_<city>.dat
     if [[ "$filename" =~ ^([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_([A-Za-z]+)\.dat$ ]]; then
-        protocol="${BASH_REMATCH[1]}"
-        nodes="${BASH_REMATCH[2]}"
-        workload="${BASH_REMATCH[3]}"
-	city="${BASH_REMATCH[5]}"
+        local protocol="${BASH_REMATCH[1]}"
+        local nodes="${BASH_REMATCH[2]}"
+        local workload="${BASH_REMATCH[3]}"
+        local city="${BASH_REMATCH[5]}"
     else
-	error "Ignoring ${filename}"
-	continue
+        error "Ignoring ${filename}"
+        return
     fi
 
-    # Extract clients (threads) from the file
-    clients=$(awk '{for(i=1;i<=NF;i++) if($i=="-threads") {print $(i+1); exit}}' $file)
-    if [ -z "$clients" ]; then
-        clients=$(grep -oE '\-threads[ =][0-9]+' "$file" | head -1 | grep -oE '[0-9]+')
-    fi
-    if [ -z "$clients" ]; then
-        clients="unknown"
-    fi
+    # Single awk pass: extract all needed values and generate CSV rows
+    awk -v protocol="$protocol" -v nodes="$nodes" \
+        -v workload="$workload" -v city="$city" '
+    BEGIN {
+        clients       = "unknown"
+        conflict_rate = "NA"
+        tput          = "unknown"
+        is_conflict   = 0
+    }
 
-    conflict_rate="NA"
-    if grep -q 'site.ycsb.workloads.ConflictWorkload' "$file"; then
-	conflict_rate=$(grep -oE 'conflict.theta=[0-9]+(\.[0-9]+)?' "$file" | head -n1 | cut -d= -f2)
-    fi
-    
-    # Extract overall throughput and truncate to two digits after the dot
-    tput=$(grep '^\[OVERALL\], Throughput(ops/sec),' "$file" | head -1 | awk -F, '{print $3}' | xargs)
-    if [ -z "$tput" ]; then
-        tput="unknown"
-    else
-        tput=$(awk -v t="$tput" 'BEGIN { printf "%.2f", t }')
-    fi
+    # Extract clients: handle both "-threads 64" and "-threads=64"
+    clients == "unknown" {
+        for (i = 1; i <= NF; i++) {
+            if ($i == "-threads") {
+                clients = $(i+1)
+                break
+            }
+            if (substr($i, 1, 9) == "-threads=" && length($i) > 9) {
+                clients = substr($i, 10)
+                break
+            }
+        }
+    }
 
-    for op in read insert update scan readmodifywrite tx-readmodifywrite; do
-        op_upper=$(echo "$op" | awk '{print toupper($0)}')
-        row="$protocol,$nodes,$workload,$conflict_rate,$city,$op,$clients,$tput"
+    # Detect ConflictWorkload
+    /site\.ycsb\.workloads\.ConflictWorkload/ { is_conflict = 1 }
 
-        for p in $(seq 1 100); do
-            ord=$(ordinal_suffix $p)
-            # Try both upper and lower case for op match
-            val=$(grep -E "^\[$op_upper\], ${ord}PercentileLatency\(us\)," "$file" | awk -F, '{print $3}' | xargs)
-            if [ -z "$val" ]; then
-                val=$(grep -E "^\[$op\], ${ord}PercentileLatency\(us\)," "$file" | awk -F, '{print $3}' | xargs)
-            fi
-            if [ -z "$val" ]; then
-                row="$row,unknown"
-            else
-                latency_ms=$(awk "BEGIN { print int( ($val/1000) + 0.5 ) }")
-                row="$row,$latency_ms"
-            fi
-        done
+    # Extract conflict.theta (only once)
+    is_conflict && conflict_rate == "NA" && /conflict\.theta=/ {
+        if (match($0, /conflict\.theta=[0-9]+(\.[0-9]+)?/)) {
+            conflict_rate = substr($0, RSTART + 15, RLENGTH - 15)
+        }
+    }
 
-        # Only output if at least one percentile exists for this op in this file
-        if echo "$row" | grep -vq ",unknown$"; then
-            echo "$row"
-	# else
-	#     error "Ignoring ${row}"
-        fi
+    # Extract overall throughput (first occurrence)
+    tput == "unknown" && /^\[OVERALL\], Throughput\(ops\/sec\),/ {
+        split($0, a, ",")
+        t = a[3]
+        gsub(/^[ \t]+|[ \t]+$/, "", t)
+        if (t != "") tput = sprintf("%.2f", t + 0)
+    }
 
+    # Extract percentile latencies: "[OP], NNNthPercentileLatency(us), VALUE"
+    /PercentileLatency\(us\),/ {
+        split($0, parts, ",")
+        # parts[1]="[OP]", parts[2]=" NNNthPercentileLatency(us)", parts[3]=" VALUE"
+
+        op_field = parts[1]
+        gsub(/^\[|\].*$/, "", op_field)
+        op_lower = tolower(op_field)
+
+        pct_field = parts[2]
+        gsub(/^[ \t]+/, "", pct_field)
+        # Require a letter immediately after the digits to skip decimal fields like "99.9PercentileLatency"
+        if (!match(pct_field, /^[0-9]+[a-zA-Z]/)) next
+        match(pct_field, /^[0-9]+/)
+        p = substr(pct_field, 1, RLENGTH) + 0
+
+        val = parts[3]
+        gsub(/^[ \t]+|[ \t]+$/, "", val)
+        if (p >= 1 && p <= 100 && val ~ /^[0-9]+$/) {
+            lat[op_lower SUBSEP p] = int(val / 1000 + 0.5)
+        }
+    }
+
+    END {
+        n_ops = split("read insert update scan readmodifywrite tx-readmodifywrite", ops, " ")
+        for (o = 1; o <= n_ops; o++) {
+            op  = ops[o]
+            row = protocol "," nodes "," workload "," conflict_rate "," city \
+                  "," op "," clients "," tput
+            for (p = 1; p <= 100; p++) {
+                key = op SUBSEP p
+                row = row "," (key in lat ? lat[key] : "unknown")
+            }
+            # Only output if the last percentile (p100) is present
+            if (row !~ /,unknown$/) print row
+        }
+    }
+    ' "$file"
+}
+
+export -f process_file
+export -f error
+
+# Use GNU parallel if available, otherwise fall back to sequential processing
+if command -v parallel >/dev/null 2>&1; then
+    parallel --group process_file ::: "$@"
+else
+    for file in "$@"; do
+        process_file "$file"
     done
-done
+fi
