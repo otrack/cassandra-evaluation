@@ -69,7 +69,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 "apparmor=unconfined",
                 "label=disable",   # <-- key for SELinux hosts
                 ],
-                tmpfs={"/tmp/accord": "rw,nosuid,nodev,mode=1777"},  
+                tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
                 ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                 environment={
                     "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx,
