@@ -67,7 +67,8 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 security_opt=["apparmor=unconfined"],
                 ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                 environment={
-                    "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx, 
+                    "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx,
+                    "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
                     "CASSANDRA_DC": dc_name,
