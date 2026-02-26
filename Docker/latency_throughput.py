@@ -163,7 +163,7 @@ def main():
         f.write("      xlabel={Throughput (ops/sec)},\n")
         f.write("      ylabel={Average Latency (ms)},\n")
         f.write(f"      xmin={xmin:.2f}, xmax={xmax:.2f},\n")
-        f.write(f"      ymin={ymin:.2f}, ymax={ymax:.2f},\n")
+        f.write(f"      ymin={ymin:.2f}, ymax={1000},\n")
         f.write("      legend pos=north west,\n")
         f.write("      cycle list name=color list,\n")
         f.write("    ]\n\n")
