@@ -72,7 +72,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
                 ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                 environment={
-                    "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx,
+                    "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx+" -XX:ActiveProcessorCount="+gcp_row['vcpus'],
                     "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
