@@ -17,7 +17,8 @@ clean_logdir
 # Configuration
 duration_minutes=${DURATION_MINUTES:-4}    # X: total duration in minutes (configurable)
 protocols="accord cockroachdb"
-nodes=5
+protocols="swiftpaxos-paxos swiftpaxos-epaxos"
+nodes=3
 replication_factor=${nodes}
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.02
@@ -127,6 +128,7 @@ for protocol in ${protocols}; do
     for i in $(seq 1 ${node_count}); do
         docker stop "$(config 'node_name')${i}" 2>/dev/null || true
     done
+    docker stop "swiftpaxos-master" 2>/dev/null || true
     stop_network
 
 done

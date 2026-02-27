@@ -276,3 +276,12 @@ In particular,
 - possibly use tbf in lieu of htb
 The end goal is to mimick cross-DC links between the different locations.
 These connections are usually high-latency but do not have bandwidth limits.
+
+# 26.02 - copilot
+
+The script Docker/parse_ycsb_to_csv.sh is very slow when there are multiple files to parse.
+The goal of this task is to improve its overall performance.
+To this end, you will use more appropriate algorithmic constructs and also make it parallel where possible.
+For instance, it looks possible to use GNU parallel and execute the loop "file in "$@"; do" concurrently.
+Of course, this requires to be careful when outputing each line, so that they do not get mixed up.
+
