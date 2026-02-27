@@ -16,9 +16,7 @@ clean_logdir
 
 # Configuration
 duration_minutes=${DURATION_MINUTES:-4}    # X: total duration in minutes (configurable)
-protocols="accord cockroachdb"
-protocols="swiftpaxos-paxos swiftpaxos-epaxos"
-protocols="accord"
+protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos"
 nodes=3
 replication_factor=${nodes}
 workload_type="site.ycsb.workloads.ConflictWorkload"
@@ -113,8 +111,8 @@ for protocol in ${protocols}; do
     (
         sleep ${crash_s}
         node1=$(config "node_name")1
-        log "Event 2 @ ${crash_s}s: Killing ${node1}"
-        docker pause "${node1}"
+        log "Event 2 @ ${crash_s}s: Killing ${node1} and ycsb-1"
+        docker kill --signal=9 "${node1}" "ycsb-1" # mimick a crash
     ) &
     event2_pid=$!
 
