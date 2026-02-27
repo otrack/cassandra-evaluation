@@ -13,10 +13,9 @@ source ${DIR}/run_benchmarks.sh
 clean_logdir
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
-theta=0
+theta=0.02
 workload="a" # does not matter
 protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
-protocols="swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
 nodes=3
 replication_factor=${nodes}
 records=1000

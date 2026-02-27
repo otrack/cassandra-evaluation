@@ -111,9 +111,9 @@ def main():
         for clients in client_counts:
             df_clients = dfp[dfp['clients_int'] == clients]
             if not df_clients.empty:
-                avg_tput = df_clients['tput_f'].mean()
+                total_tput = df_clients['tput_f'].sum()
                 avg_lat = df_clients['mean_latency_ms'].mean()
-                throughputs.append(avg_tput)
+                throughputs.append(total_tput)
                 latencies.append(avg_lat)
             else:
                 throughputs.append(None)
