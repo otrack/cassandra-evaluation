@@ -67,12 +67,12 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 security_opt=[
                 "seccomp=unconfined",
                 "apparmor=unconfined",
-                "label=disable",   # <-- key for SELinux hosts
+                "label=disable",
                 ],
                 tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
                 ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                 environment={
-                    "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx,
+                    "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx+" -XX:ActiveProcessorCount="+gcp_row['vcpus'],
                     "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
@@ -83,8 +83,8 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 ports={ '9042/tcp': ('127.0.0.1', (3333+i)), '5005/tcp': ('127.0.0.1', (5005+i)) },
                 detach=True
             )
-            # if nano_cpus is not None:
-            #     run_kwargs['nano_cpus'] = nano_cpus
+            if nano_cpus is not None:
+                run_kwargs['nano_cpus'] = nano_cpus
             if mem_limit is not None:
                 run_kwargs['mem_limit'] = mem_limit
             container = client.containers.run(**run_kwargs)
