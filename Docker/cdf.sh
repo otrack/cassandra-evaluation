@@ -27,6 +27,11 @@ do
     do_create_and_load=1
     total=$(( $(echo ${workloads} | wc -w) * $(echo ${threads} | wc -w) ))
     count=0
+    tracing="false"
+    if printf '%s\n' "$p" | grep -wF -q -- "cockroachdb";
+    then
+	tracing="true"
+    fi
     for w in ${workloads}
     do
 	for c in ${threads}
@@ -34,7 +39,7 @@ do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/${p}_${nodes}_${w}_${ts}.dat"
-	    run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=true
+	    run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing}
 	    do_create_and_load=0
 	    count=$((count+1))
 	done
