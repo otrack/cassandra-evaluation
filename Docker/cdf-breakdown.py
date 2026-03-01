@@ -5,13 +5,13 @@ produce a latency breakdown plot (processing / execution / ordering / commit)
 per city for each trace-capable protocol.
 
 Decomposition axes (mutually exclusive, summing to end-to-end latency):
-  Processing : SQL planning / statement binding
-  Execution  : DistSQL flow build + KV read (Get) + local compute
-  Ordering   : latch acquisition + Raft consensus / sequencing
-  Commit     : network transport to leaseholder + apply/ack + response transfer
+  Processing : SQL planning / statement binding (or local key lookup for Accord)
+  Execution  : DistSQL flow build + KV read + local compute (or Accord apply phase)
+  Ordering   : latch acquisition + Raft consensus (or Accord PreAccept fast path)
+  Commit     : network transport + apply/ack + response transfer
                (i.e. total - processing - execution - ordering)
 
-Currently supported protocols: cockroachdb
+Currently supported protocols: cockroachdb, accord
 
 Usage:
     python3 cdf-breakdown.py <logdir> <workload1> [<workload2> ...] \
@@ -31,8 +31,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
 
-# Protocols for which trace-based breakdown is implemented
-TRACE_PROTOCOLS = {'cockroachdb'}
+# Protocols for which trace-based breakdown is implemented.
+# TRACE_PARSERS (defined after the parser functions below) maps each protocol
+# to its corresponding parse function.
+TRACE_PROTOCOLS = {'cockroachdb', 'accord'}
 
 # The four breakdown components (order matters for stacking)
 COMPONENTS = ['processing', 'execution', 'ordering', 'commit']
@@ -184,6 +186,152 @@ def _parse_one_cockroachdb_trace(lines):
 
 
 # ---------------------------------------------------------------------------
+# Accord trace parsing
+# ---------------------------------------------------------------------------
+
+def _is_accord_event_line(line):
+    """Return True if *line* is an Accord trace event (indented [ms] format)."""
+    return bool(re.match(r'^\s+\[\d+\]', line))
+
+
+def _accord_event_ms(line):
+    """Extract the integer millisecond timestamp from '  [<ms>] ...'."""
+    m = re.match(r'^\s+\[(\d+)\]', line)
+    return int(m.group(1)) if m else None
+
+
+def parse_accord_traces(filepath):
+    """
+    Parse all per-request Accord traces from a YCSB log file.
+
+    With *db.tracing=true* and the Accord/Cassandra binding the driver collects
+    a per-statement trace.  Each trace is emitted as::
+
+        Trace ID: <uuid>, type: Execute CQL3 prepared query, duration: <N>us
+          [<unix_ms>] <message> @ <node_ip>
+          [<unix_ms>] <message> @ <node_ip>
+          ...
+
+    Lines that do not start with whitespace+bracket terminate the current block.
+
+    Returns a list of dicts with float fields:
+        processing, execution, ordering, commit, total  (all in seconds)
+    """
+    results = []
+
+    try:
+        with open(filepath, 'r', errors='replace') as fh:
+            lines = fh.readlines()
+    except OSError as exc:
+        print(f"WARNING: Cannot read {filepath}: {exc}", file=sys.stderr)
+        return results
+
+    # Split into trace blocks: a block starts at "Trace ID:" and consists of
+    # the subsequent indented "[ms]" event lines.
+    blocks = []
+    current_block = []
+    in_trace = False
+
+    for line in lines:
+        if line.startswith('Trace ID:'):
+            if current_block:
+                blocks.append(current_block)
+                current_block = []
+            in_trace = True
+        elif in_trace:
+            if _is_accord_event_line(line):
+                current_block.append(line)
+            elif current_block:
+                # A non-event line after some events → block is complete
+                blocks.append(current_block)
+                current_block = []
+                in_trace = False
+            # If current_block is still empty, stay in in_trace to handle
+            # any header continuation lines before the first event line.
+
+    if current_block:
+        blocks.append(current_block)
+
+    for block in blocks:
+        result = _parse_one_accord_trace(block)
+        if result is not None:
+            results.append(result)
+
+    return results
+
+
+def _parse_one_accord_trace(lines):
+    """
+    Extract timing events from a single Accord trace block.
+
+    Breakdown boundaries (all non-overlapping, summing to total)
+    ------------------------------------------------------------
+    Processing start : first event in trace (commands_for_key lookup)
+    Processing end   : ``Local PreAccept for``
+    Ordering end     : ``Local Execute for``   (covers consensus + post-fast-path gap)
+    Execution end    : first ``Sending ACCORD_INFORM_DURABLE_REQ``
+    Request end      : last event in trace
+
+    commit = total − processing − ordering − execution
+
+    Returns a dict {processing, execution, ordering, commit, total} in
+    seconds, or None if any required event is missing or values are invalid.
+    """
+    ts_start = None
+    ts_proc_end = None    # Local PreAccept for
+    ts_ord_end = None     # Local Execute for
+    ts_exec_end = None    # Sending ACCORD_INFORM_DURABLE_REQ
+    ts_end = None         # last event
+
+    for line in lines:
+        ms = _accord_event_ms(line)
+        if ms is None:
+            continue
+
+        stripped = line.strip()
+
+        if ts_start is None:
+            ts_start = ms
+        ts_end = ms  # always update to last valid timestamp
+
+        if ts_proc_end is None and 'Local PreAccept for' in stripped:
+            ts_proc_end = ms
+
+        if ts_ord_end is None and 'Local Execute for' in stripped:
+            ts_ord_end = ms
+
+        if ts_exec_end is None and 'Sending ACCORD_INFORM_DURABLE_REQ' in stripped:
+            ts_exec_end = ms
+
+    if None in (ts_start, ts_proc_end, ts_ord_end, ts_exec_end, ts_end):
+        return None
+
+    total = (ts_end - ts_start) / 1000.0
+    processing = (ts_proc_end - ts_start) / 1000.0
+    ordering = (ts_ord_end - ts_proc_end) / 1000.0
+    execution = (ts_exec_end - ts_ord_end) / 1000.0
+    commit = total - processing - ordering - execution
+
+    if total <= 0 or processing < 0 or ordering < 0 or execution < 0 or commit < 0:
+        return None
+
+    return {
+        'processing': processing,
+        'execution': execution,
+        'ordering': ordering,
+        'commit': commit,
+        'total': total,
+    }
+
+
+# Map protocol name → trace-parsing function
+TRACE_PARSERS = {
+    'cockroachdb': parse_cockroachdb_traces,
+    'accord': parse_accord_traces,
+}
+
+
+# ---------------------------------------------------------------------------
 # File discovery and per-city breakdown
 # ---------------------------------------------------------------------------
 
@@ -215,9 +363,10 @@ def compute_city_breakdown(logdir, protocol, nodes, workload, city):
         print(f"WARNING: Tracing not supported for protocol '{protocol}'", file=sys.stderr)
         return None
 
+    parser = TRACE_PARSERS[protocol]
     all_traces = []
     for filepath in files:
-        all_traces.extend(parse_cockroachdb_traces(filepath))
+        all_traces.extend(parser(filepath))
 
     if not all_traces:
         print(
