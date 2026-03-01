@@ -285,3 +285,42 @@ To this end, you will use more appropriate algorithmic constructs and also make 
 For instance, it looks possible to use GNU parallel and execute the loop "file in "$@"; do" concurrently.
 Of course, this requires to be careful when outputing each line, so that they do not get mixed up.
 
+# 01.03 - copilot
+
+The goal of this work is to add a plot that provides a latency breakdown to Docker/cdf.sh.
+The breakdown is by protocol and leverage the tracing capabilities of the underlying database (argument "-p db.tracing=true" to run_benchmark.sh in line 38 of cdf.sh).
+Notice that, for the moment, only cockroachdb offers this.
+
+The breakdown plot is implemented in a new Python script called cdf-breakdown.py.
+This script output one plot for each protocol (so currently, only cockroachdb, but the logic should be generic enough).
+For a protocol, there is one bar for each city.
+For each city, the script analyzes the content of the corresponding log of the city, e.g., logs/cockroachdb_3_a_20260301111952773348329_NewYork.dat.
+It uses the tracing output to decompose the time spent in each request.
+This decomposition depends on the protocols but it should be along the following axes: processing, execution, commit, and ordering.
+Where,
+1) Processing is the time spent in computing some internal logic to execute the request (e.g., the query plan);
+2) Execution is the actual time to execute the statement; 
+3) Commit is the time to commit the request; and 
+4) Ordering corresponds to the time spent to order the request wrt. the other concurrent requests.
+The total time should correspond to the average end-to-end latency to complete the request.
+
+For instance, enclosed is the result of tracing the following statement "UPDATE usertable SET field0 = $1 WHERE ycsb_key = $2" on cockroachdb.
+
+One can observe that 
+1) A client connected to SQL node n3 executed an UPDATE against table "usertable" (table ID 104) for a single primary-key row (ycsb-style key "user7109110581138159243").
+2) The SQL layer on n3 planned and executed a (local) DistSQL flow that sent a Get to store/node n1, read the current row, then sent a Put + EndTxn (parallel commit) back to n1.
+3) The KV work (Get + Put + EndTxn) was processed on n1 via Raft. The system attempted a 1PC, but the operation required consensus and went through Raft; the transaction ultimately committed (parallel-commit attempt resulted in explicit commit).
+4) The whole SQL statement took ~0.35s; ComponentStats show ~129ms of KV time (gRPC/kv request), and additional time was spent in Raft/replication and the node/node RPC round-trips.
+
+Below is a non-overlapping decomposition of the client-observed end-to-end latency for the UPDATE in the enclosed trace. 
+I show the time windows I used (with the exact log lines that mark their start/end), the numeric durations, and a short explanation of what each axis includes. The four axes are mutually exclusive and sum to the total client-perceived latency.
+
+Summary (final numbers):
+* Total (client-perceived): 09:29:19.212192 → 09:29:19.561421 ≈ 0.349229 s (349.2 ms)
+* Processing (planning, bind): 0.000369 s (0.37 ms)
+* Execution (build/run DistSQL flow, KV Get, local compute + prepare Put): 0.129904 s (129.9 ms)
+* Ordering (sequencing / latch acquisition + Raft ordering / consensus): 0.089672 s (89.7 ms)
+* Commit (transport to leaseholder, apply/ack round-trips, response transfer — excluding ordering): 0.129284 s (129.3 ms)
+
+These four values sum to the total: 0.000369 + 0.129904 + 0.089672 + 0.129284 ≈ 0.349229 s.
+
