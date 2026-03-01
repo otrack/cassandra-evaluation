@@ -66,4 +66,4 @@ pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
  \end{document}" > /dev/null
 
 debug "Plotting breakdown..."
-python3 ${DIR}/cdf-breakdown.py ${LOGDIR} ${workloads} ${nodes} ${cities} ${RESULTSDIR}/cdf-breakdown
+python3 ${DIR}/breakdown.py ${LOGDIR} ${workloads} ${nodes} ${cities} ${RESULTSDIR}/breakdown
