@@ -13,7 +13,7 @@ source ${DIR}/run_benchmarks.sh
 clean_logdir
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
-theta=0.02
+theta=0.05
 workload="a" # does not matter
 protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
 nodes=3
@@ -49,7 +49,7 @@ do
         do_create_and_load=0
 
         # Check if average latency exceeded 1s (1,000,000 us); if so, stop increasing threads
-        max_avg_latency=$(awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print max+0}' "${output_file}")
+        max_avg_latency=$(awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print max+0}' "${output_file%.dat}_Hanoi.dat"") 
         if [ "${max_avg_latency}" -gt 1000000 ]; then
             log "Average latency ${max_avg_latency}us exceeds 1s for protocol ${p}, stopping thread increase"
             break
