@@ -137,6 +137,10 @@ run_ycsb() {
 	then
 	    leaderless="true"
 	    fast="false"
+	elif printf '%s\n' "$protocol" | grep -wF -q -- "curp";
+	then
+	    leaderless="true"
+	    fast="false"
 	fi	
 	extra_opts_str+=" -p maddr=${hosts} \
 -p mport=${port} \
@@ -172,7 +176,7 @@ run_ycsb() {
     fi
 
     # adjust debug levels below
-    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=info\n\
+    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\n\
 YCSB_COMMAND=${action}\n\
 YCSB_BINDING=${ycsb_client}\n\
 YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
@@ -216,6 +220,7 @@ run_benchmark() {
 
     if [ $# -gt 11 ]; then
 	EXTRA_YCSB_OPTS=( "${@:12}" )
+	echo "EXTRA_YCSB_OPTS: "${EXTRA_YCSB_OPTS[@]}
     else
 	EXTRA_YCSB_OPTS=()
     fi
