@@ -49,7 +49,8 @@ do
         do_create_and_load=0
 
         # Check if average latency exceeded 1s (1,000,000 us); if so, stop increasing threads
-        max_avg_latency=$(awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print max+0}' "${output_file%.dat}_Hanoi.dat") 
+	city=$(cat latencies.csv | head -n 2 | tail -n 1 | awk -F, '{print $3}')
+        max_avg_latency=$(cat "${output_file%.dat}_${city}.dat" | grep -v CLEANUP | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print max+0}')
         if [ "${max_avg_latency}" -gt 1000000 ]; then
             log "Average latency ${max_avg_latency}us exceeds 1s for protocol ${p}, stopping thread increase"
             break
