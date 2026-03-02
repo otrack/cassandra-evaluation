@@ -176,7 +176,7 @@ run_ycsb() {
     fi
 
     # adjust debug levels below
-    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=debug\n\
+    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=info\n\
 YCSB_COMMAND=${action}\n\
 YCSB_BINDING=${ycsb_client}\n\
 YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
