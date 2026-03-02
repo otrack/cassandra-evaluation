@@ -11,8 +11,8 @@ clean_logdir
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
 thetas=$(seq -f "%.1f" 0 0.1 1.0)
-protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
-nodes=3
+protocols="accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+nodes=5
 replication_factor=${nodes}
 records=1000
 threads=1

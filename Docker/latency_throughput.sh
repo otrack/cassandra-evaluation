@@ -13,7 +13,7 @@ source ${DIR}/run_benchmarks.sh
 clean_logdir
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
-theta=0.05
+theta=0.20
 workload="a" # does not matter
 protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
 nodes=3
@@ -24,7 +24,7 @@ ops_per_thread=1000
 # Start with 1 thread and double until reaching max_threads
 # The resulting graph demonstrates the hockey stick effect
 # Maximum threads to prevent infinite loop
-max_threads=1024
+max_threads=256
 
 do_clean_up=0
 for p in ${protocols}

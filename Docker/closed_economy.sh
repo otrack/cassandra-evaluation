@@ -15,9 +15,9 @@ workload="ce"
 protocols="accord cockroachdb"
 node_counts="3 5 7"
 replication_factor=3
-records=1000
+records=10000
 total_threads=1
-ops_per_thread=200
+ops_per_thread=1000
 
 for p in ${protocols}
 do

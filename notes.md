@@ -324,3 +324,11 @@ Summary (final numbers):
 
 These four values sum to the total: 0.000369 + 0.129904 + 0.089672 + 0.129284 ≈ 0.349229 s.
 
+# 01.03 - copilot
+
+In Docker/latency_throughput.sh, given a protocol, the script run all the values of the threads variable.
+This is not useful if the performance degrades too much.
+Add a verification in the while loop (line 35) which check that the performance did not degrade too much.
+In case the average latency of the previous experiment is above 1s then there is no need to continue further and the loop is interrupted, moving to the next (if any) protocol.ma
+
+
