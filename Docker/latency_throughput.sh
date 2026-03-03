@@ -10,12 +10,13 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
-clean_logdir
+mkdir -p ${LOGDIR}/latency_throughput
+rm -f ${LOGDIR}/latency_throughput
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.20
 workload="a" # does not matter
-protocols="accord swiftpaxos-paxos swiftpaxos-epaxos cockroachdb"
+protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 nodes=3
 replication_factor=${nodes}
 records=10000
@@ -35,7 +36,7 @@ do
     while [ ${threads} -le ${max_threads} ]
     do
         ts=$(date +%Y%m%d%H%M%S%N)
-        output_file="${LOGDIR}/${p}_${nodes}_${workload}_${ts}.dat"
+        output_file="${LOGDIR}/latency_throughput/${p}_${nodes}_${workload}_${ts}.dat"
         
         # Clean up after the last iteration of each protocol's thread sequence
         # This ensures we start fresh for the next protocol
@@ -62,7 +63,7 @@ do
 done
 
 debug "Parsing results..."
-${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/latency_throughput.csv
+${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/latency_throughput/* > ${RESULTSDIR}/latency_throughput.csv
 
 debug "Plotting..."
 python3 ${DIR}/latency_throughput.py ${RESULTSDIR}/latency_throughput.csv ${RESULTSDIR}/latency_throughput.tex
