@@ -8,7 +8,7 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
-clean_logdir
+rm -f ${LOGDIR}/closed_economy/*
 
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
@@ -28,14 +28,14 @@ do
 	    t=1
 	fi
 	ts=$(date +%Y%m%d%H%M%S%N)
-	output_file="${LOGDIR}/${p}_${nodes}_${workload}_${ts}.dat"
+	output_file="${LOGDIR}/closed_economy/${p}_${nodes}_${workload}_${ts}.dat"
 	# Each node count requires a fresh cluster, so always create and always clean up
 	run_benchmark ${p} ${t} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1
     done
 done
 
 debug "Parsing results..."
-${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/closed_economy.csv
+${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/closed_economy/* > ${RESULTSDIR}/closed_economy.csv
 
 debug "Plotting..."
 python3 ${DIR}/closed_economy.py ${RESULTSDIR}/closed_economy.csv ${RESULTSDIR}/closed_economy.tex
