@@ -6,10 +6,8 @@ Generates a grouped bar chart:
   - X-axis: YCSB workloads (A, B, C, D), one group per workload
   - Y-axis: average latency (ms) averaged over all YCSB clients and all
     executed operations (read, insert, update, …) for each workload
-  - One bar per protocol within each group
-  - The first group's x-tick label lists the protocol names in small text
-    above the workload letter; the remaining groups show only the workload
-    letter.  All workload letters are horizontally aligned.
+  - One bar per protocol within each group, placed side-by-side
+  - Protocol name shown at the top of each bar, rotated 45 degrees
   - No legend box in the figure; protocols are identified in the caption
     via colour swatches.
 """
@@ -111,26 +109,9 @@ def main():
         "magenta!80!black", "yellow!80!black", "black"
     ]
 
-    # Y-axis upper bound
+    # Y-axis upper bound — leave extra headroom for the rotated labels at bar tops
     all_vals = [v for wl in data.values() for v in wl.values() if v > 0]
-    ymax = max(all_vals) * 1.2 if all_vals else 1000.0
-
-    # Build x-tick labels.
-    # For the first workload group: protocol names in \tiny on the top line,
-    # workload letter on the bottom line.  All other groups: a \phantom line
-    # (same height as the protocol-name line) plus the workload letter so that
-    # every workload letter sits at the same vertical position.
-    phantom_ref = protocol_order[0] if protocol_order else "accord"
-    proto_names_line = "~".join("\\tiny " + p for p in protocol_order)
-
-    first_label = "\\shortstack[c]{" + proto_names_line + "\\\\" + workloads[0] + "}"
-    phantom_line = "\\phantom{\\tiny " + phantom_ref + "}"
-    other_labels = [
-        "\\shortstack[c]{" + phantom_line + "\\\\" + w + "}"
-        for w in workloads[1:]
-    ]
-    all_tick_labels = [first_label] + other_labels
-    xticklabels_str = "{" + ",".join(all_tick_labels) + "}"
+    ymax = max(all_vals) * 1.6 if all_vals else 1000.0
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
@@ -138,21 +119,25 @@ def main():
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      ybar,\n")
-        f.write("      width=12cm, height=7cm,\n")
-        f.write("      enlarge x limits=0.2,\n")
+        f.write("      bar width=0.35cm,\n")
+        f.write("      width=14cm, height=8cm,\n")
+        f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
         f.write("      ylabel={Average latency (ms)},\n")
         f.write("      symbolic x coords={" + ",".join(workloads) + "},\n")
         f.write("      xtick=data,\n")
-        f.write(f"      xticklabels={xticklabels_str},\n")
+        f.write("      xticklabels={" + ",".join(workloads) + "},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
         f.write("      legend style={draw=none, fill=none},\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
             col = color_cycle[idx % len(color_cycle)]
-            f.write(f"      \\addplot+[ybar, fill={col}, draw=black, forget plot] coordinates {{\n")
+            f.write(f"      \\addplot+[fill={col}, draw=black, forget plot,\n")
+            f.write(f"        nodes near coords={{\\tiny {proto}}},\n")
+            f.write(f"        nodes near coords style={{rotate=45, anchor=south west, inner sep=1pt}},\n")
+            f.write(f"      ] coordinates {{\n")
             for workload in workloads:
                 val = data[workload].get(proto, 0.0)
                 f.write(f"        ({workload}, {val:.2f})\n")
