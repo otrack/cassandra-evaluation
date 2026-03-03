@@ -12,7 +12,7 @@ rm -f ${LOGDIR}/conflict/*
 workload_type="site.ycsb.workloads.ConflictWorkload"
 thetas=$(seq -f "%.1f" 0 0.1 1.0)
 workload="a" # this does not matter
-protocols="accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 nodes=5
 replication_factor=${nodes}
 records=1000
