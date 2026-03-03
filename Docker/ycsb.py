@@ -7,7 +7,9 @@ Generates a grouped bar chart:
   - Y-axis: average latency (ms) averaged over all YCSB clients and all
     executed operations (read, insert, update, …) for each workload
   - One bar per protocol within each group, placed side-by-side
-  - Protocol name shown at the top of each bar, rotated 45 degrees
+  - Protocols ordered slowest → fastest (highest → lowest average latency)
+  - Protocol name shown at the top of each bar in the first workload group
+    only, rotated 45 degrees
   - No legend box in the figure; protocols are identified in the caption
     via colour swatches.
 """
@@ -103,6 +105,14 @@ def main():
             except KeyError:
                 data[workload][proto] = 0.0
 
+    # Sort protocols slowest → fastest (highest average latency first) so that
+    # within each group the tallest bar is on the left.
+    proto_avg_lat = {
+        proto: sum(data[wl][proto] for wl in workloads) / (len(workloads) or 1)
+        for proto in protocol_order
+    }
+    protocol_order.sort(key=lambda p: proto_avg_lat[p], reverse=True)
+
     # Colours consistent with the other plotting scripts in this repository
     color_cycle = [
         "red", "blue", "green!50!black", "cyan!80!black",
@@ -132,18 +142,20 @@ def main():
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
         f.write("      every node near coord/.style={\n")
         f.write("        rotate=45, anchor=south west, inner sep=1pt,\n")
-        f.write("        text=black, fill=white, fill opacity=0.6, text opacity=1,\n")
+        f.write("        text=black, font=\\tiny,\n")
         f.write("      },\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
             col = color_cycle[idx % len(color_cycle)]
             f.write(f"      \\addplot+[fill={col}, draw=black,\n")
-            f.write(f"        nodes near coords={{\\tiny {proto}}},\n")
+            f.write(f"        nodes near coords, point meta=explicit symbolic,\n")
             f.write(f"      ] coordinates {{\n")
-            for workload in workloads:
+            for wl_idx, workload in enumerate(workloads):
                 val = data[workload].get(proto, 0.0)
-                f.write(f"        ({workload}, {val:.2f})\n")
+                # Only label bars in the first workload group
+                label = proto if wl_idx == 0 else ""
+                f.write(f"        ({workload}, {val:.2f}) [{label}]\n")
             f.write("      };\n")
 
         f.write("    \\end{axis}\n")
