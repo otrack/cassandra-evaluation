@@ -14,7 +14,7 @@ mkdir -p ${LOGDIR}/latency_throughput
 rm -f ${LOGDIR}/latency_throughput
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
-theta=0.20
+theta=0.05
 workload="a" # does not matter
 protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 protocols="cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
