@@ -7,6 +7,7 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
+mkdir -p ${LOGDIR}/cdf
 rm -f ${LOGDIR}/cdf/*
 
 workload_type="site.ycsb.workloads.CoreWorkload"

@@ -8,6 +8,7 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
+mkdir -p ${LOGDIR}/closed_economy
 rm -f ${LOGDIR}/closed_economy/*
 
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"

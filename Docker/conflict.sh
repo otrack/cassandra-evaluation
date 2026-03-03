@@ -7,6 +7,7 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
+mkdir -p ${LOGDIR}/conflict
 rm -f ${LOGDIR}/conflict/*
 
 workload_type="site.ycsb.workloads.ConflictWorkload"

@@ -331,4 +331,24 @@ This is not useful if the performance degrades too much.
 Add a verification in the while loop (line 35) which check that the performance did not degrade too much.
 In case the average latency of the previous experiment is above 1s then there is no need to continue further and the loop is interrupted, moving to the next (if any) protocol.ma
 
+# 01.03 - copilot
+
+In Docker, add a new experiment that runs YCSB workloads A to D.
+This experiment is implemented as a bash script called ycsb.sh.
+It is similar to the other ones, e.g., cdf.sh, conflict.sh, etc.
+The script outputs the total throughput across all YCSB clients, as a bar chart:
+On the x axis, for each of the workload (A,B,..), there is a group of bars, one per protocol.
+The first group of bars mention the protocol in small and below this mention, there is the name of the workload (A).
+The other groups simply mentions the workload.
+These mentions should all be horizontally aligned.
+There are no other keys in the figure.
+The y axis is the throuhgput in command per second.
+The caption of the figure should explain it, as it is the case with cdf.sh.
+
+Correct the script to plot on the y-axis the latency (not the throughput) in ms.
+The latency should be averaged over all the clients in the system.
+This requires to extract for each workload the operation which are executed (that is, either insert, update, or get).
+For each such operation, the YCSB log mention the average latency.
+For instance, "[UPDATE], AverageLatency(us), 217213.92" indicates that it took around 217ms to execute an update on average at that client.
+Be careful not to take into account the clean-up operation.
 

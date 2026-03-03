@@ -12,19 +12,23 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
-clean_logdir
+mkdir -p ${LOGDIR}/fault_tolerance
+rm -f ${LOGDIR}/fault_tolerance/*
 
 # Configuration
-duration_minutes=${DURATION_MINUTES:-4}    # X: total duration in minutes (configurable)
-protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos"
-nodes=3
-replication_factor=${nodes}
+duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
+protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols="accord cockroachdb"
+nodes=5
+replication_factor=3
 workload_type="site.ycsb.workloads.ConflictWorkload"
+workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 theta=0.02
-workload="a"
-records=1000
+workload="a" # does not matter
+workload="ce"
+records=10000
 threads=1
-status_interval=5   # YCSB -s reporting interval in seconds
+status_interval=1   # YCSB -s reporting interval in seconds
 
 duration_s=$((duration_minutes * 60))
 slowdown_s=$((duration_s / 4))
@@ -37,7 +41,7 @@ log "  Crash (docker kill database-node1 and ycsb-1) at ${crash_s}s"
 
 for protocol in ${protocols}; do
     ts=$(date +%Y%m%d%H%M%S%N)
-    output_file="${LOGDIR}/${protocol}_${nodes}_${workload}_${ts}.dat"
+    output_file="${LOGDIR}/fault_tolerance/${protocol}_${nodes}_${workload}_${ts}.dat"
 
     # Determine cluster prefix
     pref=cassandra
@@ -83,9 +87,7 @@ for protocol in ${protocols}; do
             "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
             -p maxexecutiontime=${duration_s} \
             -p status.interval=${status_interval} \
-	    -p conflict.theta=${theta} \
-	    -p updateproportion=1.0 \
-	    -p readproportion=0.0
+	    -p conflict.theta=${theta}
     done
 
     # Event 1: at X/4, add 400ms latency to database-node1 outbound traffic
@@ -135,7 +137,7 @@ done
 # Plot results for all protocols
 debug "Plotting..."
 python3 ${DIR}/fault_tolerance.py \
-    "${LOGDIR}" \
+    "${LOGDIR}/fault_tolerance" \
     ${protocols} \
     "${duration_s}" \
     "${slowdown_s}" \
