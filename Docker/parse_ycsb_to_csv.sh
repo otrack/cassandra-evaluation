@@ -7,7 +7,7 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 
 # Output concise header
-header="protocol,nodes,workload,conflict_rate,city,op,clients,tput"
+header="protocol,nodes,workload,conflict_rate,city,op,clients,tput,avg_latency_us"
 for p in $(seq 1 100); do
     header="$header,p$p"
 done
@@ -72,6 +72,19 @@ process_file() {
         if (t != "") tput = sprintf("%.2f", t + 0)
     }
 
+    # Extract AverageLatency(us) per operation (skip CLEANUP)
+    /AverageLatency\(us\),/ {
+        split($0, a, ",")
+        op_field = a[1]
+        gsub(/^\[|\].*$/, "", op_field)
+        op_lower = tolower(op_field)
+        if (op_lower != "cleanup") {
+            val = a[3]
+            gsub(/^[ \t]+|[ \t]+$/, "", val)
+            if (val != "") avg_lat[op_lower] = val + 0
+        }
+    }
+
     # Extract percentile latencies: "[OP], NNNthPercentileLatency(us), VALUE"
     /PercentileLatency\(us\),/ {
         split($0, parts, ",")
@@ -103,7 +116,7 @@ process_file() {
             protocol_clean = protocol
             gsub(/swiftpaxos-/, "", protocol_clean)
             row = protocol_clean "," nodes "," workload "," conflict_rate "," city \
-                  "," op "," clients "," tput
+                  "," op "," clients "," tput "," (op in avg_lat ? sprintf("%.2f", avg_lat[op]) : "unknown")
             for (p = 1; p <= 100; p++) {
                 key = op SUBSEP p
                 row = row "," (key in lat ? lat[key] : "unknown")

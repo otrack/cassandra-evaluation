@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-# Total throughput comparison across YCSB workloads A to D for each protocol.
-# For each workload, the total throughput (summed across all YCSB clients) is
-# plotted as a grouped bar chart: one group per workload, one bar per protocol.
+# Average latency comparison across YCSB workloads A to D for each protocol.
+# For each workload, the average latency (in ms, averaged over all YCSB clients
+# and all executed operations) is plotted as a grouped bar chart: one group per
+# workload, one bar per protocol.
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
 

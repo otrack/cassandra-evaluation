@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Plotting script for the YCSB throughput experiment.
+Plotting script for the YCSB latency experiment.
 
 Generates a grouped bar chart:
   - X-axis: YCSB workloads (A, B, C, D), one group per workload
-  - Y-axis: total throughput (commands/sec) summed across all YCSB clients
+  - Y-axis: average latency (ms) averaged over all YCSB clients and all
+    executed operations (read, insert, update, …) for each workload
   - One bar per protocol within each group
   - The first group's x-tick label lists the protocol names in small text
     above the workload letter; the remaining groups show only the workload
@@ -77,14 +78,22 @@ def main():
         if proto not in protocol_order:
             protocol_order.append(proto)
 
-    # Total throughput per (protocol, workload): sum across all nodes/cities.
-    # The 'tput' column is the same for every op-row that came from the same
-    # measurement file, so deduplicate by (protocol, workload_upper, city)
-    # before summing.
-    df_unique = df.drop_duplicates(subset=['protocol', 'workload_upper', 'city'])
-    tput_totals = (
-        df_unique.groupby(['protocol', 'workload_upper'])['tput_f']
-        .sum()
+    # Average latency (ms) per (protocol, workload), averaged across all
+    # executed operations and all clients (cities).
+    # avg_latency_us is in microseconds; divide by 1000 to get ms.
+    # CLEANUP rows are already excluded by parse_ycsb_to_csv.sh, but filter
+    # defensively.
+    df_lat = df[df['op'].str.lower() != 'cleanup'].copy()
+    df_lat['avg_lat_f'] = df_lat['avg_latency_us'].apply(safe_float)
+    df_lat = df_lat[df_lat['avg_lat_f'].notnull()]
+
+    if df_lat.empty:
+        print("No valid avg_latency_us data found in results CSV.")
+        sys.exit(1)
+
+    lat_means = (
+        df_lat.groupby(['protocol', 'workload_upper'])['avg_lat_f']
+        .mean() / 1000.0  # convert us → ms
     )
 
     data = {}
@@ -92,7 +101,7 @@ def main():
         data[workload] = {}
         for proto in protocol_order:
             try:
-                data[workload][proto] = float(tput_totals.loc[proto, workload])
+                data[workload][proto] = float(lat_means.loc[proto, workload])
             except KeyError:
                 data[workload][proto] = 0.0
 
@@ -133,7 +142,7 @@ def main():
         f.write("      enlarge x limits=0.2,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
-        f.write("      ylabel={Throughput (commands/sec)},\n")
+        f.write("      ylabel={Average latency (ms)},\n")
         f.write("      symbolic x coords={" + ",".join(workloads) + "},\n")
         f.write("      xtick=data,\n")
         f.write(f"      xticklabels={xticklabels_str},\n")
@@ -154,7 +163,7 @@ def main():
 
         # Caption: describe the figure and identify protocols via colour swatches
         workloads_str = ", ".join(workloads)
-        f.write(f"  \\caption{{Total throughput (summed across all YCSB clients) for workloads {workloads_str}. ")
+        f.write(f"  \\caption{{Average operation latency (averaged across all clients and all executed operations) for YCSB workloads {workloads_str}. ")
         f.write("For each workload, one bar per protocol: ")
         for proto_idx, proto in enumerate(protocol_order):
             col = color_cycle[proto_idx % len(color_cycle)]
@@ -166,7 +175,7 @@ def main():
             if proto_idx < len(protocol_order) - 1:
                 f.write(", ")
         f.write(".}\n")
-        f.write("  \\label{fig:ycsb-throughput}\n")
+        f.write("  \\label{fig:ycsb-latency}\n")
         f.write("\\end{figure}\n")
 
     print(f"Generated {output_tikz}")
