@@ -17,6 +17,7 @@ workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.20
 workload="a" # does not matter
 protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols="cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 nodes=3
 replication_factor=${nodes}
 records=10000
