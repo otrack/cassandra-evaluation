@@ -110,8 +110,9 @@ def main():
     ]
 
     # Y-axis upper bound — leave extra headroom for the rotated labels at bar tops
+    LABEL_HEADROOM = 1.6
     all_vals = [v for wl in data.values() for v in wl.values() if v > 0]
-    ymax = max(all_vals) * 1.6 if all_vals else 1000.0
+    ymax = max(all_vals) * LABEL_HEADROOM if all_vals else 1000.0
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
@@ -129,14 +130,16 @@ def main():
         f.write("      xtick=data,\n")
         f.write("      xticklabels={" + ",".join(workloads) + "},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
-        f.write("      legend style={draw=none, fill=none},\n")
+        f.write("      every node near coord/.style={\n")
+        f.write("        rotate=45, anchor=south west, inner sep=1pt,\n")
+        f.write("        text=black, fill=white, fill opacity=0.6, text opacity=1,\n")
+        f.write("      },\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
             col = color_cycle[idx % len(color_cycle)]
-            f.write(f"      \\addplot+[fill={col}, draw=black, forget plot,\n")
+            f.write(f"      \\addplot+[fill={col}, draw=black,\n")
             f.write(f"        nodes near coords={{\\tiny {proto}}},\n")
-            f.write(f"        nodes near coords style={{rotate=45, anchor=south west, inner sep=1pt}},\n")
             f.write(f"      ] coordinates {{\n")
             for workload in workloads:
                 val = data[workload].get(proto, 0.0)
