@@ -294,6 +294,7 @@ def main():
         f.write(f"        xmax={500:.2f},\n")
         f.write("        ytick={0,0.5,1},\n")
         f.write("        cycle list name=color list,\n")
+        f.write("        scale=.75,\n")
         f.write("      ]\n")
 
         # First, plot average rows if requested

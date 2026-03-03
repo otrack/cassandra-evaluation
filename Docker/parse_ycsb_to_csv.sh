@@ -99,7 +99,10 @@ process_file() {
         n_ops = split("read insert update scan readmodifywrite tx-readmodifywrite", ops, " ")
         for (o = 1; o <= n_ops; o++) {
             op  = ops[o]
-            row = protocol "," nodes "," workload "," conflict_rate "," city \
+	    # remove all occurrences of "swiftpaxos-" from protocol for output
+            protocol_clean = protocol
+            gsub(/swiftpaxos-/, "", protocol_clean)
+            row = protocol_clean "," nodes "," workload "," conflict_rate "," city \
                   "," op "," clients "," tput
             for (p = 1; p <= 100; p++) {
                 key = op SUBSEP p

@@ -7,16 +7,17 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
-clean_logdir
+rm -f ${LOGDIR}/conflict/*
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
 thetas=$(seq -f "%.1f" 0 0.1 1.0)
+workload="a" # this does not matter
 protocols="accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 nodes=5
 replication_factor=${nodes}
 records=1000
 threads=1
-ops_per_thread=1000
+ops_per_thread=100
 
 do_clean_up=0
 for p in ${protocols}
@@ -30,8 +31,8 @@ do
 	do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	    ts=$(date +%Y%m%d%H%M%S%N)
-	    output_file="${LOGDIR}/${p}_${nodes}_a_${ts}.dat"
-	    run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} a ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0
+	    output_file="${LOGDIR}/conflict/${p}_${nodes}_a_${ts}.dat"
+	    run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0
 	    do_create_and_load=0
 	    count=$((count+1))
 	done
@@ -39,10 +40,10 @@ do
 done
 
 debug "Parsing results..."
-${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/conflict.csv
+${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/conflict/* > ${RESULTSDIR}/conflict.csv
 
 debug "Plotting..."
-python3 ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv a 3 ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
+python3 ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv ${workload} ${nodes} ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
 
 pdflatex -jobname=conflict -output-directory=${RESULTSDIR} \
 "\documentclass{article}\

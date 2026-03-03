@@ -7,12 +7,11 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
-clean_logdir
+rm -f ${LOGDIR}/cdf/*
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a"
-protocols="quorum accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
-protocols="accord paxos swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 nodes=5
 replication_factor=${nodes}
 cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""
@@ -38,7 +37,7 @@ do
 	do
 	    do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	    ts=$(date +%Y%m%d%H%M%S%N)
-	    output_file="${LOGDIR}/${p}_${nodes}_${w}_${ts}.dat"
+	    output_file="${LOGDIR}/cdf/${p}_${nodes}_${w}_${ts}.dat"
 	    run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing}
 	    do_create_and_load=0
 	    count=$((count+1))
@@ -47,7 +46,7 @@ do
 done
 
 debug "Parsing results..."
-${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/* > ${RESULTSDIR}/cdf.csv
+${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/cdf/* > ${RESULTSDIR}/cdf.csv
 
 debug "Plotting..."
 if [ "$plot_average" = true ]; then
@@ -71,4 +70,4 @@ pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
  \end{document}" > /dev/null
 
 debug "Plotting breakdown..."
-python3 ${DIR}/breakdown.py ${LOGDIR} ${workloads} ${nodes} ${cities} ${RESULTSDIR}/breakdown
+python3 ${DIR}/breakdown.py ${LOGDIR}/cdf ${workloads} ${nodes} ${cities} ${RESULTSDIR}/breakdown

@@ -37,7 +37,7 @@ init_logdir() {
 }
 
 clean_logdir() {
-    rm -Rf ${LOGDIR}/*
+    rm -f ${LOGDIR}/*    
 }
 
 DEBUG=$(config debug)
