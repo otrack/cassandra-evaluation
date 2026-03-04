@@ -18,7 +18,7 @@ theta=0.05
 workload="a" # does not matter
 protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 protocols="cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
-nodes=3
+nodes=5
 replication_factor=${nodes}
 records=10000
 ops_per_thread=1000
@@ -50,10 +50,10 @@ do
         run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0
         do_create_and_load=0
 
-        # Check if average latency exceeded 1s (500,000 us); if so, stop increasing threads
+        # Check if average latency exceeded 1s (500 ms); if so, stop increasing threads
 	city=$(cat latencies.csv | head -n 2 | tail -n 1 | awk -F, '{print $3}')
-        max_avg_latency=$(cat "${output_file%.dat}_${city}.dat" | grep -v CLEANUP | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print max+0}')
-        if [ "${max_avg_latency}" -gt 500000 ]; then
+        max_avg_latency=$(cat "${output_file%.dat}_${city}.dat" | grep -v CLEANUP | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print max/1000}')
+        if [ "${max_avg_latency}" -gt 500 ]; then
             log "Average latency ${max_avg_latency}us exceeds 1s for protocol ${p}, stopping thread increase"
             break
         fi
