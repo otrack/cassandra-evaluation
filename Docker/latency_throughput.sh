@@ -11,13 +11,13 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 mkdir -p ${LOGDIR}/latency_throughput
-rm -f ${LOGDIR}/latency_throughput/*
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.05
 workload="a" # does not matter
 protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 protocols="cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols="accord"
 nodes=5
 replication_factor=${nodes}
 records=1000
@@ -31,6 +31,10 @@ max_threads=256
 do_clean_up=0
 for p in ${protocols}
 do
+
+    # clean prior logs
+    rm -f ${LOGDIR}/latency_throughput/*${p}*
+
     do_create_and_load=1
     threads=1
 
@@ -52,9 +56,9 @@ do
 
         # Check if average latency exceeded 1s (500 ms); if so, stop increasing threads
 	city=$(cat latencies.csv | head -n 2 | tail -n 1 | awk -F, '{print $3}')
-        max_avg_latency=$(cat "${output_file%.dat}_${city}.dat" | grep -v CLEANUP | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print int(max/1000)}')
+        max_avg_latency=$(cat "${output_file%.dat}_${city}.dat" | grep -v CLEANUP | grep -v FAILED | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print int(max/1000)}')
         if [ "${max_avg_latency}" -gt 500 ]; then
-            log "Average latency ${max_avg_latency}us exceeds 1s for protocol ${p}, stopping thread increase"
+            log "Average latency ${max_avg_latency}ms exceeds 1s for protocol ${p}, stopping thread increase"
 	    stop_benchmark ${p} ${nodes}
             break
         fi
