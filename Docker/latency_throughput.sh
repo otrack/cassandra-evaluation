@@ -20,7 +20,7 @@ protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp
 protocols="cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 nodes=5
 replication_factor=${nodes}
-records=1
+records=1000
 ops_per_thread=10
 
 # Start with 1 thread and double until reaching max_threads
