@@ -20,8 +20,8 @@ protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp
 protocols="cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 nodes=5
 replication_factor=${nodes}
-records=10000
-ops_per_thread=1000
+records=1
+ops_per_thread=10
 
 # Start with 1 thread and double until reaching max_threads
 # The resulting graph demonstrates the hockey stick effect
@@ -55,6 +55,7 @@ do
         max_avg_latency=$(cat "${output_file%.dat}_${city}.dat" | grep -v CLEANUP | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print max/1000}')
         if [ "${max_avg_latency}" -gt 500 ]; then
             log "Average latency ${max_avg_latency}us exceeds 1s for protocol ${p}, stopping thread increase"
+	    stop_benchmark ${p} ${nodes}
             break
         fi
 

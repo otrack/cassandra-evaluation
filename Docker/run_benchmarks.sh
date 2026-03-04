@@ -299,3 +299,27 @@ run_benchmark() {
 	stop_network
     fi
 }
+
+stop_benchmark() {
+
+    if [ $# -lt 2 ]; then
+	echo "Usage: $0 <protocol> <node_count>"
+	echo "Example: $0 swiftpaxos-paxos 3"
+	exit 1
+    fi
+
+    protocol=$1
+    node_count=$2
+
+
+    pref=cassandra
+    if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos"; then	
+	pref=swiftpaxos
+    elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
+	pref=cockroachdb
+    fi
+    
+    ${pref}_cleanup_cluster ${node_count}
+    stop_network
+    
+}
