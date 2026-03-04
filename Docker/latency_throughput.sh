@@ -11,7 +11,7 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 mkdir -p ${LOGDIR}/latency_throughput
-rm -f ${LOGDIR}/latency_throughput
+rm -f ${LOGDIR}/latency_throughput/*
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.05
