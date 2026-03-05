@@ -59,11 +59,12 @@ cassandra_create_usertable() {
     fi
 
     # Truncate the table to empty it
-    docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$truncate_table_command"
-    if [ $? -eq 0 ]; then
-        debug "Table 'usertable' truncated."
-    else
-        error "Error truncating table."
-        exit 1
-    fi
+    # FIXME skipped ftm to avoids bugs
+    # docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$truncate_table_command"
+    # if [ $? -eq 0 ]; then
+    #     debug "Table 'usertable' truncated."
+    # else
+    #     error "Error truncating table."
+    #     exit 1
+    # fi
 }
