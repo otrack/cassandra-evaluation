@@ -321,7 +321,7 @@ def main():
         f.write("  \\centering\n")
         f.write(make_protocol_legend(protocols, protocol_colors,
                                      protocol_aliases=protocol_aliases))
-        f.write("  \\begin{tikzpicture}\n")
+        f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
         f.write("      enlarge x limits=0.25,\n")
@@ -376,16 +376,16 @@ def main():
                 "The markers indicate the average ($\\CIRCLE$), P90 ($\\blacktriangle$), P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles.}\n")
         f.write("\\end{figure}\n")
 
-        if accord_latencies:
-            f.write("\\medskip\n")
-            f.write("\\begin{tabular}{lrr}\n")
-            f.write("  \\hline\n")
-            f.write("  Nodes & Accord best-case latency (ms) & Accord worst-case latency (ms) \\\\\n")
-            f.write("  \\hline\n")
-            for nodes, best_latency, worst_latency in accord_latencies:
-                f.write(f"  {nodes} & {best_latency:.2f} & {worst_latency:.2f} \\\\\n")
-            f.write("  \\hline\n")
-            f.write("\\end{tabular}\n")
+        # if accord_latencies:
+        #     f.write("\\medskip\n")
+        #     f.write("\\begin{tabular}{lrr}\n")
+        #     f.write("  \\hline\n")
+        #     f.write("  Nodes & Accord best-case latency (ms) & Accord worst-case latency (ms) \\\\\n")
+        #     f.write("  \\hline\n")
+        #     for nodes, best_latency, worst_latency in accord_latencies:
+        #         f.write(f"  {nodes} & {best_latency:.2f} & {worst_latency:.2f} \\\\\n")
+        #     f.write("  \\hline\n")
+        #     f.write("\\end{tabular}\n")
 
     print(f"Generated {output_tikz}")
 
