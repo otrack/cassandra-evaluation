@@ -3,7 +3,7 @@ import math
 import pandas as pd
 
 from emulate_latency import haversine, estimate_latency
-from colors import load_protocol_colors, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
 
 def compute_optimum_per_replica(latlon, n_nodes):
     """
@@ -275,13 +275,15 @@ def main():
     max_latency = max_latency + xpad
 
     protocol_colors = load_protocol_colors()
+    protocol_aliases = load_protocol_aliases()
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("    \\centering\n")
 
         # --- Protocol legend at the top of the figure ---
-        f.write(make_protocol_legend(protocol_order, protocol_colors, indent="    "))
+        f.write(make_protocol_legend(protocol_order, protocol_colors, indent="    ",
+                                     protocol_aliases=protocol_aliases))
 
         f.write("    \\begin{tikzpicture}\n")
 

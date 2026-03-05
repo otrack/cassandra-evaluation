@@ -17,7 +17,7 @@ Generates a grouped bar chart:
 import sys
 import pandas as pd
 
-from colors import load_protocol_colors, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
 
 
 def usage_and_exit():
@@ -117,6 +117,7 @@ def main():
 
     # Colours from the unified protocol color schema
     protocol_colors = load_protocol_colors()
+    protocol_aliases = load_protocol_aliases()
 
     # Y-axis upper bound — leave extra headroom for the rotated labels at bar tops
     LABEL_HEADROOM = 1.6
@@ -126,7 +127,8 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
-        f.write(make_protocol_legend(protocol_order, protocol_colors))
+        f.write(make_protocol_legend(protocol_order, protocol_colors,
+                                     protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      ybar,\n")

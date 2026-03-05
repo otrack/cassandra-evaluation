@@ -16,7 +16,7 @@ import re
 import glob
 from collections import defaultdict
 
-from colors import load_protocol_colors, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
 
 
 def parse_status_lines(logfile):
@@ -63,6 +63,7 @@ def main():
     output_tex = sys.argv[-1]
 
     protocol_colors = load_protocol_colors()
+    protocol_aliases = load_protocol_aliases()
 
     # Collect per-protocol aggregated throughput series
     protocol_data = {}
@@ -93,7 +94,8 @@ def main():
         f.write("  \\centering\n")
         # Protocol legend above the plot (only for protocols that have data)
         present_protocols = [p for p in protocols if p in protocol_data]
-        f.write(make_protocol_legend(present_protocols, protocol_colors))
+        f.write(make_protocol_legend(present_protocols, protocol_colors,
+                                     protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=6cm,\n")

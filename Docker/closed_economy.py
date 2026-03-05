@@ -17,7 +17,7 @@ import sys
 import pandas as pd
 import numpy as np
 
-from colors import load_protocol_colors, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
 
 MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
@@ -296,6 +296,7 @@ def main():
 
     # Prepare colors from the unified protocol color schema
     protocol_colors = load_protocol_colors()
+    protocol_aliases = load_protocol_aliases()
 
     # Compute y-axis limits
     all_vals = []
@@ -318,7 +319,8 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
-        f.write(make_protocol_legend(protocols, protocol_colors))
+        f.write(make_protocol_legend(protocols, protocol_colors,
+                                     protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
