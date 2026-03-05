@@ -352,3 +352,16 @@ For each such operation, the YCSB log mention the average latency.
 For instance, "[UPDATE], AverageLatency(us), 217213.92" indicates that it took around 217ms to execute an update on average at that client.
 Be careful not to take into account the clean-up operation.
 
+# 05.03 - copilot
+
+The Latex plots produced by the experiments in /Docker, e.g., cdf.sh, conflict.sh, ycsb.sh, etc, use different color schemas.
+As a consequence, acrosss plots, the same protocol may appear with different colors which is difficult to follow for the reader.
+This task should 
+- Use a unified color schema linking the protocols listed in /Docker/protocols.txt to a well-defined color.
+To do this, you may change protocols.txt into a csv file whose second entry is the chosen color for the protocol.
+The Accord protocol must be in red.
+- In the experiments, when the performance of a protocol are presented, the corresponding curve/points should use the appropriate color.
+- Remove the mention of the colors from all the generated plots but the one created by cdf.sh.
+In this plot, at the top of it, you should list the protocols together with the chosen color.
+
+
