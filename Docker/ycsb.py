@@ -154,7 +154,7 @@ def main():
             f.write(f"      ] coordinates {{\n")
             for wl_idx, workload in enumerate(workloads):
                 val = data[workload].get(proto, 0.0)
-                f.write(f"        ({workload}, {val:.2f}) [{{}}]\n")
+                f.write(f"        ({workload}, {val:.2f}) []\n")
             f.write("      };\n")
             f.write(f"      \\addlegendentry{{{proto}}}\n\n")
 
