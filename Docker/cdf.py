@@ -3,7 +3,7 @@ import math
 import pandas as pd
 
 from emulate_latency import haversine, estimate_latency
-from colors import load_protocol_colors, get_protocol_color
+from colors import load_protocol_colors, get_protocol_color, make_protocol_legend
 
 def compute_optimum_per_replica(latlon, n_nodes):
     """
@@ -281,15 +281,7 @@ def main():
         f.write("    \\centering\n")
 
         # --- Protocol legend at the top of the figure ---
-        legend_entries = []
-        for proto_idx, proto in enumerate(protocol_order):
-            col = get_protocol_color(proto, protocol_colors, proto_idx)
-            legend_entries.append(
-                r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.5,0);~\texttt{{{proto}}}".format(
-                    color=col, proto=escape_latex(proto)
-                )
-            )
-        f.write("    {\\small " + r"\quad ".join(legend_entries) + "}\\\\[4pt]\n")
+        f.write(make_protocol_legend(protocol_order, protocol_colors, indent="    "))
 
         f.write("    \\begin{tikzpicture}\n")
 

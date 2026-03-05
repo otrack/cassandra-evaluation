@@ -14,7 +14,7 @@ import sys
 import pandas as pd
 import numpy as np
 
-from colors import load_protocol_colors, get_protocol_color
+from colors import load_protocol_colors, get_protocol_color, make_protocol_legend
 
 
 def usage_and_exit():
@@ -155,6 +155,7 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        f.write(make_protocol_legend(protocol_order, protocol_colors))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
@@ -163,20 +164,18 @@ def main():
         f.write("      ylabel={Average Latency (ms)},\n")
         f.write(f"      xmin={xmin:.2f}, xmax={xmax:.2f},\n")
         f.write(f"      ymin={ymin:.2f}, ymax={1000},\n")
-        f.write("      legend pos=north west,\n")
         f.write("      cycle list name=color list,\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
             col = get_protocol_color(proto, protocol_colors, idx)
             data = data_by_protocol[proto]
-            
+
             f.write(f"      \\addplot+[{col}, mark=*, thick] table {{\n")
             for tput, lat in zip(data['throughputs'], data['latencies']):
                 if tput is not None and lat is not None:
                     f.write(f"        {tput:.2f} {lat:.2f}\n")
-            f.write("      };\n")
-            f.write(f"      \\addlegendentry{{{proto}}}\n\n")
+            f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")

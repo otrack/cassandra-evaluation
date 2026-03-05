@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 
 from emulate_latency import haversine, estimate_latency
-from colors import load_protocol_colors, get_protocol_color
+from colors import load_protocol_colors, get_protocol_color, make_protocol_legend
 
 def usage_and_exit():
     print("Usage: python conflict.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex")
@@ -281,6 +281,7 @@ def main():
     with open(output_tikz, "w") as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        f.write(make_protocol_legend(protocol_order, protocol_colors))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=6cm,\n")
@@ -291,7 +292,6 @@ def main():
         f.write(f"     ymin={0:.2f}, ymax={ymax:.2f},\n")
         f.write("      xtick={0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1},\n")
         f.write("      xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=1},\n")
-        f.write("      legend pos=outer north east,\n")
         f.write("      cycle list name=color list,\n")
         f.write("    ]\n\n")
 
@@ -303,8 +303,7 @@ def main():
                     # skip missing points to create gaps
                     continue
                 f.write(f"        {x:.2f} {y:.2f}\n")
-            f.write("      };\n")
-            f.write(f"      \\addlegendentry{{{proto}}}\n\n")
+            f.write("      };\n\n")
 
         # Draw a single horizontal dashed gray line for the average theoretical optimum across all locations
         if replica_means:

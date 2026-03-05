@@ -17,7 +17,7 @@ Generates a grouped bar chart:
 import sys
 import pandas as pd
 
-from colors import load_protocol_colors, get_protocol_color
+from colors import load_protocol_colors, get_protocol_color, make_protocol_legend
 
 
 def usage_and_exit():
@@ -126,6 +126,7 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        f.write(make_protocol_legend(protocol_order, protocol_colors))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      ybar,\n")
@@ -139,8 +140,6 @@ def main():
         f.write("      xtick=data,\n")
         f.write("      xticklabels={" + ",".join(workloads) + "},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
-        f.write("      legend pos=outer north east,\n")
-        f.write("      legend style={font=\\small},\n")
         f.write("      every node near coord/.style={\n")
         f.write("        rotate=45, anchor=south west, inner sep=1pt,\n")
         f.write("        text=black, font=\\tiny,\n")
@@ -155,8 +154,7 @@ def main():
             for wl_idx, workload in enumerate(workloads):
                 val = data[workload].get(proto, 0.0)
                 f.write(f"        ({workload}, {val:.2f}) []\n")
-            f.write("      };\n")
-            f.write(f"      \\addlegendentry{{{proto}}}\n\n")
+            f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")

@@ -16,7 +16,7 @@ import re
 import glob
 from collections import defaultdict
 
-from colors import load_protocol_colors, get_protocol_color
+from colors import load_protocol_colors, get_protocol_color, make_protocol_legend
 
 
 def parse_status_lines(logfile):
@@ -91,6 +91,9 @@ def main():
     with open(output_tex, "w") as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        # Protocol legend above the plot (only for protocols that have data)
+        present_protocols = [p for p in protocols if p in protocol_data]
+        f.write(make_protocol_legend(present_protocols, protocol_colors))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=6cm,\n")
@@ -112,8 +115,7 @@ def main():
             f.write(f"      \\addplot[{col}, thick, mark=none] table {{\n")
             for t, tput in zip(times, throughputs):
                 f.write(f"        {t} {tput:.2f}\n")
-            f.write("      };\n")
-            f.write(f"      \\addlegendentry{{{protocol}}}\n\n")
+            f.write("      };\n\n")
 
         # Vertical line: slowdown start (X/4)
         f.write(
