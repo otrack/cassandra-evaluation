@@ -38,7 +38,7 @@ cd swiftpaxos
 git clone https://github.com/otrack/cassandra/
 cd cassandra
 git checkout testing6
-ant artifacts -Dant.gen-doc.skip=true -Dcheckstyle.skip=true
+ant artifacts -Dant.gen-doc.skip=true -Dno-checkstyle=true
 ```
 
 ### Cassandra Docker Library
