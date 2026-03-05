@@ -8,7 +8,6 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 mkdir -p ${LOGDIR}/conflict
-rm -f ${LOGDIR}/conflict/*
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
 thetas=$(seq -f "%.1f" 0 0.1 1.0)
@@ -23,6 +22,9 @@ ops_per_thread=100
 do_clean_up=0
 for p in ${protocols}
 do
+    # clean prior logs
+    rm -f ${LOGDIR}/conflict/*${p}*
+    
     do_create_and_load=1
     total=$(( $(echo ${thetas} | wc -w) * $(echo ${threads} | wc -w) ))
     count=0

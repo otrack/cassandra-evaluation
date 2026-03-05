@@ -13,7 +13,6 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 mkdir -p ${LOGDIR}/fault_tolerance
-rm -f ${LOGDIR}/fault_tolerance/*
 
 # Configuration
 duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
@@ -40,6 +39,10 @@ log "  Slowdown (+400ms latency on database-node1) from ${slowdown_s}s to ${slow
 log "  Crash (docker kill database-node1 and ycsb-1) at ${crash_s}s"
 
 for protocol in ${protocols}; do
+    
+    # clean prior logs
+    rm -f ${LOGDIR}/fault_tolerance/*${protocol}*
+    
     ts=$(date +%Y%m%d%H%M%S%N)
     output_file="${LOGDIR}/fault_tolerance/${protocol}_${nodes}_${workload}_${ts}.dat"
 

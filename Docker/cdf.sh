@@ -8,11 +8,11 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 mkdir -p ${LOGDIR}/cdf
-rm -f ${LOGDIR}/cdf/*
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a"
-protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols="accord cassandra cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols="cassandra"
 nodes=5
 replication_factor=${nodes}
 cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""
@@ -24,6 +24,9 @@ ops_per_thread=1000
 do_clean_up=0
 for p in ${protocols}
 do
+    # clean prior logs
+    rm -f ${LOGDIR}/cdf/*${p}*
+    
     do_create_and_load=1
     total=$(( $(echo ${workloads} | wc -w) * $(echo ${threads} | wc -w) ))
     count=0

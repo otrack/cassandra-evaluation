@@ -11,7 +11,6 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 mkdir -p ${LOGDIR}/ycsb
-rm -f ${LOGDIR}/ycsb/*
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
@@ -25,6 +24,9 @@ ops_per_thread=1000
 do_clean_up=0
 for p in ${protocols}
 do
+    # clean prior logs
+    rm -f ${LOGDIR}/ycsb/*${p}*
+    
     do_create_and_load=1
     total=$(( $(echo ${workloads} | wc -w) * $(echo ${threads} | wc -w) ))
     count=0
