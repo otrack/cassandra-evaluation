@@ -96,7 +96,7 @@ def main():
         present_protocols = [p for p in protocols if p in protocol_data]
         f.write(make_protocol_legend(present_protocols, protocol_colors,
                                      protocol_aliases=protocol_aliases))
-        f.write("  \\begin{tikzpicture}\n")
+        f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=6cm,\n")
         f.write("      grid=both,\n")
@@ -124,21 +124,18 @@ def main():
             f"      \\addplot[orange, dashed, thick] "
             f"coordinates {{({slowdown_s},0) ({slowdown_s},{ymax:.2f})}};\n"
         )
-        f.write("      \\addlegendentry{slowdown start}\n\n")
 
         # Vertical line: slowdown end (X/4+X/8)
         f.write(
             f"      \\addplot[orange!50!black, dashed, thick] "
             f"coordinates {{({slowdown_end_s},0) ({slowdown_end_s},{ymax:.2f})}};\n"
         )
-        f.write("      \\addlegendentry{slowdown end}\n\n")
 
         # Vertical line: crash event (3X/4)
         f.write(
             f"      \\addplot[black, dashed, thick] "
             f"coordinates {{({crash_s},0) ({crash_s},{ymax:.2f})}};\n"
         )
-        f.write("      \\addlegendentry{node crash}\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")

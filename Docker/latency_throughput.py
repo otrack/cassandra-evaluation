@@ -158,14 +158,14 @@ def main():
         f.write("  \\centering\n")
         f.write(make_protocol_legend(protocol_order, protocol_colors,
                                      protocol_aliases=protocol_aliases))
-        f.write("  \\begin{tikzpicture}\n")
+        f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
         f.write("      grid=both,\n")
         f.write("      xlabel={Throughput (ops/sec)},\n")
         f.write("      ylabel={Average Latency (ms)},\n")
         f.write(f"      xmin={xmin:.2f}, xmax={xmax:.2f},\n")
-        f.write(f"      ymin={ymin:.2f}, ymax={1000},\n")
+        f.write(f"      ymin={ymin:.2f}, ymax={500},\n")
         f.write("      cycle list name=color list,\n")
         f.write("    ]\n\n")
 
@@ -182,9 +182,7 @@ def main():
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Latency vs Throughput: Average operation latency as a function of throughput. ")
-        f.write("Each curve represents a protocol; the number of clients increases by a factor of 2 ")
-        f.write("(1, 2, 4, 8, ...) demonstrating the hockey stick effect where latency increases sharply ")
-        f.write("while throughput plateaus/degrades as the system saturates.}\n")
+        f.write("Each curve represents a protocol; the number of clients increases by a factor of 2 until saturation.}\n")        
         f.write("  \\label{fig:latency-throughput}\n")
         f.write("\\end{figure}\n")
 

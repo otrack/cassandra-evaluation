@@ -132,7 +132,7 @@ def main():
         f.write("  \\begin{tikzpicture}[scale=.75]\n")
         f.write("    \\begin{axis}[\n")
         f.write("      ybar,\n")
-        f.write("      bar width=0.35cm,\n")
+        f.write("      bar width=0.3cm,\n")
         f.write("      width=12cm, height=8cm,\n")
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
