@@ -17,6 +17,8 @@ Generates a grouped bar chart:
 import sys
 import pandas as pd
 
+from colors import load_protocol_colors, get_protocol_color
+
 
 def usage_and_exit():
     print("Usage: python ycsb.py results.csv workload1 [workload2 ...] num_nodes output.tex")
@@ -113,11 +115,8 @@ def main():
     }
     protocol_order.sort(key=lambda p: proto_avg_lat[p], reverse=True)
 
-    # Colours consistent with the other plotting scripts in this repository
-    color_cycle = [
-        "red", "blue", "green!50!black", "cyan!80!black",
-        "magenta!80!black", "yellow!80!black", "black"
-    ]
+    # Colours from the unified protocol color schema
+    protocol_colors = load_protocol_colors()
 
     # Y-axis upper bound — leave extra headroom for the rotated labels at bar tops
     LABEL_HEADROOM = 1.6
@@ -140,6 +139,8 @@ def main():
         f.write("      xtick=data,\n")
         f.write("      xticklabels={" + ",".join(workloads) + "},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
+        f.write("      legend pos=outer north east,\n")
+        f.write("      legend style={font=\\small},\n")
         f.write("      every node near coord/.style={\n")
         f.write("        rotate=45, anchor=south west, inner sep=1pt,\n")
         f.write("        text=black, font=\\tiny,\n")
@@ -147,32 +148,22 @@ def main():
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
-            col = color_cycle[idx % len(color_cycle)]
+            col = get_protocol_color(proto, protocol_colors, idx)
             f.write(f"      \\addplot+[fill={col}, draw=black,\n")
             f.write(f"        nodes near coords, point meta=explicit symbolic,\n")
             f.write(f"      ] coordinates {{\n")
             for wl_idx, workload in enumerate(workloads):
                 val = data[workload].get(proto, 0.0)
-                f.write(f"        ({workload}, {val:.2f}) [{}]\n")
+                f.write(f"        ({workload}, {val:.2f}) [{{}}]\n")
             f.write("      };\n")
+            f.write(f"      \\addlegendentry{{{proto}}}\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
 
-        # Caption: describe the figure and identify protocols via colour swatches
+        # Caption: describe the figure without explicit colour swatches
         workloads_str = ", ".join(workloads)
-        f.write(f"  \\caption{{Average operation latency (averaged across all clients and all executed operations) for YCSB workloads {workloads_str}. ")
-        f.write("For each workload, one bar per protocol: ")
-        for proto_idx, proto in enumerate(protocol_order):
-            col = color_cycle[proto_idx % len(color_cycle)]
-            f.write(
-                r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.8,0);~{{{proto}}}".format(
-                    color=col, proto=proto
-                )
-            )
-            if proto_idx < len(protocol_order) - 1:
-                f.write(", ")
-        f.write(".}\n")
+        f.write(f"  \\caption{{Average operation latency (averaged across all clients and all executed operations) for YCSB workloads {workloads_str}.}}\n")
         f.write("  \\label{fig:ycsb-latency}\n")
         f.write("\\end{figure}\n")
 

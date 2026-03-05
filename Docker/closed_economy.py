@@ -17,6 +17,8 @@ import sys
 import pandas as pd
 import numpy as np
 
+from colors import load_protocol_colors, get_protocol_color
+
 MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
 METRIC_COLUMNS = {
@@ -292,11 +294,8 @@ def main():
             else:
                 data[proto][nodes] = {metric: None for metric in LATENCY_METRICS}
 
-    # Prepare colors for protocols
-    color_cycle = [
-        "blue",
-        "red",
-    ]
+    # Prepare colors from the unified protocol color schema
+    protocol_colors = load_protocol_colors()
 
     # Compute y-axis limits
     all_vals = []
@@ -338,7 +337,7 @@ def main():
             (idx - (len(node_counts) - 1) / 2) * offset_step for idx in range(len(node_counts))
         ]
         for proto_idx, proto in enumerate(protocols):
-            col = color_cycle[proto_idx % len(color_cycle)]
+            col = get_protocol_color(proto, protocol_colors, proto_idx)
             first_protocol_entry = False  # add a single legend entry per protocol
             for node_idx, nodes in enumerate(node_counts):
                 offset = offsets[node_idx]

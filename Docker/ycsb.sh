@@ -14,7 +14,7 @@ mkdir -p ${LOGDIR}/ycsb
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
-protocols=$(paste -sd' ' protocols.txt)
+protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
 nodes=5
 replication_factor=${nodes}
 records=10000

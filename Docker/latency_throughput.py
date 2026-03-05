@@ -14,6 +14,8 @@ import sys
 import pandas as pd
 import numpy as np
 
+from colors import load_protocol_colors, get_protocol_color
+
 
 def usage_and_exit():
     print("Usage: python latency_throughput.py results.csv output.tex")
@@ -125,11 +127,8 @@ def main():
             'latencies': latencies
         }
 
-    # Prepare colors (consistent with other scripts)
-    color_cycle = [
-        "red", "blue", "green!50!black", "cyan!80!black",
-        "magenta!80!black", "yellow!80!black", "black"
-    ]
+    # Prepare colors (unified protocol color schema)
+    protocol_colors = load_protocol_colors()
 
     # Determine axis ranges
     all_tputs = []
@@ -169,7 +168,7 @@ def main():
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
-            col = color_cycle[idx % len(color_cycle)]
+            col = get_protocol_color(proto, protocol_colors, idx)
             data = data_by_protocol[proto]
             
             f.write(f"      \\addplot+[{col}, mark=*, thick] table {{\n")

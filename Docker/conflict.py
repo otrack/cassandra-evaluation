@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 
 from emulate_latency import haversine, estimate_latency
+from colors import load_protocol_colors, get_protocol_color
 
 def usage_and_exit():
     print("Usage: python conflict.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex")
@@ -160,11 +161,8 @@ def main():
                 rates.append(float(df_rate['mean_latency_ms'].mean()))
         data_by_protocol[proto] = rates
 
-    # Prepare colors (re-use same palette as cdf.py)
-    color_cycle = [
-        "red", "blue", "green!50!black", "cyan!80!black",
-        "magenta!80!black", "yellow!80!black", "black"
-    ]
+    # Prepare colors (unified protocol color schema)
+    protocol_colors = load_protocol_colors()
 
     # Determine y range for nicer plotting
     all_vals = []
@@ -298,7 +296,7 @@ def main():
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
-            col = color_cycle[idx % len(color_cycle)]
+            col = get_protocol_color(proto, protocol_colors, idx)
             f.write(f"      \\addplot+[{col}, mark=*, thick] table {{\n")
             for x, y in zip(x_values, data_by_protocol[proto]):
                 if y is None:

@@ -3,6 +3,7 @@ import math
 import pandas as pd
 
 from emulate_latency import haversine, estimate_latency
+from colors import load_protocol_colors, get_protocol_color
 
 def compute_optimum_per_replica(latlon, n_nodes):
     """
@@ -273,14 +274,23 @@ def main():
     min_latency = max(0, min_latency - xpad)
     max_latency = max_latency + xpad
 
-    color_cycle = [
-        "red", "blue", "green!50!black", "cyan!80!black",
-        "magenta!80!black", "yellow!80!black", "black"
-    ]
+    protocol_colors = load_protocol_colors()
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("    \\centering\n")
+
+        # --- Protocol legend at the top of the figure ---
+        legend_entries = []
+        for proto_idx, proto in enumerate(protocol_order):
+            col = get_protocol_color(proto, protocol_colors, proto_idx)
+            legend_entries.append(
+                r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.5,0);~\texttt{{{proto}}}".format(
+                    color=col, proto=escape_latex(proto)
+                )
+            )
+        f.write("    {\\small " + r"\quad ".join(legend_entries) + "}\\\\[4pt]\n")
+
         f.write("    \\begin{tikzpicture}\n")
 
         f.write("      \\begin{groupplot}[\n")
@@ -331,7 +341,7 @@ def main():
                         if not latencies:
                             continue
 
-                        col = color_cycle[proto_idx % len(color_cycle)]
+                        col = get_protocol_color(proto, protocol_colors, proto_idx)
                         f.write("          \\addplot+["+col+", mark=none] table {\n")
                         for i, val in enumerate(latencies):
                             pct = i/99
@@ -377,7 +387,7 @@ def main():
                                          if pd.notnull(row.get(f'p{i}')) and row[f'p{i}'] != 'unknown']
                             if not latencies:
                                 continue
-                            col = color_cycle[proto_idx % len(color_cycle)]
+                            col = get_protocol_color(proto, protocol_colors, proto_idx)
                             f.write("          \\addplot+["+col+", mark=none] table {\n")
                             for i, val in enumerate(latencies):
                                 pct = i/99
@@ -387,7 +397,7 @@ def main():
         f.write("      \\end{groupplot}\n")
         f.write("    \\end{tikzpicture}\n")
 
-        # --- Caption with color swatches ---
+        # --- Caption (no color swatches; legend is at the top of the figure) ---
         cities_escaped = ", ".join([escape_latex(c) for c in actual_cities])
         workloads_escaped = ", ".join([escape_latex(w.upper()) for w in workloads])
         if include_average and no_cities:
@@ -397,16 +407,11 @@ def main():
         else:
             caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} at {cities_escaped}."
 
-        f.write(f"    \\caption{{{caption_start} ")
-        for proto_idx, proto in enumerate(protocol_order):
-            col = color_cycle[proto_idx % len(color_cycle)]
-            f.write(r"\protect\tikz \protect\draw[thick, {color}] (0,0) -- +(0.8,0);~{{{proto}}}".format(color=col, proto=proto))
-            if proto_idx < len(protocol_order) - 1:
-                f.write(", ")
+        f.write(f"    \\caption{{{caption_start}")
         # Add reference to the gray optimum line in the caption
         if city_optimums or avg_optimum:
-            f.write(". ")
-            f.write(r"\textcolor{gray}{Q}~{closest quorum}")
+            f.write(" ")
+            f.write(r"\textcolor{gray}{Q}~denotes the closest-quorum latency bound.")
         f.write("    \\label{fig:workload-cdf}}\n")
         f.write("\\end{figure}\n")
 

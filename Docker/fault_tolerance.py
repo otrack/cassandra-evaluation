@@ -16,6 +16,8 @@ import re
 import glob
 from collections import defaultdict
 
+from colors import load_protocol_colors, get_protocol_color
+
 
 def parse_status_lines(logfile):
     """
@@ -60,10 +62,7 @@ def main():
     crash_s = int(sys.argv[-2])
     output_tex = sys.argv[-1]
 
-    color_cycle = [
-        "red", "blue", "green!50!black", "cyan!80!black",
-        "magenta!80!black", "yellow!80!black", "black"
-    ]
+    protocol_colors = load_protocol_colors()
 
     # Collect per-protocol aggregated throughput series
     protocol_data = {}
@@ -108,7 +107,7 @@ def main():
         for idx, protocol in enumerate(protocols):
             if protocol not in protocol_data:
                 continue
-            col = color_cycle[idx % len(color_cycle)]
+            col = get_protocol_color(protocol, protocol_colors, idx)
             times, throughputs = protocol_data[protocol]
             f.write(f"      \\addplot[{col}, thick, mark=none] table {{\n")
             for t, tput in zip(times, throughputs):

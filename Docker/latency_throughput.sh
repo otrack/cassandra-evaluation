@@ -15,7 +15,7 @@ mkdir -p ${LOGDIR}/latency_throughput
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.05
 workload="a" # does not matter
-protocols=$(paste -sd' ' protocols.txt)
+protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
 nodes=5
 replication_factor=${nodes}
 records=1000
