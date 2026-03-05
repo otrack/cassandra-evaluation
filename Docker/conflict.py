@@ -315,7 +315,6 @@ def main():
             f.write(f"        0.00 {avg_optimum:.2f}\n")
             f.write(f"        1.00 {avg_optimum:.2f}\n")
             f.write("      };\n")
-            f.write("      \\addlegendentry{closest quorum}\n\n")
 
         # include data replica location in caption (third entry in latencies.csv if present)
         f.write("    \\end{axis}\n")
