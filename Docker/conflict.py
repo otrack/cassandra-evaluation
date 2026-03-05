@@ -289,6 +289,7 @@ def main():
         f.write("      width=12cm, height=6cm,\n")
         f.write("      grid=both,\n")
         f.write("      xlabel={Conflict rate ($\\theta$)},\n")
+        f.write("      ymode=log,\n")
         f.write("      ylabel={Average latency (ms)},\n")
         f.write("      xmin=0, xmax=1,\n")
         f.write(f"     ymin={0:.2f}, ymax={ymax:.2f},\n")
