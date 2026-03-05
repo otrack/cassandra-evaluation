@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 
 from emulate_latency import haversine, estimate_latency
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
 
 def usage_and_exit():
     print("Usage: python conflict.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex")
@@ -160,11 +161,9 @@ def main():
                 rates.append(float(df_rate['mean_latency_ms'].mean()))
         data_by_protocol[proto] = rates
 
-    # Prepare colors (re-use same palette as cdf.py)
-    color_cycle = [
-        "red", "blue", "green!50!black", "cyan!80!black",
-        "magenta!80!black", "yellow!80!black", "black"
-    ]
+    # Prepare colors (unified protocol color schema)
+    protocol_colors = load_protocol_colors()
+    protocol_aliases = load_protocol_aliases()
 
     # Determine y range for nicer plotting
     all_vals = []
@@ -283,6 +282,8 @@ def main():
     with open(output_tikz, "w") as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        f.write(make_protocol_legend(protocol_order, protocol_colors,
+                                     protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=6cm,\n")
@@ -293,20 +294,18 @@ def main():
         f.write(f"     ymin={0:.2f}, ymax={ymax:.2f},\n")
         f.write("      xtick={0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1},\n")
         f.write("      xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=1},\n")
-        f.write("      legend pos=outer north east,\n")
         f.write("      cycle list name=color list,\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
-            col = color_cycle[idx % len(color_cycle)]
+            col = get_protocol_color(proto, protocol_colors, idx)
             f.write(f"      \\addplot+[{col}, mark=*, thick] table {{\n")
             for x, y in zip(x_values, data_by_protocol[proto]):
                 if y is None:
                     # skip missing points to create gaps
                     continue
                 f.write(f"        {x:.2f} {y:.2f}\n")
-            f.write("      };\n")
-            f.write(f"      \\addlegendentry{{{proto}}}\n\n")
+            f.write("      };\n\n")
 
         # Draw a single horizontal dashed gray line for the average theoretical optimum across all locations
         if replica_means:
@@ -316,7 +315,6 @@ def main():
             f.write(f"        0.00 {avg_optimum:.2f}\n")
             f.write(f"        1.00 {avg_optimum:.2f}\n")
             f.write("      };\n")
-            f.write("      \\addlegendentry{closest quorum}\n\n")
 
         # include data replica location in caption (third entry in latencies.csv if present)
         f.write("    \\end{axis}\n")

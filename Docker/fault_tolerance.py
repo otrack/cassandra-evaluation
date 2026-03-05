@@ -16,6 +16,8 @@ import re
 import glob
 from collections import defaultdict
 
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
+
 
 def parse_status_lines(logfile):
     """
@@ -60,10 +62,8 @@ def main():
     crash_s = int(sys.argv[-2])
     output_tex = sys.argv[-1]
 
-    color_cycle = [
-        "red", "blue", "green!50!black", "cyan!80!black",
-        "magenta!80!black", "yellow!80!black", "black"
-    ]
+    protocol_colors = load_protocol_colors()
+    protocol_aliases = load_protocol_aliases()
 
     # Collect per-protocol aggregated throughput series
     protocol_data = {}
@@ -92,6 +92,10 @@ def main():
     with open(output_tex, "w") as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        # Protocol legend above the plot (only for protocols that have data)
+        present_protocols = [p for p in protocols if p in protocol_data]
+        f.write(make_protocol_legend(present_protocols, protocol_colors,
+                                     protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=6cm,\n")
@@ -108,13 +112,12 @@ def main():
         for idx, protocol in enumerate(protocols):
             if protocol not in protocol_data:
                 continue
-            col = color_cycle[idx % len(color_cycle)]
+            col = get_protocol_color(protocol, protocol_colors, idx)
             times, throughputs = protocol_data[protocol]
             f.write(f"      \\addplot[{col}, thick, mark=none] table {{\n")
             for t, tput in zip(times, throughputs):
                 f.write(f"        {t} {tput:.2f}\n")
-            f.write("      };\n")
-            f.write(f"      \\addlegendentry{{{protocol}}}\n\n")
+            f.write("      };\n\n")
 
         # Vertical line: slowdown start (X/4)
         f.write(

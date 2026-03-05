@@ -17,6 +17,8 @@ import sys
 import pandas as pd
 import numpy as np
 
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
+
 MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
 METRIC_COLUMNS = {
@@ -292,11 +294,9 @@ def main():
             else:
                 data[proto][nodes] = {metric: None for metric in LATENCY_METRICS}
 
-    # Prepare colors for protocols
-    color_cycle = [
-        "blue",
-        "red",
-    ]
+    # Prepare colors from the unified protocol color schema
+    protocol_colors = load_protocol_colors()
+    protocol_aliases = load_protocol_aliases()
 
     # Compute y-axis limits
     all_vals = []
@@ -319,6 +319,8 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        f.write(make_protocol_legend(protocols, protocol_colors,
+                                     protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=8cm,\n")
@@ -330,7 +332,6 @@ def main():
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
         f.write("      xtick={" + ",".join(str(i) for i in range(len(protocols))) + "},\n")
         f.write("      xticklabels={" + ",".join(protocols) + "},\n")
-        f.write("      legend style={at={(.75,1.2)}, legend columns=4, font=\\small},\n")
         f.write("    ]\n\n")
 
         # Center node count offsets around each protocol position.
@@ -338,8 +339,7 @@ def main():
             (idx - (len(node_counts) - 1) / 2) * offset_step for idx in range(len(node_counts))
         ]
         for proto_idx, proto in enumerate(protocols):
-            col = color_cycle[proto_idx % len(color_cycle)]
-            first_protocol_entry = False  # add a single legend entry per protocol
+            col = get_protocol_color(proto, protocol_colors, proto_idx)
             for node_idx, nodes in enumerate(node_counts):
                 offset = offsets[node_idx]
                 avg_val = data[proto].get(nodes, {}).get("avg")
@@ -353,14 +353,10 @@ def main():
                     continue
                 x = proto_idx + offset
                 # Two coordinates at the same x-position draw a vertical line for best/worst.
-                # Keep the first vertical range per protocol in the legend to label the protocol color.
-                f.write(f"      \\addplot+[mark=-, color={col}, solid] coordinates {{\n")
+                f.write(f"      \\addplot+[mark=-, color={col}, solid, forget plot] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {best_val:.2f})\n")
                 f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
                 f.write("      };\n\n")
-                if first_protocol_entry:
-                    f.write(f"      \\addlegendentry{{{proto}}}\n\n")
-                    first_protocol_entry = False
                 f.write(f"      \\addplot+[only marks, mark=*, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
                 f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
                 f.write("      };\n\n")
@@ -372,16 +368,6 @@ def main():
                     f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
                     f.write(f"        ({x:.2f}, {val:.2f})\n")
                     f.write("      };\n\n")
-            # If no valid ranges were plotted for this protocol, still add a legend entry.
-            if first_protocol_entry:
-                f.write(f"      \\addlegendimage{{line legend, color={col}}}\n")
-                f.write(f"      \\addlegendentry{{{proto}}}\n\n")
-
-        # for metric in MARKER_METRICS:
-        #     mark = METRIC_MARKS[metric]
-        #     f.write("      % Add a single legend entry per metric marker style.\n")
-        #     f.write(f"      \\addlegendimage{{only marks, mark={mark}, fill=black, draw=black, mark size=3pt, line width=1pt}}\n")
-        #     f.write(f"      \\addlegendentry{{{METRIC_LABELS[metric]}}}\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
