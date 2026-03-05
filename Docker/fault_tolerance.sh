@@ -12,6 +12,25 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
+usage() {
+    echo "Usage: $0 [--dry-run]"
+    echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
+}
+
+dry_run=0
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run)
+            dry_run=1
+            ;;
+        *)
+            echo "Unknown parameter: $arg"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
 mkdir -p ${LOGDIR}/fault_tolerance
 
 # Configuration
@@ -38,104 +57,106 @@ log "Fault-tolerance experiment: ${duration_minutes}min total"
 log "  Slowdown (+400ms latency on database-node1) from ${slowdown_s}s to ${slowdown_end_s}s"
 log "  Crash (docker kill database-node1 and ycsb-1) at ${crash_s}s"
 
-for protocol in ${protocols}; do
-    
-    # clean prior logs
-    rm -f ${LOGDIR}/fault_tolerance/*${protocol}*
-    
-    ts=$(date +%Y%m%d%H%M%S%N)
-    output_file="${LOGDIR}/fault_tolerance/${protocol}_${nodes}_${workload}_${ts}.dat"
+if [ "$dry_run" -eq 0 ]; then
+    for protocol in ${protocols}; do
+        
+        # clean prior logs
+        rm -f ${LOGDIR}/fault_tolerance/*${protocol}*
+        
+        ts=$(date +%Y%m%d%H%M%S%N)
+        output_file="${LOGDIR}/fault_tolerance/${protocol}_${nodes}_${workload}_${ts}.dat"
 
-    # Determine cluster prefix
-    pref=cassandra
-    if printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
-        pref=cockroachdb
-    elif printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos"; then
-        pref=swiftpaxos
-    fi
+        # Determine cluster prefix
+        pref=cassandra
+        if printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
+            pref=cockroachdb
+        elif printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos"; then
+            pref=swiftpaxos
+        fi
 
-    log "Running fault-tolerance experiment for protocol: ${protocol}"
+        log "Running fault-tolerance experiment for protocol: ${protocol}"
 
-    # Start cluster and load data
-    init_logdir
-    start_network
-    ${pref}_start_cluster "${nodes}" "${protocol}"
+        # Start cluster and load data
+        init_logdir
+        start_network
+        ${pref}_start_cluster "${nodes}" "${protocol}"
 
-    node_count=$(${pref}_get_node_count)
-    hosts=$(${pref}_get_hosts "${node_count}")
-    port=$(${pref}_get_port)
+        node_count=$(${pref}_get_node_count)
+        hosts=$(${pref}_get_hosts "${node_count}")
+        port=$(${pref}_get_port)
 
-    if [ -z "$hosts" ]; then
-        error "Failed to retrieve IP addresses."
-        exit 1
-    fi
+        if [ -z "$hosts" ]; then
+            error "Failed to retrieve IP addresses."
+            exit 1
+        fi
 
-    # Load YCSB data
-    nearby_database=$(config "node_name")1
-    run_ycsb "load" "${workload_type}" "${workload}" "${hosts}" "${port}" \
-        "${records}" "${records}" "${protocol}" "${replication_factor}" \
-        "${output_file%.dat}.load" "1" "ycsb" "${nearby_database}"
-    wait_container "ycsb"
-    
-    # Emulate WAN latency
-    log "Emulating latency for ${node_count} node(s)..."
-    emulate_latency "${node_count}"
+        # Load YCSB data
+        nearby_database=$(config "node_name")1
+        run_ycsb "load" "${workload_type}" "${workload}" "${hosts}" "${port}" \
+            "${records}" "${records}" "${protocol}" "${replication_factor}" \
+            "${output_file%.dat}.load" "1" "ycsb" "${nearby_database}"
+        wait_container "ycsb"
+        
+        # Emulate WAN latency
+        log "Emulating latency for ${node_count} node(s)..."
+        emulate_latency "${node_count}"
 
-    # Start YCSB run clients from each node (time-bounded via maxexecutiontime)
-    for i in $(seq 1 ${node_count}); do
-        nearby_database=$(config "node_name")${i}
-        location=$(get_location $i ${DIR}/latencies.csv)
-        run_ycsb "run" "${workload_type}" "${workload}" "${hosts}" "${port}" \
-            "${records}" 999999999 "${protocol}" "${replication_factor}" \
-            "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
-            -p maxexecutiontime=${duration_s} \
-            -p status.interval=${status_interval} \
-	    -p conflict.theta=${theta}
+        # Start YCSB run clients from each node (time-bounded via maxexecutiontime)
+        for i in $(seq 1 ${node_count}); do
+            nearby_database=$(config "node_name")${i}
+            location=$(get_location $i ${DIR}/latencies.csv)
+            run_ycsb "run" "${workload_type}" "${workload}" "${hosts}" "${port}" \
+                "${records}" 999999999 "${protocol}" "${replication_factor}" \
+                "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
+                -p maxexecutiontime=${duration_s} \
+                -p status.interval=${status_interval} \
+	        -p conflict.theta=${theta}
+        done
+
+        # Event 1: at X/4, add 400ms latency to database-node1 outbound traffic
+        (
+            sleep ${slowdown_s}
+            node1=$(config "node_name")1
+            log "Event 1 @ ${slowdown_s}s: Adding 400ms latency to ${node1}"
+            docker exec "${node1}" tc qdisc del dev eth0 root 2>/dev/null || true
+            docker exec "${node1}" tc qdisc add dev eth0 root netem delay 400ms
+        ) &
+        event1_pid=$!
+
+        # Event 1b: at X/4+X/8, remove the slowdown from database-node1
+        (
+            sleep ${slowdown_end_s}
+            node1=$(config "node_name")1
+            log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${node1}"
+            docker exec "${node1}" tc qdisc del dev eth0 root 2>/dev/null || true
+        ) &
+        event1b_pid=$!
+
+        # Event 2: at 3X/4, pause database-node1 (to mimick an actual crash)
+        (
+            sleep ${crash_s}
+            node1=$(config "node_name")1
+            log "Event 2 @ ${crash_s}s: Killing ${node1} and ycsb-1"
+            docker kill --signal=9 "${node1}" "ycsb-1" # mimick a crash
+        ) &
+        event2_pid=$!
+
+        # Wait for all YCSB clients to complete
+        for i in $(seq 1 ${node_count}); do
+            wait_container "ycsb-${i}"
+        done
+
+        wait ${event1_pid} ${event1b_pid} ${event2_pid} 2>/dev/null || true
+
+        # Cleanup - database-node1 may already be gone (docker kill + --rm)
+        for i in $(seq 1 ${node_count}); do
+            docker stop "$(config 'node_name')${i}" 2>/dev/null || true
+        done
+        docker stop "swiftpaxos-master" 2>/dev/null || true
+        stop_network
+
     done
-
-    # Event 1: at X/4, add 400ms latency to database-node1 outbound traffic
-    (
-        sleep ${slowdown_s}
-        node1=$(config "node_name")1
-        log "Event 1 @ ${slowdown_s}s: Adding 400ms latency to ${node1}"
-        docker exec "${node1}" tc qdisc del dev eth0 root 2>/dev/null || true
-        docker exec "${node1}" tc qdisc add dev eth0 root netem delay 400ms
-    ) &
-    event1_pid=$!
-
-    # Event 1b: at X/4+X/8, remove the slowdown from database-node1
-    (
-        sleep ${slowdown_end_s}
-        node1=$(config "node_name")1
-        log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${node1}"
-        docker exec "${node1}" tc qdisc del dev eth0 root 2>/dev/null || true
-    ) &
-    event1b_pid=$!
-
-    # Event 2: at 3X/4, pause database-node1 (to mimick an actual crash)
-    (
-        sleep ${crash_s}
-        node1=$(config "node_name")1
-        log "Event 2 @ ${crash_s}s: Killing ${node1} and ycsb-1"
-        docker kill --signal=9 "${node1}" "ycsb-1" # mimick a crash
-    ) &
-    event2_pid=$!
-
-    # Wait for all YCSB clients to complete
-    for i in $(seq 1 ${node_count}); do
-        wait_container "ycsb-${i}"
-    done
-
-    wait ${event1_pid} ${event1b_pid} ${event2_pid} 2>/dev/null || true
-
-    # Cleanup - database-node1 may already be gone (docker kill + --rm)
-    for i in $(seq 1 ${node_count}); do
-        docker stop "$(config 'node_name')${i}" 2>/dev/null || true
-    done
-    docker stop "swiftpaxos-master" 2>/dev/null || true
-    stop_network
-
-done
+fi
 
 # Plot results for all protocols
 debug "Plotting..."

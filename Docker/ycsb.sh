@@ -10,6 +10,25 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
+usage() {
+    echo "Usage: $0 [--dry-run]"
+    echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
+}
+
+dry_run=0
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run)
+            dry_run=1
+            ;;
+        *)
+            echo "Unknown parameter: $arg"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
 mkdir -p ${LOGDIR}/ycsb
 
 workload_type="site.ycsb.workloads.CoreWorkload"
