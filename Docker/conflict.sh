@@ -12,7 +12,7 @@ mkdir -p ${LOGDIR}/conflict
 workload_type="site.ycsb.workloads.ConflictWorkload"
 thetas=$(seq -f "%.1f" 0 0.1 1.0)
 workload="a" # this does not matter
-protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols=$(paste -sd' ' protocols.txt)
 nodes=5
 replication_factor=${nodes}
 records=1000

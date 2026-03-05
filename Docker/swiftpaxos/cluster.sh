@@ -9,7 +9,6 @@ swiftpaxos_start_cluster() {
     fi
     local node_count=$1
     local protocol=$(echo "$2" | awk -F- '{print $2}')
-    echo ${protocol}
     image=$(config swiftpaxos_image)
     local resource_limits
     resource_limits=$(get_resource_limits)

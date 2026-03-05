@@ -14,7 +14,7 @@ mkdir -p ${LOGDIR}/ycsb
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
-protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols=$(paste -sd' ' protocols.txt)
 nodes=5
 replication_factor=${nodes}
 records=10000

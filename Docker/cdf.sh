@@ -11,7 +11,7 @@ mkdir -p ${LOGDIR}/cdf
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a"
-protocols="accord cassandra cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
+protocols=$(paste -sd' ' protocols.txt)
 protocols="cassandra"
 nodes=5
 replication_factor=${nodes}

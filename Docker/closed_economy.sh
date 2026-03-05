@@ -12,7 +12,7 @@ mkdir -p ${LOGDIR}/closed_economy
 
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
-protocols="accord cockroachdb"
+protocols="accord cockroachdb cassandra-paxos"
 node_counts="3 5 7"
 replication_factor=3
 records=10000

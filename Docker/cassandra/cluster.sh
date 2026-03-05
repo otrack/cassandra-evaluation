@@ -5,6 +5,10 @@ CASSANDRA_DIR=$(dirname "${BASH_SOURCE[0]}")
 cassandra_start_cluster() {
     local node_count=$1
     local protocol=$2
+    if printf '%s\n' "$protocol" | grep -wF -q -- "cassandra-";
+    then
+       protocol=$(echo "$2" | awk -F- '{print $2}')
+    fi
     python3 ${CASSANDRA_DIR}/start_cassandra_data_centers.py "$node_count" "$protocol"
     if [ $? -ne 0 ]; then
         error "Failed to start Cassandra cluster with $node_count node(s)."

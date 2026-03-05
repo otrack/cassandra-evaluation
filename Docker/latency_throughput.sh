@@ -15,9 +15,7 @@ mkdir -p ${LOGDIR}/latency_throughput
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.05
 workload="a" # does not matter
-protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
-protocols="cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
-protocols="accord"
+protocols=$(paste -sd' ' protocols.txt)
 nodes=5
 replication_factor=${nodes}
 records=1000
