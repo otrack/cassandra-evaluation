@@ -69,6 +69,12 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                 "apparmor=unconfined",
                 "label=disable",
                 ],
+                log_config=docker.types.LogConfig(
+                type="json-file",
+                config={
+                    "max-size": "10m",  # Max size per log file (e.g. 10MB)
+                    "max-file": "3"     # Max number of rotated log files to keep
+                }
                 tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
                 ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                 environment={
