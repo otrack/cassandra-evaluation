@@ -10,7 +10,14 @@ cassandra_start_cluster() {
         error "Failed to start Cassandra cluster with $node_count node(s)."
         exit 1
     fi
+
+    for i in $(seq 1 $node_count); do
+	container_name=$(config "node_name")$i
+	log_file=${LOGDIR}/${protocol}_node${i}.log	
+	docker logs -f $container_name > ${log_file} 2>&1 &
+    done
 }
+
 
 cassandra_add_node() {
     local mode=$1
