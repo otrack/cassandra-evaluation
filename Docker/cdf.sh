@@ -12,7 +12,6 @@ mkdir -p ${LOGDIR}/cdf
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a"
 protocols=$(paste -sd' ' protocols.txt)
-protocols="cassandra"
 nodes=5
 replication_factor=${nodes}
 cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""

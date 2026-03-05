@@ -153,9 +153,7 @@ def main():
             f.write(f"      ] coordinates {{\n")
             for wl_idx, workload in enumerate(workloads):
                 val = data[workload].get(proto, 0.0)
-                # Only label bars in the first workload group
-                label = proto if wl_idx == 0 else ""
-                f.write(f"        ({workload}, {val:.2f}) [{label}]\n")
+                f.write(f"        ({workload}, {val:.2f}) [{}]\n")
             f.write("      };\n")
 
         f.write("    \\end{axis}\n")
