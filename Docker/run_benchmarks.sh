@@ -162,6 +162,10 @@ run_ycsb() {
 	# cassandra
 	ycsb_client="cassandra-cql"
 	local consistency_level="ONE"
+	if printf '%s\n' "$protocol" | grep -wF -q -- "cassandra";
+	then
+	    protocol=$(echo "$protocol" | awk -F- '{print $2}')
+	fi
 	if [ "$protocol" == "accord" ] || [ "$protocol" == "paxos" ];
 	then
 	    consistency_level="SERIAL"
