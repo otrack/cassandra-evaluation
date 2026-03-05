@@ -1,15 +1,8 @@
 #!/usr/bin/env bash
 
 ./cdf.sh
-
-sleep 10
-
+./ycsb.sh
 ./conflict.sh
-
-sleep 10
-
-./closed_economy.sh
-
-sleep 10
-
 ./latency_throughput.sh
+./closed_economy.sh
+./fault_tolerance.sh

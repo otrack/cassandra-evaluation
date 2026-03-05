@@ -129,11 +129,11 @@ def main():
         f.write("  \\centering\n")
         f.write(make_protocol_legend(protocol_order, protocol_colors,
                                      protocol_aliases=protocol_aliases))
-        f.write("  \\begin{tikzpicture}\n")
+        f.write("  \\begin{tikzpicture}[scale=.75]\n")
         f.write("    \\begin{axis}[\n")
         f.write("      ybar,\n")
         f.write("      bar width=0.35cm,\n")
-        f.write("      width=14cm, height=8cm,\n")
+        f.write("      width=12cm, height=8cm,\n")
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
