@@ -36,7 +36,7 @@ replication_factor=${nodes}
 cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""
 plot_average=true
 records=10000
-threads=1
+threads=10
 ops_per_thread=1000
 
 if [ "$dry_run" -eq 0 ]; then
