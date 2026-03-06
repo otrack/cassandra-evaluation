@@ -363,3 +363,13 @@ The Accord protocol must be in red.
 - In each plot, when the performance of a protocol is illustrated, the corresponding curve/points should use the appropriate color.
 - Remove the mention of the colors from all the generated plots but the one created by cdf.sh.
 In this plot, at the top of it, you should list the protocols together with the chosen color.
+
+# 06.03 - copilot
+
+In /Docker, the conflict.sh experiment report that some clients might fail.
+The goal of this task is to report such an information in the plot created in conflict.py.
+In detail, 
+- parse_ycsb_to_csv.sh computes also the percentage of failed operations (from the total of operations executed by the YCSB client)
+This is a an additional column of the csv file, after p100, called "failed".
+- when some clients fail the dot of the corresponding protocol is painted with a crossing pattern
+- for Cassandra, the ratio of failed operations is reported above each of its dot in the plot
