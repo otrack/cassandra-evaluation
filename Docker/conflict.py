@@ -161,6 +161,33 @@ def main():
                 rates.append(float(df_rate['mean_latency_ms'].mean()))
         data_by_protocol[proto] = rates
 
+    # For each protocol, compute average failed percentage per conflict rate
+    def get_failed_col(df):
+        if 'failed' in df.columns:
+            def to_float_failed(v):
+                try:
+                    return float(v)
+                except Exception:
+                    return 0.0
+            return df['failed'].apply(to_float_failed)
+        return pd.Series([0.0] * len(df), index=df.index)
+
+    df_valid['failed_f'] = get_failed_col(df_valid)
+
+    failed_by_protocol = {}
+    for proto in protocol_order:
+        dfp = df_valid[df_valid['protocol'] == proto]
+        failed_rates = []
+        for x in x_values:
+            df_rate = dfp[np.isclose(dfp['conflict_rate_f'].astype(float), x, atol=1e-6)]
+            if df_rate.empty:
+                df_rate = dfp[dfp['conflict_rate_f'].round(2) == round(x, 2)]
+            if df_rate.empty:
+                failed_rates.append(None)
+            else:
+                failed_rates.append(float(df_rate['failed_f'].mean()))
+        failed_by_protocol[proto] = failed_rates
+
     # Prepare colors (unified protocol color schema)
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
@@ -300,13 +327,39 @@ def main():
 
         for idx, proto in enumerate(protocol_order):
             col = get_protocol_color(proto, protocol_colors, idx)
+            failed_vals = failed_by_protocol.get(proto, [None] * len(x_values))
+
+            # Collect failed coords for crosshatch overlay
+            failed_coords = []
+            for x, y, fp in zip(x_values, data_by_protocol[proto], failed_vals):
+                if y is None:
+                    continue
+                if fp is not None and fp > 0:
+                    failed_coords.append((x, y, fp))
+
+            # Main plot: line connecting all points with normal circle marks
             f.write(f"      \\addplot+[{col}, mark=*, thick] table {{\n")
             for x, y in zip(x_values, data_by_protocol[proto]):
                 if y is None:
-                    # skip missing points to create gaps
                     continue
                 f.write(f"        {x:.2f} {y:.2f}\n")
             f.write("      };\n\n")
+
+            # Overlay crosshatch marks on failed points
+            if failed_coords:
+                f.write(f"      \\addplot+[only marks, mark=*, mark options={{draw={col}, fill=white, pattern=crosshatch, pattern color={col}}}, {col}] coordinates {{\n")
+                for x, y, fp in failed_coords:
+                    f.write(f"        ({x:.2f},{y:.2f})\n")
+                f.write("      };\n\n")
+
+            # For cassandra-paxos, annotate each dot with the failed ratio
+            if proto == "cassandra-paxos":
+                for x, y, fp in zip(x_values, data_by_protocol[proto], failed_vals):
+                    if y is None:
+                        continue
+                    label_fp = fp if (fp is not None) else 0.0
+                    f.write(f"      \\node[above, font=\\tiny, text={col}] at (axis cs:{x:.2f},{y:.2f}) {{{label_fp:.1f}\\%}};\n")
+                f.write("\n")
 
         # Draw a single horizontal dashed gray line for the average theoretical optimum across all locations
         if replica_means:
