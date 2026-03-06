@@ -305,7 +305,7 @@ def main():
         f.write(make_protocol_legend(protocol_order, protocol_colors, indent="    ",
                                      protocol_aliases=protocol_aliases))
 
-        f.write("    \\begin{tikzpicture}\n")
+        f.write("    \\begin{tikzpicture}[scale=.75]\n")
 
         f.write("      \\begin{groupplot}[\n")
         f.write(f"        group style={{group size={n_ops} by {total_rows}, horizontal sep=1.2cm, vertical sep=0.8cm}},\n")
@@ -422,11 +422,12 @@ def main():
                         f.write("          xlabel={{Latency (ms)}},\n")
                     f.write(f"          ymin=0.99, ymax=1,\n")
                     f.write(f"          ytick={{0.99,1}},\n")
-                    f.write(f"          xmin={tail_min_lat:.2f}, xmax={tail_max_lat:.2f},\n")
-                    if avg_optimum is not None:
-                        f.write(f"          extra x ticks={{{avg_optimum:.2f}}},\n")
-                        f.write(f"          extra x tick labels={{Q}},\n")
-                        f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
+                    f.write(f"          xtick={{0,500,1000}},\n")
+                    f.write(f"          xmin={tail_min_lat:.2f}, xmax={1000:.2f},\n")
+                    # if avg_optimum is not None:
+                    #     f.write(f"          extra x ticks={{{avg_optimum:.2f}}},\n")
+                    #     f.write(f"          extra x tick labels={{Q}},\n")
+                    #     f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
                     f.write("        ]\n")
 
                     if not avg_latencies_dict:
