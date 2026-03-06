@@ -366,6 +366,54 @@ In this plot, at the top of it, you should list the protocols together with the 
 
 # 06.03 - copilot
 
+In parse_ycsb_to_csv.sh, the script counts failures as follows:
+
+    # Extract per-operation failure counts: "[OP], Failures, VALUE"
+    /^\[[^]]+\], Failures,/ {
+        split($0, a, ",")
+        op_field = a[1]
+        gsub(/^\[|\].*$/, "", op_field)
+        op_lower = tolower(op_field)
+        if (op_lower != "cleanup") {
+            val = a[3]
+            gsub(/^[ \t]+|[ \t]+$/, "", val)
+            if (val ~ /^[0-9]+$/) op_fail[op_lower] = val + 0
+        }
+    }
+
+This is not the correct way. To understand why, look at the following extract of a YCSB client log:
+
+[OVERALL], RunTime(ms), 116824
+[OVERALL], Throughput(ops/sec), 0.8559884955146203
+[TOTAL_GCS_G1_Young_Generation], Count, 3
+[TOTAL_GC_TIME_G1_Young_Generation], Time(ms), 28
+[TOTAL_GC_TIME_%_G1_Young_Generation], Time(%), 0.023967677874409368
+[TOTAL_GCS_G1_Old_Generation], Count, 0
+[TOTAL_GC_TIME_G1_Old_Generation], Time(ms), 0
+[TOTAL_GC_TIME_%_G1_Old_Generation], Time(%), 0.0
+[TOTAL_GCs], Count, 3
+[TOTAL_GC_TIME], Time(ms), 28
+[TOTAL_GC_TIME_%], Time(%), 0.023967677874409368
+[UPDATE-FAILED], Operations, 81
+[UPDATE-FAILED], AverageLatency(us), 1219410.172839506
+[UPDATE-FAILED], MinLatency(us), 587776
+[UPDATE-FAILED], MaxLatency(us), 1902591
+[UPDATE-FAILED], 1stPercentileLatency(us), 588287
+
+It informs us that operations that failed are report as [FOO-FAILED], Operations, XXX
+where FO0 is the name of the operation and XXX the number of times it failed.
+
+As a consequence, to compute the ratio of failed operation, one should capture this line to count the number of time an operation of type FOO failed.
+Then, summing this value with the total number of time it succeeded gives us easily a ratio, which is the value we need to report.
+
+# 06.03 - copilot
+
+The reporting for Cassandra is nice but there is a slight glitch:
+for the extreme conflict rate, 0 and 1, the failure ratio are not quite visible.
+To fix this, you should slightly move on the right the one for 0 and on the left the one for 1.
+
+Also, the failure ratio is interesting, so let's generalize this to all protocols.
+However, if there is no failures, then 0% can be omitted from the plot.
 In /Docker, the conflict.sh experiment report that some clients might fail.
 The goal of this task is to report such an information in the plot created in conflict.py.
 In detail, 

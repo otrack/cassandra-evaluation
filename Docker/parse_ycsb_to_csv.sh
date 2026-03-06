@@ -11,6 +11,7 @@ header="protocol,nodes,workload,conflict_rate,city,op,clients,tput,avg_latency_u
 for p in $(seq 1 100); do
     header="$header,p$p"
 done
+header="$header,failed"
 echo "$header"
 
 # Process a single file, outputting CSV rows
@@ -108,6 +109,29 @@ process_file() {
         }
     }
 
+    # Extract per-operation counts.
+    # Successful ops:  "[OP], Operations, VALUE"
+    # Failed ops:      "[OP-FAILED], Operations, VALUE"
+    /^\[[^]]+\], Operations,/ {
+        split($0, a, ",")
+        op_field = a[1]
+        gsub(/^\[|\].*$/, "", op_field)
+        op_lower = tolower(op_field)
+        if (op_lower != "cleanup" && op_lower != "overall") {
+            val = a[3]
+            gsub(/^[ \t]+|[ \t]+$/, "", val)
+            if (val ~ /^[0-9]+$/) {
+                # Detect failed-operation entries (suffix "-failed")
+                if (match(op_lower, /-failed$/)) {
+                    base_op = substr(op_lower, 1, RSTART - 1)
+                    op_fail[base_op] = val + 0
+                } else {
+                    op_ops[op_lower] = val + 0
+                }
+            }
+        }
+    }
+
     END {
         n_ops = split("read insert update scan readmodifywrite tx-readmodifywrite", ops, " ")
         for (o = 1; o <= n_ops; o++) {
@@ -119,7 +143,14 @@ process_file() {
                 row = row "," (key in lat ? lat[key] : "unknown")
             }
             # Only output if the last percentile (p100) is present
-            if (row !~ /,unknown$/) print row
+            if (row !~ /,unknown$/) {
+                failed_pct = 0
+                succ = (op in op_ops)  ? op_ops[op]  : 0
+                fail = (op in op_fail) ? op_fail[op] : 0
+                total = succ + fail
+                if (total > 0) failed_pct = fail / total * 100
+                print row "," sprintf("%.4f", failed_pct)
+            }
         }
     }
     ' "$file"
