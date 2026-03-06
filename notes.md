@@ -414,3 +414,10 @@ To fix this, you should slightly move on the right the one for 0 and on the left
 
 Also, the failure ratio is interesting, so let's generalize this to all protocols.
 However, if there is no failures, then 0% can be omitted from the plot.
+In /Docker, the conflict.sh experiment report that some clients might fail.
+The goal of this task is to report such an information in the plot created in conflict.py.
+In detail, 
+- parse_ycsb_to_csv.sh computes also the percentage of failed operations (from the total of operations executed by the YCSB client)
+This is a an additional column of the csv file, after p100, called "failed".
+- when some clients fail the dot of the corresponding protocol is painted with a crossing pattern
+- for Cassandra, the ratio of failed operations is reported above each of its dot in the plot
