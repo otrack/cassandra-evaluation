@@ -109,7 +109,9 @@ process_file() {
         }
     }
 
-    # Extract per-operation total counts: "[OP], Operations, VALUE"
+    # Extract per-operation counts.
+    # Successful ops:  "[OP], Operations, VALUE"
+    # Failed ops:      "[OP-FAILED], Operations, VALUE"
     /^\[[^]]+\], Operations,/ {
         split($0, a, ",")
         op_field = a[1]
@@ -118,20 +120,15 @@ process_file() {
         if (op_lower != "cleanup" && op_lower != "overall") {
             val = a[3]
             gsub(/^[ \t]+|[ \t]+$/, "", val)
-            if (val ~ /^[0-9]+$/) op_ops[op_lower] = val + 0
-        }
-    }
-
-    # Extract per-operation failure counts: "[OP], Failures, VALUE"
-    /^\[[^]]+\], Failures,/ {
-        split($0, a, ",")
-        op_field = a[1]
-        gsub(/^\[|\].*$/, "", op_field)
-        op_lower = tolower(op_field)
-        if (op_lower != "cleanup") {
-            val = a[3]
-            gsub(/^[ \t]+|[ \t]+$/, "", val)
-            if (val ~ /^[0-9]+$/) op_fail[op_lower] = val + 0
+            if (val ~ /^[0-9]+$/) {
+                # Detect failed-operation entries (suffix "-failed")
+                if (match(op_lower, /-failed$/)) {
+                    base_op = substr(op_lower, 1, RSTART - 1)
+                    op_fail[base_op] = val + 0
+                } else {
+                    op_ops[op_lower] = val + 0
+                }
+            }
         }
     }
 
@@ -148,10 +145,10 @@ process_file() {
             # Only output if the last percentile (p100) is present
             if (row !~ /,unknown$/) {
                 failed_pct = 0
-                if (op in op_ops && op_ops[op] > 0) {
-                    f = (op in op_fail) ? op_fail[op] : 0
-                    failed_pct = f / op_ops[op] * 100
-                }
+                succ = (op in op_ops)  ? op_ops[op]  : 0
+                fail = (op in op_fail) ? op_fail[op] : 0
+                total = succ + fail
+                if (total > 0) failed_pct = fail / total * 100
                 print row "," sprintf("%.4f", failed_pct)
             }
         }
