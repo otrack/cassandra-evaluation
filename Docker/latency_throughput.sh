@@ -38,7 +38,7 @@ protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
 nodes=5
 replication_factor=${nodes}
 records=1000
-ops_per_thread=100
+ops_per_thread=1000000
 
 # Start with 1 thread and double until reaching max_threads
 # The resulting graph demonstrates the hockey stick effect
@@ -69,7 +69,7 @@ if [ "$dry_run" -eq 0 ]; then
                 do_clean_up=1
             fi
             
-            run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0
+            run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=600
             do_create_and_load=0
 
             # Check if average latency exceeded 1s (500 ms); if so, stop increasing threads
