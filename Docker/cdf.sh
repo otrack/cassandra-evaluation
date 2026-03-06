@@ -52,7 +52,7 @@ if [ "$dry_run" -eq 0 ]; then
         tracing="false"
         if printf '%s\n' "$p" | grep -wF -q -- "cockroachdb";
         then
-	    tracing="true"
+	    tracing="false" # FIXME
         fi
         for w in ${workloads}
         do
