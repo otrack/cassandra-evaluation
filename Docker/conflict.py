@@ -352,13 +352,24 @@ def main():
                     f.write(f"        ({x:.2f},{y:.2f})\n")
                 f.write("      };\n\n")
 
-            # For cassandra-paxos, annotate each dot with the failed ratio
-            if proto == "cassandra-paxos":
-                for x, y, fp in zip(x_values, data_by_protocol[proto], failed_vals):
-                    if y is None:
-                        continue
-                    label_fp = fp if (fp is not None) else 0.0
-                    f.write(f"      \\node[above, font=\\tiny, text={col}] at (axis cs:{x:.2f},{y:.2f}) {{{label_fp:.1f}\\%}};\n")
+            # Annotate each dot with the failed ratio (all protocols); skip when 0%
+            has_annotations = False
+            for x, y, fp in zip(x_values, data_by_protocol[proto], failed_vals):
+                if y is None:
+                    continue
+                label_fp = fp if (fp is not None) else 0.0
+                if label_fp == 0.0:
+                    continue
+                # Choose anchor to avoid clipping at the left (x=0) and right (x=1) axis edges
+                if abs(x) < 1e-9:
+                    anchor = "above right"
+                elif abs(x - 1.0) < 1e-9:
+                    anchor = "above left"
+                else:
+                    anchor = "above"
+                f.write(f"      \\node[{anchor}, font=\\tiny, text={col}] at (axis cs:{x:.2f},{y:.2f}) {{{label_fp:.1f}\\%}};\n")
+                has_annotations = True
+            if has_annotations:
                 f.write("\n")
 
         # Draw a single horizontal dashed gray line for the average theoretical optimum across all locations
