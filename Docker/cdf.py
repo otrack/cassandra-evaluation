@@ -248,12 +248,6 @@ def main():
     actual_cities = df['city'].unique().tolist() if 'city' in df.columns and not no_cities else []
     actual_n_cities = len(actual_cities)
 
-    # Calculate total rows
-    if include_average:
-        total_rows = n_wl + (actual_n_cities * n_wl)
-    else:
-        total_rows = actual_n_cities * n_wl
-
     # Protocol order for consistent color assignment
     if no_cities:
         df_for_protocols = df_unfiltered
@@ -274,6 +268,32 @@ def main():
     min_latency = max(0, min_latency - xpad)
     max_latency = max_latency + xpad
 
+    # Compute x-range for the tail latency plots (p99-p100 of the average)
+    tail_min_lat, tail_max_lat = float('inf'), float('-inf')
+    if include_average:
+        for workload in workloads:
+            for op in all_ops:
+                avg_dict = compute_average_latencies_across_cities(df_unfiltered, workload, op, num_nodes)
+                for proto, lats in avg_dict.items():
+                    # indices 97-99 (0-based) correspond to p98-p100,
+                    # covering roughly pct 0.98-1.0 (just below the [0.99,1] tail)
+                    tail_vals = [v for i, v in enumerate(lats) if v is not None and i >= 97]
+                    if tail_vals:
+                        tail_min_lat = min(tail_min_lat, min(tail_vals))
+                        tail_max_lat = max(tail_max_lat, max(tail_vals))
+        if tail_min_lat == float('inf'):
+            tail_min_lat = min_latency
+            tail_max_lat = max_latency
+        tail_xpad = 0.05 * max(1.0, tail_max_lat - tail_min_lat)
+        tail_min_lat = max(0, tail_min_lat - tail_xpad)
+        tail_max_lat = tail_max_lat + tail_xpad
+
+    # Calculate total rows (cities first, then average, then tail latency)
+    if include_average:
+        total_rows = (actual_n_cities * n_wl) + n_wl + n_wl
+    else:
+        total_rows = actual_n_cities * n_wl
+
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
 
@@ -288,8 +308,8 @@ def main():
         f.write("    \\begin{tikzpicture}\n")
 
         f.write("      \\begin{groupplot}[\n")
-        f.write(f"        group style={{group size={n_ops} by {total_rows}, horizontal sep=1.2cm, vertical sep=1.2cm}},\n")
-        f.write("        width=4cm, height=4cm,\n")
+        f.write(f"        group style={{group size={n_ops} by {total_rows}, horizontal sep=1.2cm, vertical sep=0.8cm}},\n")
+        f.write("        width=5cm, height=5cm,\n")
         f.write("        grid=both,\n")
         f.write("        ymajorgrids=true,\n")
         f.write("        xmajorgrids=true,\n")
@@ -301,7 +321,53 @@ def main():
         f.write("        scale=.75,\n")
         f.write("      ]\n")
 
-        # First, plot average rows if requested
+        # First, plot city rows
+        if not no_cities:
+            for city_index, city in enumerate(cities):
+                for wl_index, workload in enumerate(workloads):
+                    for op_index, op in enumerate(all_ops):
+                        dfw = df[(df['workload'] == workload) & (df['nodes'] == num_nodes)
+                                 & (df['op'] == op) & (df['city'] == city)]
+
+                        if dfw.empty:
+                            continue
+
+                        f.write("        \\nextgroupplot[\n")
+                        if op_index == 0:
+                            if actual_n_cities == 1 and not include_average:
+                                f.write(f"          ylabel={{{workload}}},\n")
+                            else:
+                                f.write(f"          ylabel={{{city}}},\n")
+                        else:
+                            f.write("          yticklabels={{}},\n")
+                        if city_index == 0 and wl_index == 0:
+                            f.write(f"          title={{{op}}},\n")
+                        if not include_average and city_index == n_cities - 1 and wl_index == n_wl - 1:
+                            f.write("          xlabel={{Latency (ms)}},\n")
+                        if city in city_optimums:
+                            f.write(f"          extra x ticks={{{city_optimums[city]:.2f}}},\n")
+                            f.write(f"          extra x tick labels={{Q}},\n")
+                            f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
+                        f.write("        ]\n")
+
+                        for proto_idx, proto in enumerate(protocol_order):
+                            if proto not in dfw['protocol'].unique():
+                                continue
+                            row = dfw[dfw['protocol'] == proto].iloc[0] if not dfw[dfw['protocol'] == proto].empty else None
+                            if row is None:
+                                continue
+                            latencies = [row[f'p{i}'] for i in range(1, 101)
+                                         if pd.notnull(row.get(f'p{i}')) and row[f'p{i}'] != 'unknown']
+                            if not latencies:
+                                continue
+                            col = get_protocol_color(proto, protocol_colors, proto_idx)
+                            f.write("          \\addplot+["+col+", mark=none] table {\n")
+                            for i, val in enumerate(latencies):
+                                pct = i/99
+                                f.write(f"          {val} {pct}\n")
+                            f.write("          };\n")
+
+        # Then, plot average rows (after cities)
         if include_average:
             for wl_index, workload in enumerate(workloads):
                 for op_index, op in enumerate(all_ops):
@@ -316,7 +382,7 @@ def main():
                             f.write(f"          ylabel={{average}},\n")
                     else:
                         f.write("          yticklabels={{}},\n")
-                    if wl_index == 0:
+                    if no_cities and wl_index == 0:
                         f.write(f"          title={{{op}}},\n")
                     if avg_optimum is not None:
                         f.write(f"          extra x ticks={{{avg_optimum:.2f}}},\n")
@@ -342,51 +408,44 @@ def main():
                             f.write(f"          {val} {pct}\n")
                         f.write("          };\n")
 
-        # Then, plot city rows
-        if not no_cities:
-            for city_index, city in enumerate(cities):
-                for wl_index, workload in enumerate(workloads):
-                    for op_index, op in enumerate(all_ops):
-                        dfw = df[(df['workload'] == workload) & (df['nodes'] == num_nodes)
-                                 & (df['op'] == op) & (df['city'] == city)]
+            # Finally, plot tail latency rows (zoom on [0.99, 1] of average distribution)
+            for wl_index, workload in enumerate(workloads):
+                for op_index, op in enumerate(all_ops):
+                    avg_latencies_dict = compute_average_latencies_across_cities(df_unfiltered, workload, op, num_nodes)
 
-                        if dfw.empty:
+                    f.write("        \\nextgroupplot[\n")
+                    if op_index == 0:
+                        f.write(f"          ylabel={{avg. tail}},\n")
+                    else:
+                        f.write("          yticklabels={{}},\n")
+                    if wl_index == n_wl - 1:
+                        f.write("          xlabel={{Latency (ms)}},\n")
+                    f.write(f"          ymin=0.99, ymax=1,\n")
+                    f.write(f"          ytick={{0.99,1}},\n")
+                    f.write(f"          xmin={tail_min_lat:.2f}, xmax={tail_max_lat:.2f},\n")
+                    if avg_optimum is not None:
+                        f.write(f"          extra x ticks={{{avg_optimum:.2f}}},\n")
+                        f.write(f"          extra x tick labels={{Q}},\n")
+                        f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
+                    f.write("        ]\n")
+
+                    if not avg_latencies_dict:
+                        continue
+
+                    for proto_idx, proto in enumerate(protocol_order):
+                        if proto not in avg_latencies_dict:
                             continue
 
-                        f.write("        \\nextgroupplot[\n")
-                        if op_index == 0:
-                            if actual_n_cities == 1 and not include_average:
-                                f.write(f"          ylabel={{{workload}}},\n")
-                            else:
-                                f.write(f"          ylabel={{{city}}},\n")
-                        else:
-                            f.write("          yticklabels={{}},\n")
-                        if city_index == n_cities - 1 and wl_index == n_wl - 1:
-                            f.write("          xlabel={{Latency (ms)}},\n")
-                        if wl_index == 0 and city_index == 0 and not include_average:
-                            f.write(f"          title={{{op}}},\n")
-                        if city in city_optimums:
-                            f.write(f"          extra x ticks={{{city_optimums[city]:.2f}}},\n")
-                            f.write(f"          extra x tick labels={{Q}},\n")
-                            f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
-                        f.write("        ]\n")
+                        latencies = avg_latencies_dict[proto]
+                        if not latencies:
+                            continue
 
-                        for proto_idx, proto in enumerate(protocol_order):
-                            if proto not in dfw['protocol'].unique():
-                                continue
-                            row = dfw[dfw['protocol'] == proto].iloc[0] if not dfw[dfw['protocol'] == proto].empty else None
-                            if row is None:
-                                continue
-                            latencies = [row[f'p{i}'] for i in range(1, 101)
-                                         if pd.notnull(row.get(f'p{i}')) and row[f'p{i}'] != 'unknown']
-                            if not latencies:
-                                continue
-                            col = get_protocol_color(proto, protocol_colors, proto_idx)
-                            f.write("          \\addplot+["+col+", mark=none] table {\n")
-                            for i, val in enumerate(latencies):
-                                pct = i/99
-                                f.write(f"          {val} {pct}\n")
-                            f.write("          };\n")
+                        col = get_protocol_color(proto, protocol_colors, proto_idx)
+                        f.write("          \\addplot+["+col+", mark=none] table {\n")
+                        for i, val in enumerate(latencies):
+                            pct = i/99
+                            f.write(f"          {val} {pct}\n")
+                        f.write("          };\n")
 
         f.write("      \\end{groupplot}\n")
         f.write("    \\end{tikzpicture}\n")
