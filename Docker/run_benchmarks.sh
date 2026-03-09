@@ -110,7 +110,7 @@ run_ycsb() {
 	    true
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
 	then
-	    cockroachdb_create_usertable 10 "$replication_factor"
+	    cockroachdb_create_usertable 10 "$replication_factor" "$workload_type"
 	else
 	    # Determine transaction mode
 	    local transaction_mode="bruh"
@@ -122,7 +122,7 @@ run_ycsb() {
 	    cassandra_create_keyspace 3600 "$node_count" "$replication_factor"
 
 	    # Create the usertable if it doesn't exist
-	    cassandra_create_usertable 3600 "$transaction_mode" "$node_count"
+	    cassandra_create_usertable 3600 "$transaction_mode" "$node_count" "$workload_type"
 	fi
     fi
 

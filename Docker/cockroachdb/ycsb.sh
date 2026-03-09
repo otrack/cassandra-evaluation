@@ -7,6 +7,7 @@ COCKROACHDB_YCSB_DIR=$(dirname "${BASH_SOURCE[0]}")
 cockroachdb_create_usertable() {
     local num_fields="$1"
     local replication_factor="$2"
+    local workload="$3"
 
     if [[ -z "$num_fields" || -z "$replication_factor" ]]; then
         error "Usage: cockroachdb_create_usertable <num_fields> <replication_factor>"
@@ -24,15 +25,23 @@ cockroachdb_create_usertable() {
     local container
     container="$(config "node_name")1"
 
-    # Build the FIELD0..FIELD{N-1} column list dynamically.
-    local fields_sql=""
-    local i
-    for (( i=0; i<num_fields; i++ )); do
-        fields_sql+=", FIELD${i} TEXT"
-    done
-
-    local create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY${fields_sql});"
+    local create_table_command=""
     local zonecfg_command="ALTER TABLE usertable CONFIGURE ZONE USING num_replicas = ${replication_factor};"
+    if [ "$workload" == "site.ycsb.workloads.ClosedEconomyWorkload" ]; then
+
+	create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY, FIELD0 INT);"
+	
+    else 
+	
+	# Build the FIELD0..FIELD{N-1} column list dynamically.
+	local fields_sql=""
+	local i
+	for (( i=0; i<num_fields; i++ )); do
+            fields_sql+=", FIELD${i} TEXT"
+	done
+
+	create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY${fields_sql});"
+    fi
 
     # Create table, then set per-table replication factor via zone config.
     docker exec "${container}" cockroach sql --insecure -e "${create_table_command}"

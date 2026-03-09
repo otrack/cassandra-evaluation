@@ -41,16 +41,23 @@ cassandra_create_usertable() {
     local timeout=$1
     local transaction_mode=$2
     local node_count=$3
+    local workload_type=$4
     local container=$(config "node_name")${node_count}	
-    truncate_table_command="TRUNCATE ycsb.usertable;"
-    if [ "$transaction_mode" == "full" ]; then
-        create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 VARCHAR, field1 VARCHAR, field2 VARCHAR, field3 VARCHAR, field4 VARCHAR, field5 VARCHAR, field6 VARCHAR, field7 VARCHAR, field8 VARCHAR, field9 VARCHAR) WITH transactional_mode = 'full';"
-    else
-        create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 VARCHAR, field1 VARCHAR, field2 VARCHAR, field3 VARCHAR, field4 VARCHAR, field5 VARCHAR, field6 VARCHAR, field7 VARCHAR, field8 VARCHAR, field9 VARCHAR);"
+
+    local create_table_command=""
+    if [ "$workload_type" == "site.ycsb.workloads.ClosedEconomyWorkload" ]; then
+	create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 INT)"
+    else # site.ycsb.workloads.CoreWorkload"
+	create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 VARCHAR, field1 VARCHAR, field2 VARCHAR, field3 VARCHAR, field4 VARCHAR, field5 VARCHAR, field6 VARCHAR, field7 VARCHAR, field8 VARCHAR, field9 VARCHAR)";
     fi
+    
+    if [ "$transaction_mode" == "full" ]; then
+        create_table_command="${create_table_command} WITH transactional_mode = 'full'"
+    fi
+    create_table_command="${create_table_command};"
 
     # Create the table if it does not exist
-    docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$create_table_command"
+    docker exec -i ${container} cqlsh --request-timeout="${timeout}" -e "${create_table_command}"
     if [ $? -eq 0 ]; then
         debug "Table 'usertable' created or already exists."
     else
@@ -58,8 +65,10 @@ cassandra_create_usertable() {
         exit 1
     fi
 
+    # FIXME skipped FTM to avoids bugs
+    #
     # Truncate the table to empty it
-    # FIXME skipped ftm to avoids bugs
+    # truncate_table_command="TRUNCATE ycsb.usertable;"
     # docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$truncate_table_command"
     # if [ $? -eq 0 ]; then
     #     debug "Table 'usertable' truncated."

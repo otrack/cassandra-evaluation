@@ -31,12 +31,12 @@ mkdir -p ${LOGDIR}/closed_economy
 
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
-protocols="accord cockroachdb cassandra-paxos"
+protocols="accord cockroachdb" # only backend to support this
 node_counts="3 5 7"
 replication_factor=3
 records=10000
 total_threads=1
-ops_per_thread=1000
+ops_per_thread=0
 
 if [ "$dry_run" -eq 0 ]; then
     for p in ${protocols}
@@ -53,7 +53,7 @@ if [ "$dry_run" -eq 0 ]; then
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/closed_economy/${p}_${nodes}_${workload}_${ts}.dat"
 	    # Each node count requires a fresh cluster, so always create and always clean up
-	    run_benchmark ${p} ${t} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1
+	    run_benchmark ${p} ${t} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1 -p maxexecutiontime=600
         done
     done
 fi
