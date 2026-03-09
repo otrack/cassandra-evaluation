@@ -91,7 +91,7 @@ start_container() {
     local start_time
     start_time=$(date +%s)
     local timeout
-    timeout=${START_CONTAINER_TIMEOUT:-60}   # seconds, override by exporting START_CONTAINER_TIMEOUT
+    timeout=${START_CONTAINER_TIMEOUT:-90}   # seconds, override by exporting START_CONTAINER_TIMEOUT
 
     while true; do
         # Check for the readiness message in logs
