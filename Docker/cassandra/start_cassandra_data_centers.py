@@ -140,7 +140,7 @@ if __name__ == "__main__":
                     
         cassandra_image = config["accord_cassandra_image"] if protocol == "accord" else config["normal_cassandra_image"]
     except ValueError as e:
-        print(f"Invalid number of nodes: {e}")
+        print(f"Invalid parameters: {e}")
         sys.exit(1)
 
     create_cassandra_cluster(num_nodes, cassandra_image)
