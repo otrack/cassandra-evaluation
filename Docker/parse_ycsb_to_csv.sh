@@ -39,6 +39,7 @@ process_file() {
         conflict_rate = "NA"
         tput          = "unknown"
         is_conflict   = 0
+        is_swap       = 0
     }
 
     # Extract clients: handle both "-threads 64" and "-threads=64"
@@ -62,6 +63,16 @@ process_file() {
     is_conflict && conflict_rate == "NA" && /conflict\.theta=/ {
         if (match($0, /conflict\.theta=[0-9]+(\.[0-9]+)?/)) {
             conflict_rate = substr($0, RSTART + 15, RLENGTH - 15)
+        }
+    }
+
+    # Detect SwapWorkload
+    /site\.ycsb\.workloads\.SwapWorkload/ { is_swap = 1 }
+
+    # Extract swap.s (only once)
+    is_swap && conflict_rate == "NA" && /swap\.s=/ {
+        if (match($0, /swap\.s=[0-9]+/)) {
+            conflict_rate = substr($0, RSTART + 7, RLENGTH - 7)
         }
     }
 

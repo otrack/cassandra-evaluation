@@ -6,3 +6,4 @@
 ./latency_throughput.sh
 ./closed_economy.sh
 ./fault_tolerance.sh
+./swap.sh
