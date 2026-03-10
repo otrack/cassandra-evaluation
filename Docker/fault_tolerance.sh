@@ -40,7 +40,6 @@ mkdir -p ${LOGDIR}/fault_tolerance
 
 # Configuration
 duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
-protocols="accord cockroachdb swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp"
 protocols="accord cockroachdb"
 nodes=5
 replication_factor=3
