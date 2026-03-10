@@ -456,3 +456,14 @@ This task should change this conflict rate to from 0.0 to 0.1 by step of 0.01.
 There are two files impacted by this change.
 First, the script launching the experiment itself, cdf.sh.
 Second, the Python script, cdf.py, in charge of creating the plot output by cdf.sh.
+
+# 10.03 - copilot
+
+This task consists in two parts.
+First, change the default time maxexecutiontime to 120s when the "--test" flag is set.
+This should impact all the experiments scripts under /Docker, i.e., cdf.sh, closed_economy.sh, ephemeral.sh, conflict.sh, fault_tolerance.sh, latency_throughput.sh, swap.sh, and ycsb.sh.
+Second, create a new script /Docker/run-all.sh that run all the abvoe scripts one after the other.
+By default, this script use the "--test" flag everywhere.
+When moving to the next script, it should track that the previous one went well.
+If not, it takes care of clearing all the docker containers still running and related to the previous experiment, and re-executes the faulty script.
+
