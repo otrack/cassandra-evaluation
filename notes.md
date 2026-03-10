@@ -448,3 +448,11 @@ In detail, assume that the experiment runs on a machine M with c cpus and g giga
 Suppose further that this experiment uses k database containers.
 When the flag is raised, the machine specification (machine=...) in exp.config is ignored.
 Instead, the script picks a specification s with s.c cpus and s.g gigabytes of memory such that c <= s.c * k and g <= s.g * k.
+
+# 10.03 - copilot
+
+In the experiment /Docker/conflict.sh, the conflict rate is set from 0.0 to 1.0 by step of 0.1.
+This task should change this conflict rate to from 0.0 to 0.1 by step of 0.01.
+There are two files impacted by this change.
+First, the script launching the experiment itself, cdf.sh.
+Second, the Python script, cdf.py, in charge of creating the plot output by cdf.sh.
