@@ -28,18 +28,14 @@ cockroachdb_create_usertable() {
     local create_table_command=""
     local zonecfg_command="ALTER TABLE usertable CONFIGURE ZONE USING num_replicas = ${replication_factor};"
     if [ "$workload" == "site.ycsb.workloads.ClosedEconomyWorkload" ]; then
-
-	create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY, FIELD0 INT);"
-	
-    else 
-	
+	create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY, FIELD0 INT);"	
+    else 	
 	# Build the FIELD0..FIELD{N-1} column list dynamically.
 	local fields_sql=""
 	local i
 	for (( i=0; i<num_fields; i++ )); do
             fields_sql+=", FIELD${i} TEXT"
 	done
-
 	create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY${fields_sql});"
     fi
 
