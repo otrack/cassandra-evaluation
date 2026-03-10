@@ -291,7 +291,7 @@ compute_test_machine() {
     # gcp.csv columns: $1=name, $2=vcpus, $3=memory(GB)
     local machine
     machine=$(awk -F',' -v c="$actual_cpus" -v g="$actual_mem_gb" -v k="$node_count" '
-        NR>1 && ($2+0)*k >= c+0 && ($3+0)*k >= g+0 {
+        NR>1 && ($2+0)*k >= c+0 || ($3+0)*k >= g+0 {
             if (best == "" || $2+0 < best_c+0 || ($2+0 == best_c+0 && $3+0 < best_g+0)) {
                 best = $1
                 best_c = $2
