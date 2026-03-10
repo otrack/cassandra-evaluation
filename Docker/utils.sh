@@ -287,12 +287,12 @@ compute_test_machine() {
         return 1
     fi
 
-    # Find the smallest spec s where actual_cpus <= s.c * node_count and actual_mem_gb <= s.g * node_count
+    # Find the best spec s where actual_mem_gb <= s.g * node_count
     # gcp.csv columns: $1=name, $2=vcpus, $3=memory(GB)
     local machine
     machine=$(awk -F',' -v c="$actual_cpus" -v g="$actual_mem_gb" -v k="$node_count" '
-        NR>1 && ($2+0)*k >= c+0 || ($3+0)*k >= g+0 {
-            if (best == "" || $2+0 < best_c+0 || ($2+0 == best_c+0 && $3+0 < best_g+0)) {
+        NR>1 && ($3+0)*k <= g+0 {
+            if (best == "" || $2+0 >= best_c+0) {
                 best = $1
                 best_c = $2
                 best_g = $3
