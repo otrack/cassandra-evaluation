@@ -8,15 +8,20 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run]"
+    echo "Usage: $0 [--dry-run] [--test]"
     echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
+    echo "  --test     Use a 60s run time and right-size containers to fit this machine."
 }
 
 dry_run=0
+test_run=0
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
             dry_run=1
+            ;;
+        --test)
+            test_run=1
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -40,6 +45,15 @@ records=10000
 threads=10
 ops_per_thread=0
 
+maxexecutiontime=600
+if [ "$test_run" -eq 1 ]; then
+    maxexecutiontime=60
+    original_machine=$(config machine)
+    restore_machine() { sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"; }
+    trap restore_machine EXIT
+    compute_test_machine "${nodes}"
+fi
+
 if [ "$dry_run" -eq 0 ]; then
     do_clean_up=0
     for p in ${protocols}
@@ -62,7 +76,7 @@ if [ "$dry_run" -eq 0 ]; then
 	        do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	        ts=$(date +%Y%m%d%H%M%S%N)
 	        output_file="${LOGDIR}/cdf/${p}_${nodes}_${w}_${ts}.dat"
-	        run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing} -p maxexecutiontime=600
+	        run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing} -p maxexecutiontime=${maxexecutiontime}
 	        do_create_and_load=0
 	        count=$((count+1))
 	    done

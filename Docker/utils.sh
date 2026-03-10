@@ -264,6 +264,53 @@ get_resource_limits() {
     echo "--cpus ${vcpus} --memory ${memory_mb}m"
 }
 
+compute_test_machine() {
+    local node_count=$1
+    if [ -z "$node_count" ] || ! [[ "$node_count" =~ ^[0-9]+$ ]] || [ "$node_count" -le 0 ]; then
+        error "compute_test_machine: node_count must be a positive integer"
+        return 1
+    fi
+
+    # Get actual machine CPUs
+    local actual_cpus
+    actual_cpus=$(nproc)
+
+    # Get actual machine memory in GB (1 GB = 1048576 kB)
+    local actual_mem_kb
+    actual_mem_kb=$(awk '/^MemTotal:/{print $2}' /proc/meminfo)
+    local actual_mem_gb
+    actual_mem_gb=$(awk "BEGIN { printf \"%.6f\", ${actual_mem_kb} / 1048576 }")
+
+    local gcp_csv="${DIR}/gcp.csv"
+    if [ ! -f "$gcp_csv" ]; then
+        error "gcp.csv not found: ${gcp_csv}"
+        return 1
+    fi
+
+    # Find the smallest spec s where actual_cpus <= s.c * node_count and actual_mem_gb <= s.g * node_count
+    # gcp.csv columns: $1=name, $2=vcpus, $3=memory(GB)
+    local machine
+    machine=$(awk -F',' -v c="$actual_cpus" -v g="$actual_mem_gb" -v k="$node_count" '
+        NR>1 && ($2+0)*k >= c+0 && ($3+0)*k >= g+0 {
+            if (best == "" || $2+0 < best_c+0 || ($2+0 == best_c+0 && $3+0 < best_g+0)) {
+                best = $1
+                best_c = $2
+                best_g = $3
+            }
+        }
+        END { print best }
+    ' "$gcp_csv")
+
+    if [ -z "$machine" ]; then
+        error "No suitable machine spec found in gcp.csv for ${actual_cpus} CPUs and ${actual_mem_gb}GB memory with ${node_count} nodes"
+        return 1
+    fi
+
+    log "Test mode: machine spec '${machine}' for ${actual_cpus} CPUs, ${actual_mem_gb}GB memory, ${node_count} nodes"
+    sed -i "s/^machine=.*/machine=${machine}/" "${CONFIG_FILE}"
+    return 0
+}
+
 get_location() {
   local k="$1"
   local file="${2:-latencies.csv}"
