@@ -111,21 +111,16 @@ def main():
         return f"{v:.2f}$\\times$" if v is not None else "N/A"
 
     col_spec    = "l" + "c" * len(workloads)
-    header_cols = " & ".join(f"Workload {w}" for w in workloads)
+    header_cols = " & ".join(f"{w}" for w in workloads)
     row_on_str  = " & ".join(fmt_lat(lat_on[w])   for w in workloads)
     row_off_str = " & ".join(fmt_lat(lat_off[w])  for w in workloads)
     row_sp_str  = " & ".join(fmt_speedup(speedup[w]) for w in workloads)
     workloads_str = ", ".join(workloads)
 
     with open(output_tex, 'w') as f:
-        f.write("\\begin{table}[htbp]\n")
+        f.write("\\begin{table}[t]\n")
         f.write("  \\centering\n")
-        f.write(
-            f"  \\caption{{Average operation latency (ms, averaged over all clients and\n"
-            f"    operations) and speed-up when ephemeral reads are enabled in Accord\n"
-            f"    (YCSB workloads {workloads_str}).}}\n"
-        )
-        f.write("  \\label{tab:ephemeral}\n")
+        f.write("  \\footnotesize\n")
         f.write(f"  \\begin{{tabular}}{{{col_spec}}}\n")
         f.write("    \\toprule\n")
         f.write(f"    & {header_cols} \\\\\n")
@@ -135,6 +130,12 @@ def main():
         f.write(f"    Speed-up           & {row_sp_str}  \\\\\n")
         f.write("    \\bottomrule\n")
         f.write("  \\end{tabular}\n")
+        f.write(
+            f"  \\caption{{Average operation latency (ms, averaged over all clients and\n"
+            f"    operations) and speed-up when ephemeral reads are enabled in Accord\n"
+            f"    (YCSB workloads {workloads_str}).}}\n"
+             "  \\label{tab:ephemeral}\n}"
+        )
         f.write("\\end{table}\n")
 
     print(f"Generated {output_tex}")

@@ -48,7 +48,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                         nano_cpus = int(float(gcp_row['vcpus']) * 1e9)
                         memory_gb = float(gcp_row['memory'])
                         mem_limit = int(memory_gb * 1024 * 1024 * 1024)
-                        cassandra_xmx = f"{math.floor(memory_gb * 1 / 2)}g"
+                        cassandra_xmx = f"{math.floor(memory_gb)}g"
                         break
         except FileNotFoundError:
             debug(f"gcp.csv not found, no resource limits applied for machine '{machine}'")
