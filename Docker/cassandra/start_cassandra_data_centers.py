@@ -38,6 +38,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
     mem_limit = None
     cassandra_xmx = "4g"  # default fallback
     machine = config.get("machine", "")
+    ephemeral_read_enabled = config.get("accord.ephemeral_read_enabled", "true")
     if machine:
         try:
             with open(os.path.join(os.path.dirname(__file__), '..', 'gcp.csv'), 'r') as gcp_file:
@@ -83,7 +84,8 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                     "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
                     "CASSANDRA_CLUSTER_NAME": "TestCluster",
                     "CASSANDRA_DC": dc_name,
-                    "CASSANDRA_RACK": "RAC1"
+                    "CASSANDRA_RACK": "RAC1",
+                    "CASSANDRA_EPHEMERAL_READ_ENABLED": ephemeral_read_enabled
                 },
                 cap_add=["NET_ADMIN"],  # Add NET_ADMIN capability,
                 ports={ '9042/tcp': ('127.0.0.1', (3333+i)), '5005/tcp': ('127.0.0.1', (5005+i)) },

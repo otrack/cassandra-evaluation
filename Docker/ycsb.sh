@@ -38,7 +38,7 @@ nodes=5
 replication_factor=${nodes}
 records=10000
 threads=10
-ops_per_thread=1000
+ops_per_thread=0
 
 if [ "$dry_run" -eq 0 ]; then
     do_clean_up=0
@@ -57,7 +57,7 @@ if [ "$dry_run" -eq 0 ]; then
 		do_clean_up=$(( count == total-1 ? 1 : 0 ))
 		ts=$(date +%Y%m%d%H%M%S%N)
 		output_file="${LOGDIR}/ycsb/${p}_${nodes}_${w}_${ts}.dat"
-		run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up}
+		run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p maxexecutiontime=600
 		do_create_and_load=0
 		count=$((count+1))
 	    done

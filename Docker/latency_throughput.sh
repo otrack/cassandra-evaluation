@@ -35,11 +35,10 @@ workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.05
 workload="a" # does not matter
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
-protocols=accord
 nodes=5
 replication_factor=${nodes}
 records=1000
-ops_per_thread=1000000
+ops_per_thread=0
 
 # Start with 1 thread and double until reaching max_threads
 # The resulting graph demonstrates the hockey stick effect

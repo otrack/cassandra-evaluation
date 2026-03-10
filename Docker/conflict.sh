@@ -36,7 +36,7 @@ nodes=5
 replication_factor=${nodes}
 records=1000
 threads=10
-ops_per_thread=1000
+ops_per_thread=0
 
 if [ "$dry_run" -eq 0 ]; then
     do_clean_up=0
@@ -55,7 +55,7 @@ if [ "$dry_run" -eq 0 ]; then
 	        do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	        ts=$(date +%Y%m%d%H%M%S%N)
 	        output_file="${LOGDIR}/conflict/${p}_${nodes}_a_${ts}.dat"
-	        run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0
+	        run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=600
 	        do_create_and_load=0
 	        count=$((count+1))
 	    done
