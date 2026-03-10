@@ -34,7 +34,7 @@ done
 mkdir -p ${LOGDIR}/conflict
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
-thetas=$(seq -f "%.1f" 0 0.1 1.0)
+thetas=$(seq -f "%.02f" 0 0.01 0.1)
 workload="a" # this does not matter
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
 nodes=5
