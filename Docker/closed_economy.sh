@@ -9,15 +9,20 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run]"
+    echo "Usage: $0 [--dry-run] [--test]"
     echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
+    echo "  --test     Use a 60s run time and right-size containers to fit this machine."
 }
 
 dry_run=0
+test_run=0
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
             dry_run=1
+            ;;
+        --test)
+            test_run=1
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -38,6 +43,14 @@ records=10000
 total_threads=1
 ops_per_thread=0
 
+maxexecutiontime=600
+if [ "$test_run" -eq 1 ]; then
+    maxexecutiontime=60
+    original_machine=$(config machine)
+    restore_machine() { sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"; }
+    trap restore_machine EXIT
+fi
+
 if [ "$dry_run" -eq 0 ]; then
     for p in ${protocols}
     do
@@ -46,6 +59,9 @@ if [ "$dry_run" -eq 0 ]; then
         
         for nodes in ${node_counts}
         do
+	    if [ "$test_run" -eq 1 ]; then
+	        compute_test_machine "${nodes}"
+	    fi
 	    t=$((total_threads / nodes))
 	    if [ ${t} -lt 1 ]; then
 	        t=1
@@ -53,7 +69,7 @@ if [ "$dry_run" -eq 0 ]; then
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/closed_economy/${p}_${nodes}_${workload}_${ts}.dat"
 	    # Each node count requires a fresh cluster, so always create and always clean up
-	    run_benchmark ${p} ${t} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1 -p maxexecutiontime=600
+	    run_benchmark ${p} ${t} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1 -p maxexecutiontime=${maxexecutiontime}
         done
     done
 fi

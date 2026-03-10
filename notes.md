@@ -421,3 +421,30 @@ In detail,
 This is a an additional column of the csv file, after p100, called "failed".
 - when some clients fail the dot of the corresponding protocol is painted with a crossing pattern
 - for Cassandra, the ratio of failed operations is reported above each of its dot in the plot
+
+# 10.03 - copilot
+
+This task adds under /Docker an experiment that runs the swap workload in YCSB.
+This workload is described here: https://github.com/otrack/YCSB/blob/cassandra5/core/src/main/java/site/ycsb/workloads/SwapWorkload.java.
+In detail, 
+- the experiment is implemented in a bash script called swap.sh
+- it follows the same pattern as other experiments, e.g., closed_economy.sh, cdf.sh, and conflict.sh
+- the workload is already available in the Docker image of YCSB (under wokrloads/workloadsw)
+- there is no other workload to run 
+- the number of nodes is 5 and the replication factor is set 3
+- parameter S in the SwapWorkload varies from 3 to 8
+- because the workload relies on transactions, only two protocols are evaluated: accord and cockroachdb
+- as with other experiements, the script outputs a Latex plot that informs about the results;
+  more precisely this plot should (i) on the x axis varies the number of swapped items, ie., parameter S, from 3 to 8
+  and (ii) on the y axis mentions the total throughput of the system.
+
+# 10.03 - copilot
+
+This task adds a flag --test to the experiment scripts in /Docker (that is cdf.sh, closed_economy.sh, conflict.sh, ephemeral.sh, fault_tolerance.sh, latency_throughput.sh, ycsb.sh and swap.sh).
+When raised, this flag
+1) changes the default 600s for an experiment to run (parameter maxexecutiontime) into 60s.
+2) right sizes the container size to fit the machine on which the experiment is launched.
+In detail, assume that the experiment runs on a machine M with c cpus and g gigabytes of memory.
+Suppose further that this experiment uses k database containers.
+When the flag is raised, the machine specification (machine=...) in exp.config is ignored.
+Instead, the script picks a specification s with s.c cpus and s.g gigabytes of memory such that c <= s.c * k and g <= s.g * k.

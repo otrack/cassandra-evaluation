@@ -13,15 +13,20 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run]"
+    echo "Usage: $0 [--dry-run] [--test]"
     echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
+    echo "  --test     Use a 60s run time and right-size containers to fit this machine."
 }
 
 dry_run=0
+test_run=0
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
             dry_run=1
+            ;;
+        --test)
+            test_run=1
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -47,6 +52,14 @@ workload="ce"
 records=10000
 threads=1
 status_interval=1   # YCSB -s reporting interval in seconds
+
+if [ "$test_run" -eq 1 ]; then
+    duration_minutes=1
+    original_machine=$(config machine)
+    restore_machine() { sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"; }
+    trap restore_machine EXIT
+    compute_test_machine "${nodes}"
+fi
 
 duration_s=$((duration_minutes * 60))
 slowdown_s=$((duration_s / 4))
