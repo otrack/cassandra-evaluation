@@ -4,7 +4,7 @@ Plotting script for the swap workload experiment.
 
 This script generates a line chart showing:
 - X-axis: number of swapped items per transaction (parameter S), from 3 to 8
-- Y-axis: total system throughput (ops/sec), summed across all nodes
+- Y-axis: average latency (ms), averaged across all nodes
 - One line per protocol (accord and cockroachdb)
 """
 
@@ -20,6 +20,25 @@ def usage_and_exit():
     sys.exit(1)
 
 
+def row_mean_latency(row):
+    """Compute mean latency (ms) from p1..p100 percentile columns."""
+    vals = []
+    for i in range(1, 101):
+        key = f"p{i}"
+        v = row.get(key, None)
+        if pd.isna(v):
+            continue
+        if isinstance(v, str) and v.strip().lower() == "unknown":
+            continue
+        try:
+            vals.append(float(v))
+        except Exception:
+            continue
+    if not vals:
+        return None
+    return float(np.mean(vals))
+
+
 def main():
     if len(sys.argv) < 3:
         usage_and_exit()
@@ -30,27 +49,31 @@ def main():
     df = pd.read_csv(results_csv)
 
     # Parse numeric columns
-    def safe_float(x):
-        try:
-            return float(x)
-        except Exception:
-            return None
-
     def safe_int(x):
         try:
             return int(x)
         except Exception:
             return None
 
-    df['tput_f'] = df['tput'].apply(safe_float)
     # The conflict_rate column is reused to store swap.s values (extracted by parse_ycsb_to_csv.sh)
     df['s_val'] = df['conflict_rate'].apply(safe_int)
 
-    # Keep only rows with valid S values and throughput
-    df = df[df['tput_f'].notnull() & df['s_val'].notnull()].copy()
+    # Keep only rows with valid S values
+    df = df[df['s_val'].notnull()].copy()
 
     if df.empty:
         print("No valid swap workload data found in results CSV.")
+        sys.exit(1)
+
+    # Compute mean latency per row from percentile columns
+    mean_lats = []
+    for idx, row in df.iterrows():
+        mean_lats.append(row_mean_latency(row))
+    df['mean_latency_ms'] = mean_lats
+    df = df[df['mean_latency_ms'].notnull()]
+
+    if df.empty:
+        print("No valid latency data found in results CSV.")
         sys.exit(1)
 
     # Get unique protocols in order of appearance
@@ -62,35 +85,34 @@ def main():
     # S values from 3 to 8
     s_values = sorted(df['s_val'].unique().tolist())
 
-    # For each protocol, compute total throughput per S value
-    # (sum across all nodes/cities for the same S value)
+    # For each protocol, compute average latency per S value
+    # (mean across all nodes/cities for the same S value)
     data_by_protocol = {}
     for proto in protocol_order:
         dfp = df[df['protocol'] == proto]
-        throughputs = []
+        latencies = []
         for s in s_values:
             df_s = dfp[dfp['s_val'] == s]
             if not df_s.empty:
-                total_tput = df_s['tput_f'].sum()
-                throughputs.append(total_tput)
+                latencies.append(float(df_s['mean_latency_ms'].mean()))
             else:
-                throughputs.append(None)
-        data_by_protocol[proto] = throughputs
+                latencies.append(None)
+        data_by_protocol[proto] = latencies
 
     # Prepare colors (unified protocol color schema)
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
 
     # Determine y-axis range
-    all_tputs = []
+    all_lats = []
     for proto, vals in data_by_protocol.items():
         for v in vals:
             if v is not None:
-                all_tputs.append(v)
+                all_lats.append(v)
 
-    if all_tputs:
+    if all_lats:
         ymin = 0
-        ymax = max(all_tputs) * 1.2
+        ymax = max(all_lats) * 1.2
     else:
         ymin = 0
         ymax = 1000
@@ -106,7 +128,7 @@ def main():
         f.write("      width=12cm, height=8cm,\n")
         f.write("      grid=both,\n")
         f.write("      xlabel={Number of swapped items ($S$)},\n")
-        f.write("      ylabel={Total throughput (ops/sec)},\n")
+        f.write("      ylabel={Average latency (ms)},\n")
         f.write(f"      xmin={min(s_values) - 0.5:.1f}, xmax={max(s_values) + 0.5:.1f},\n")
         f.write(f"      ymin={ymin:.2f}, ymax={ymax:.2f},\n")
         f.write("      xtick={" + ",".join(str(s) for s in s_values) + "},\n")
@@ -116,15 +138,15 @@ def main():
         for idx, proto in enumerate(protocol_order):
             col = get_protocol_color(proto, protocol_colors, idx)
             f.write(f"      \\addplot+[{col}, mark=*, thick] table {{\n")
-            for s, tput in zip(s_values, data_by_protocol[proto]):
-                if tput is not None:
-                    f.write(f"        {s} {tput:.2f}\n")
+            for s, lat in zip(s_values, data_by_protocol[proto]):
+                if lat is not None:
+                    f.write(f"        {s} {lat:.2f}\n")
             f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
-        f.write("  \\caption{Swap workload: total system throughput as a function of the number of swapped items per transaction ($S$).}\n")
-        f.write("  \\label{fig:swap-throughput}\n")
+        f.write("  \\caption{Swap workload: average latency as a function of the number of swapped items per transaction ($S$).}\n")
+        f.write("  \\label{fig:swap-latency}\n")
         f.write("\\end{figure}\n")
 
     print(f"Generated {output_tikz}")
