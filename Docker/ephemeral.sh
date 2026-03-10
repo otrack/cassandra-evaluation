@@ -15,7 +15,7 @@ source ${DIR}/run_benchmarks.sh
 usage() {
     echo "Usage: $0 [--dry-run] [--test]"
     echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
-    echo "  --test     Use a 60s run time and right-size containers to fit this machine."
+    echo "  --test     Use a 120s run time and right-size containers to fit this machine."
 }
 
 dry_run=0
@@ -49,7 +49,7 @@ ops_per_thread=0
 
 maxexecutiontime=600
 if [ "$test_run" -eq 1 ]; then
-    maxexecutiontime=60
+    maxexecutiontime=120
 fi
 
 # Helper to update accord.ephemeral_read_enabled in exp.config
