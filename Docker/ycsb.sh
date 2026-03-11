@@ -41,8 +41,8 @@ workloads="a b c d"
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
 nodes=5
 replication_factor=${nodes}
-records=10000
-threads=10
+records=$(config records)
+threads=$(config threads)
 ops_per_thread=0
 
 maxexecutiontime=600

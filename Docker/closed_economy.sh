@@ -39,8 +39,8 @@ workload="ce"
 protocols="accord cockroachdb" # only backend to support this
 node_counts="3 5 7"
 replication_factor=3
-records=10000
-total_threads=1
+records=$(config records)
+threads=$(config threads)
 ops_per_thread=0
 
 maxexecutiontime=600
@@ -62,14 +62,10 @@ if [ "$dry_run" -eq 0 ]; then
 	    if [ "$test_run" -eq 1 ]; then
 	        compute_test_machine "${nodes}"
 	    fi
-	    t=$((total_threads / nodes))
-	    if [ ${t} -lt 1 ]; then
-	        t=1
-	    fi
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/closed_economy/${p}_${nodes}_${workload}_${ts}.dat"
 	    # Each node count requires a fresh cluster, so always create and always clean up
-	    run_benchmark ${p} ${t} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1 -p maxexecutiontime=${maxexecutiontime}
+	    run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1 -p maxexecutiontime=${maxexecutiontime}
         done
     done
 fi

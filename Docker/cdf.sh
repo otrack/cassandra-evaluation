@@ -36,12 +36,13 @@ mkdir -p ${LOGDIR}/cdf
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a"
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
+protocols=swiftpaxos-paxos
 nodes=5
 replication_factor=${nodes}
 cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""
 plot_average=true
-records=10000
-threads=10
+records=$(config records)
+threads=$(config threads)
 ops_per_thread=0
 
 maxexecutiontime=600

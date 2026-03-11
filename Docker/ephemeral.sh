@@ -43,8 +43,8 @@ workloads="a b c d"
 protocol="accord"
 nodes=5
 replication_factor=${nodes}
-records=10000
-threads=10
+records=$(config records)
+threads=$(config threads)
 ops_per_thread=0
 
 maxexecutiontime=600

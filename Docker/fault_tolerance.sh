@@ -48,8 +48,8 @@ workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 theta=0.02
 workload="a" # does not matter
 workload="ce"
-records=10000
-threads=1
+records=$(config records)
+threads=$(config threads)
 status_interval=1   # YCSB -s reporting interval in seconds
 
 if [ "$test_run" -eq 1 ]; then

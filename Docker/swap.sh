@@ -40,8 +40,8 @@ workload="sw" # workloads/workloadsw
 protocols="accord cockroachdb" # only backends that support transactions
 nodes=5
 replication_factor=3
-records=1000
-threads=10
+records=$(config records)
+threads=$(config threads)
 # ops_per_thread=0 means operationcount=0 (unlimited); run duration is controlled by maxexecutiontime
 ops_per_thread=0
 s_values=$(seq 3 8)
