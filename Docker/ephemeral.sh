@@ -15,7 +15,7 @@ source ${DIR}/run_benchmarks.sh
 usage() {
     echo "Usage: $0 [--dry-run] [--test]"
     echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
-    echo "  --test     Use a 120s run time and right-size containers to fit this machine."
+    echo "  --test     Use a 60s run time and right-size containers to fit this machine."
 }
 
 dry_run=0
@@ -47,29 +47,28 @@ records=$(config records)
 threads=$(config threads)
 ops_per_thread=0
 
-maxexecutiontime=600
-if [ "$test_run" -eq 1 ]; then
-    maxexecutiontime=120
-fi
-
 # Helper to update accord.ephemeral_read_enabled in exp.config
 set_ephemeral_read() {
     local value=$1
     sed -i "s/^accord\.ephemeral_read_enabled=.*/accord.ephemeral_read_enabled=${value}/" ${CONFIG_FILE}
 }
 
-# Save original ephemeral setting and original machine, restore both on exit
+# Save original ephemeral setting, machine, and maxexecutiontime; restore all on exit
 original_ephemeral=$(config "accord.ephemeral_read_enabled")
 original_machine=$(config machine)
+original_maxexecutiontime=$(config maxexecutiontime)
 restore_config() {
     set_ephemeral_read "${original_ephemeral:-true}"
     sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"
+    sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
 }
 trap restore_config EXIT
 
 if [ "$test_run" -eq 1 ]; then
     compute_test_machine "${nodes}"
+    sed -i "s/^maxexecutiontime=.*/maxexecutiontime=60/" "${CONFIG_FILE}"
 fi
+maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
     total=$(echo ${workloads} | wc -w)
