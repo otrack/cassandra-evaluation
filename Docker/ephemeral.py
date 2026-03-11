@@ -134,7 +134,7 @@ def main():
             f"  \\caption{{Average operation latency (ms, averaged over all clients and\n"
             f"    operations) and speed-up when ephemeral reads are enabled in Accord\n"
             f"    (YCSB workloads {workloads_str}).}}\n"
-             "  \\label{tab:ephemeral}\n}"
+             "  \\label{tab:ephemeral}\n"
         )
         f.write("\\end{table}\n")
 
