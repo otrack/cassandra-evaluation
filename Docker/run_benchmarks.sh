@@ -91,6 +91,22 @@ run_ycsb() {
     # capture any extra arguments (13th onward) and prepare a safely quoted string
     shift 13
     local extra_opts=( "$@" )
+
+    # When loading, ignore maxexecutiontime so the load phase can always finish
+    if [ "$action" == "load" ]; then
+        local filtered_opts=()
+        local i=0
+        while [ $i -lt ${#extra_opts[@]} ]; do
+            if [ "${extra_opts[$i]}" == "-p" ] && [ $((i+1)) -lt ${#extra_opts[@]} ] && [[ "${extra_opts[$((i+1))]}" == maxexecutiontime=* ]]; then
+                i=$((i+2))
+            else
+                filtered_opts+=("${extra_opts[$i]}")
+                i=$((i+1))
+            fi
+        done
+        extra_opts=("${filtered_opts[@]}")
+    fi
+
     local extra_opts_str=""
     if [ ${#extra_opts[@]} -gt 0 ]; then
       for o in "${extra_opts[@]}"; do

@@ -11,7 +11,7 @@ source ${DIR}/run_benchmarks.sh
 usage() {
     echo "Usage: $0 [--dry-run] [--test]"
     echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
-    echo "  --test     Use a 120s run time and right-size containers to fit this machine."
+    echo "  --test     Use a 60s run time and right-size containers to fit this machine."
 }
 
 dry_run=0
@@ -43,13 +43,17 @@ records=$(config records)
 threads=$(config threads)
 ops_per_thread=0
 
-maxexecutiontime=600
 if [ "$test_run" -eq 1 ]; then
-    maxexecutiontime=120
     original_machine=$(config machine)
-    restore_machine() { sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"; }
-    trap restore_machine EXIT
+    original_maxexecutiontime=$(config maxexecutiontime)
+    restore_test_settings() {
+        sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"
+        sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
+    }
+    trap restore_test_settings EXIT
+    sed -i "s/^maxexecutiontime=.*/maxexecutiontime=60/" "${CONFIG_FILE}"
 fi
+maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
     for p in ${protocols}
