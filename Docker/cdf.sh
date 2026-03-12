@@ -36,6 +36,7 @@ mkdir -p ${LOGDIR}/cdf
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a"
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
+protocols=cockroachdb
 nodes=5
 replication_factor=${nodes}
 cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""

@@ -85,7 +85,7 @@ run_ycsb() {
     local ycsb_threads=${threads}
 
     if [ "$action" == "load" ]; then
-        ycsb_threads=1 # FIXME needed w. CRDB (constraint violation), yet we want a load parallel phase.
+        ycsb_threads=10 # FIXME needed w. CRDB (constraint violation), yet we want a load parallel phase.
     fi
     
     # capture any extra arguments (13th onward) and prepare a safely quoted string
