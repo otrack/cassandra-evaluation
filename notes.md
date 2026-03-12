@@ -467,3 +467,16 @@ By default, this script use the "--test" flag everywhere.
 When moving to the next script, it should track that the previous one went well.
 If not, it takes care of clearing all the docker containers still running and related to the previous experiment, and re-executes the faulty script.
 
+# 12.03 - copilot
+
+Make the following modifications to the plotting scripts:
+- ycsb.py should plot the median latency (not the average) on the y axis.
+Additionally, each bar should include the standard deviation, presented as a small solid line 
+centered horizontally at the tip of the bar.
+The scale of the y axis should be 0 to 500 ms.
+- conflict.py latency_throughput.py, closed_economy.py and swap.py should all plot the median and not the average latency.
+- regarding closed_economy.py and swap.py, reduce the width of the figures, because currently there is a lot of blank space.
+The two figures should fit side-by-side on a column in a two-column paper.
+You may remove the labels for the swap.py plot because they are the exact same as in closed_economy.py.
+
+
