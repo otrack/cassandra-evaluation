@@ -22,7 +22,7 @@ from colors import load_protocol_colors, load_protocol_aliases, get_protocol_col
 MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
 METRIC_COLUMNS = {
-    "avg": "avg_latency_ms",
+    "avg": "median_latency_ms",
     "p90": "p90_ms",
     "p95": "p95_ms",
     "p99": "p99_ms",
@@ -30,7 +30,7 @@ METRIC_COLUMNS = {
     "worst": "worst_latency_ms",
 }
 METRIC_LABELS = {
-    "avg": "Avg",
+    "avg": "Median",
     "p90": "P90",
     "p95": "P95",
     "p99": "P99",
@@ -138,18 +138,15 @@ def percentile_values(row):
     return values
 
 def estimate_row_latency(row):
-    """Estimate mean latency (ms) from percentile columns in a DataFrame row.
+    """Return the median latency (p50) from a DataFrame row.
 
     Args:
         row: Pandas Series/dict containing percentile keys (p1..p100).
 
     Returns:
-        Estimated latency in milliseconds, or None if no valid percentile data exists.
+        Median latency in milliseconds (p50), or None if missing/invalid.
     """
-    vals = percentile_values(row)
-    if not vals:
-        return None
-    return np.mean(vals)
+    return percentile_value(row, 50)
 
 def get_row_best_worst_latency(row):
     """Estimate best and worst latency (ms) from percentile columns in a DataFrame row.
@@ -256,7 +253,7 @@ def main():
 
     df_rmw['nodes_int'] = df_rmw['nodes'].apply(safe_int)
     df_rmw = df_rmw[df_rmw['nodes_int'].notnull()]
-    df_rmw['avg_latency_ms'] = df_rmw.apply(estimate_row_latency, axis=1)
+    df_rmw['median_latency_ms'] = df_rmw.apply(estimate_row_latency, axis=1)
     df_rmw[['best_latency_ms', 'worst_latency_ms']] = df_rmw.apply(
         get_row_best_worst_latency, axis=1, result_type='expand'
     )
@@ -323,7 +320,7 @@ def main():
                                      protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=12cm, height=8cm,\n")
+        f.write("      width=8cm, height=8cm,\n")
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
@@ -373,7 +370,7 @@ def main():
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\label{fig:closed-economy-latency}\n")
         f.write("  \\caption{Closed economy workload latency as a function of the protocol. For each protocol, from left to right, 3, 5 and 7 nodes. "
-                "The markers indicate the average ($\\CIRCLE$), P90 ($\\blacktriangle$), P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles.}\n")
+                "The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$), P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles.}\n")
         f.write("\\end{figure}\n")
 
         # if accord_latencies:

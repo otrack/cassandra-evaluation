@@ -22,28 +22,21 @@ def usage_and_exit():
     sys.exit(1)
 
 
-def row_mean_latency(row):
-    """Compute mean latency from p1..p100 percentiles.
-    
-    Note: This is an approximation. We compute the mean of percentile values
-    to get a rough estimate of average latency. This approach is consistent
-    with other plotting scripts in this codebase (e.g., conflict.py).
+def row_median_latency(row):
+    """Return the median latency (p50) from a DataFrame row.
+
+    p50 is the 50th percentile, i.e. the median latency. This is consistent
+    with other plotting scripts in this codebase (e.g., conflict.py, swap.py).
     """
-    vals = []
-    for i in range(1, 101):
-        key = f"p{i}"
-        v = row.get(key, None)
-        if pd.isna(v):
-            continue
-        if isinstance(v, str) and v.strip().lower() == "unknown":
-            continue
-        try:
-            vals.append(float(v))
-        except Exception:
-            continue
-    if not vals:
+    v = row.get('p50', None)
+    if pd.isna(v):
         return None
-    return float(np.mean(vals))
+    if isinstance(v, str) and v.strip().lower() == "unknown":
+        return None
+    try:
+        return float(v)
+    except Exception:
+        return None
 
 
 def main():
@@ -78,15 +71,15 @@ def main():
         print("No valid data found in results CSV.")
         sys.exit(1)
 
-    # Compute mean latency for each row
-    mean_lats = []
+    # Compute median latency for each row
+    median_lats = []
     for idx, row in df.iterrows():
-        m = row_mean_latency(row)
-        mean_lats.append(m)
-    df['mean_latency_ms'] = mean_lats
+        m = row_median_latency(row)
+        median_lats.append(m)
+    df['median_latency_ms'] = median_lats
 
-    # Drop rows without computed mean latency
-    df = df[df['mean_latency_ms'].notnull()]
+    # Drop rows without computed median latency
+    df = df[df['median_latency_ms'].notnull()]
 
     if df.empty:
         print("No rows with valid latency data.")
@@ -114,7 +107,7 @@ def main():
             df_clients = dfp[dfp['clients_int'] == clients]
             if not df_clients.empty:
                 total_tput = df_clients['tput_f'].sum()
-                avg_lat = df_clients['mean_latency_ms'].mean()
+                avg_lat = df_clients['median_latency_ms'].mean()
                 throughputs.append(total_tput)
                 latencies.append(avg_lat)
             else:
@@ -163,7 +156,7 @@ def main():
         f.write("      width=12cm, height=8cm,\n")
         f.write("      grid=both,\n")
         f.write("      xlabel={Throughput (ops/sec)},\n")
-        f.write("      ylabel={Average Latency (ms)},\n")
+        f.write("      ylabel={Median Latency (ms)},\n")
         f.write(f"      xmin={xmin:.2f}, xmax={xmax:.2f},\n")
         f.write(f"      ymin={ymin:.2f}, ymax={500},\n")
         f.write("      cycle list name=color list,\n")
@@ -181,7 +174,7 @@ def main():
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
-        f.write("  \\caption{Latency vs Throughput: Average operation latency as a function of throughput. ")
+        f.write("  \\caption{Latency vs Throughput: Median operation latency as a function of throughput. ")
         f.write("Each curve represents a protocol; the number of clients increases by a factor of 2 until saturation.}\n")        
         f.write("  \\label{fig:latency-throughput}\n")
         f.write("\\end{figure}\n")
