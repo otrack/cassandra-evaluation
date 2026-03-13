@@ -4,10 +4,13 @@ Plotting script for the YCSB latency experiment.
 
 Generates a grouped bar chart:
   - X-axis: YCSB workloads (A, B, C, D), one group per workload
-  - Y-axis: average latency (ms) averaged over all YCSB clients and all
-    executed operations (read, insert, update, …) for each workload
+  - Y-axis: median latency (ms) — the median of per-row p50 values across all
+    executed operations and all clients for each workload/protocol group
   - One bar per protocol within each group, placed side-by-side
-  - Protocols ordered slowest → fastest (highest → lowest average latency)
+  - Each bar includes a standard deviation indicator (small solid horizontal
+    line centred at the tip of the bar)
+  - Y-axis fixed from 0 to 500 ms
+  - Protocols ordered slowest → fastest (highest → lowest median latency)
   - Protocol name shown at the top of each bar in the first workload group
     only, rotated 45 degrees
   - No legend box in the figure; protocols are identified in the caption
@@ -80,49 +83,51 @@ def main():
         if proto not in protocol_order:
             protocol_order.append(proto)
 
-    # Average latency (ms) per (protocol, workload), averaged across all
-    # executed operations and all clients (cities).
-    # avg_latency_us is in microseconds; divide by 1000 to get ms.
+    # Median latency (ms) per (protocol, workload), computed from the p50 (median)
+    # percentile column across all executed operations and all clients (cities).
+    # p50 values are already in ms — no unit conversion needed.
     # CLEANUP rows are already excluded by parse_ycsb_to_csv.sh, but filter
     # defensively.
     df_lat = df[df['op'].str.lower() != 'cleanup'].copy()
-    df_lat['avg_lat_f'] = df_lat['avg_latency_us'].apply(safe_float)
-    df_lat = df_lat[df_lat['avg_lat_f'].notnull()]
+    df_lat['p50_f'] = df_lat['p50'].apply(safe_float)
+    df_lat = df_lat[df_lat['p50_f'].notnull()]
 
     if df_lat.empty:
-        print("No valid avg_latency_us data found in results CSV.")
+        print("No valid p50 latency data found in results CSV.")
         sys.exit(1)
 
-    lat_means = (
-        df_lat.groupby(['protocol', 'workload_upper'])['avg_lat_f']
-        .mean() / 1000.0  # convert us → ms
-    )
+    # Median and standard deviation of p50 values per (protocol, workload).
+    # p50 is the median latency in ms (no unit conversion needed).
+    grp = df_lat.groupby(['protocol', 'workload_upper'])['p50_f']
+    lat_medians = grp.median()
+    lat_stds = grp.std().fillna(0)
 
     data = {}
     for workload in workloads:
         data[workload] = {}
         for proto in protocol_order:
             try:
-                data[workload][proto] = float(lat_means.loc[proto, workload])
+                median = float(lat_medians.loc[proto, workload])
+                std = float(lat_stds.loc[proto, workload])
             except KeyError:
-                data[workload][proto] = 0.0
+                median = 0.0
+                std = 0.0
+            data[workload][proto] = (median, std)
 
-    # Sort protocols slowest → fastest (highest average latency first) so that
+    # Sort protocols slowest → fastest (highest median latency first) so that
     # within each group the tallest bar is on the left.
-    proto_avg_lat = {
-        proto: sum(data[wl][proto] for wl in workloads) / (len(workloads) or 1)
+    proto_median_lat = {
+        proto: sum(data[wl][proto][0] for wl in workloads) / (len(workloads) or 1)
         for proto in protocol_order
     }
-    protocol_order.sort(key=lambda p: proto_avg_lat[p], reverse=True)
+    protocol_order.sort(key=lambda p: proto_median_lat[p], reverse=True)
 
     # Colours from the unified protocol color schema
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
 
-    # Y-axis upper bound — leave extra headroom for the rotated labels at bar tops
-    LABEL_HEADROOM = 1.6
-    all_vals = [v for wl in data.values() for v in wl.values() if v > 0]
-    ymax = max(all_vals) * LABEL_HEADROOM if all_vals else 1000.0
+    # Y-axis fixed at 0–500 ms as required
+    ymax = 500.0
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
@@ -137,25 +142,22 @@ def main():
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
-        f.write("      ylabel={Average latency (ms)},\n")
+        f.write("      ylabel={Median latency (ms)},\n")
         f.write("      symbolic x coords={" + ",".join(workloads) + "},\n")
         f.write("      xtick=data,\n")
         f.write("      xticklabels={" + ",".join(workloads) + "},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
-        f.write("      every node near coord/.style={\n")
-        f.write("        rotate=45, anchor=south west, inner sep=1pt,\n")
-        f.write("        text=black, font=\\tiny,\n")
-        f.write("      },\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
             col = get_protocol_color(proto, protocol_colors, idx)
             f.write(f"      \\addplot+[fill={col}, draw=black,\n")
-            f.write(f"        nodes near coords, point meta=explicit symbolic,\n")
+            f.write(f"        error bars/.cd, y dir=both, y explicit,\n")
+            f.write(f"        error mark=-, error bar style={{solid, line width=0.8pt}},\n")
             f.write(f"      ] coordinates {{\n")
             for wl_idx, workload in enumerate(workloads):
-                val = data[workload].get(proto, 0.0)
-                f.write(f"        ({workload}, {val:.2f}) []\n")
+                median, std = data[workload].get(proto, (0.0, 0.0))
+                f.write(f"        ({workload}, {median:.2f}) +- (0, {std:.2f})\n")
             f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
@@ -163,7 +165,7 @@ def main():
 
         # Caption: describe the figure without explicit colour swatches
         workloads_str = ", ".join(workloads)
-        f.write(f"  \\caption{{Average operation latency (averaged across all clients and all executed operations) for YCSB workloads {workloads_str}.}}\n")
+        f.write(f"  \\caption{{Median operation latency (median across all clients and all executed operations) for YCSB workloads {workloads_str}. Error bars show the standard deviation.}}\n")
         f.write("  \\label{fig:ycsb-latency}\n")
         f.write("\\end{figure}\n")
 

@@ -12,22 +12,16 @@ def usage_and_exit():
     print("Usage: python conflict.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex")
     sys.exit(1)
 
-def row_mean_latency(row):
-    vals = []
-    for i in range(1, 101):
-        key = f"p{i}"
-        v = row.get(key, None)
-        if pd.isna(v):
-            continue
-        if isinstance(v, str) and v.strip().lower() == "unknown":
-            continue
-        try:
-            vals.append(float(v))
-        except Exception:
-            continue
-    if not vals:
+def row_median_latency(row):
+    v = row.get('p50', None)
+    if pd.isna(v):
         return None
-    return float(np.mean(vals))
+    if isinstance(v, str) and v.strip().lower() == "unknown":
+        return None
+    try:
+        return float(v)
+    except Exception:
+        return None
 
 def compute_optimum_per_replica(latlon, n_nodes):
     """
@@ -125,15 +119,15 @@ def main():
         print("No valid rows with a numeric conflict_rate found. Exiting.")
         sys.exit(0)
 
-    # Compute per-row mean latency (ms) from p1..p100 percentiles
-    mean_lats = []
+    # Compute per-row median latency (ms) from p50 percentile
+    median_lats = []
     for idx, row in df_valid.iterrows():
-        m = row_mean_latency(row)
-        mean_lats.append(m)
-    df_valid['mean_latency_ms'] = mean_lats
+        m = row_median_latency(row)
+        median_lats.append(m)
+    df_valid['median_latency_ms'] = median_lats
 
-    # Drop rows without computed mean
-    df_valid = df_valid[df_valid['mean_latency_ms'].notnull()]
+    # Drop rows without computed median
+    df_valid = df_valid[df_valid['median_latency_ms'].notnull()]
 
     # Determine protocol order (stable)
     protocol_order = []
@@ -144,7 +138,7 @@ def main():
     # x-axis: conflict rates from 0.0 to 0.1 step 0.01
     x_values = [round(x, 2) for x in np.arange(0.0, 0.1001, 0.01)]
 
-    # For each protocol, compute average mean_latency_ms per conflict rate
+    # For each protocol, compute average median_latency_ms per conflict rate
     data_by_protocol = {}
     for proto in protocol_order:
         dfp = df_valid[df_valid['protocol'] == proto]
@@ -158,7 +152,7 @@ def main():
             if df_rate.empty:
                 rates.append(None)
             else:
-                rates.append(float(df_rate['mean_latency_ms'].mean()))
+                rates.append(float(df_rate['median_latency_ms'].mean()))
         data_by_protocol[proto] = rates
 
     # For each protocol, compute average failed percentage per conflict rate
@@ -317,7 +311,7 @@ def main():
         f.write("      grid=both,\n")
         f.write("      xlabel={Conflict rate ($\\theta$)},\n")
         f.write("      ymode=log,\n")
-        f.write("      ylabel={Average latency (ms)},\n")
+        f.write("      ylabel={Median latency (ms)},\n")
         f.write("      xmin=0, xmax=0.1,\n")
         f.write(f"     ymin={0:.2f}, ymax={ymax:.2f},\n")
         f.write("      xtick={0,0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,0.1},\n")
@@ -384,7 +378,7 @@ def main():
         # include data replica location in caption (third entry in latencies.csv if present)
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
-        f.write("  \\caption{Average operation latency across all locations as a function of the conflict parameter ($\\theta$).")
+        f.write("  \\caption{Median operation latency across all locations as a function of the conflict parameter ($\\theta$).")
         # f.write(data_cities_caption)
         f.write("}\n")
         f.write("  \\label{fig:conflict-latency}\n")
