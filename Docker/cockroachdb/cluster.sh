@@ -12,7 +12,8 @@ cockroachdb_start_cluster() {
     local image=$(config cockroachdb_image)
     local network=$(config "network_name")
     local resource_limits
-    resource_limits=$(get_resource_limits)
+    local resource_limits=$(get_resource_limits)
+    local max_mem_gb=$(echo ${resource_limits} | awk '{for(i=1;i<=NF;i++) if($i=="--memory") {v=$(i+1); printf "%.0f\n", (tolower(v)~/m/ ? (v+0)/1024 : (v+0))}}')
     
     log "Starting CockroachDB cluster with ${node_count} node(s)..."
     
@@ -21,7 +22,7 @@ cockroachdb_start_cluster() {
     # Note: Using "--" to separate Docker options from container command
     start_container ${image} ${first_node} "initial startup completed" ${LOGDIR}/cockroachdb_node1.log \
         --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
-        -- start --insecure --join=${first_node} || {
+        -- start --insecure --store=type=mem,size=${max_mem_gb}GB --join=${first_node} || {
         error "Failed to start first CockroachDB node"
         return 1
     }
@@ -40,7 +41,7 @@ cockroachdb_start_cluster() {
         # Note: Using "--" to separate Docker options from container command
         start_container ${image} ${container_name} "nodeID" ${LOGDIR}/cockroachdb_node${i}.log \
             --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
-            -- start --insecure --join=${first_ip} || {
+            -- start --insecure --store=type=mem,size=${max_mem_gb}GB --join=${first_ip} || {
             error "Failed to start CockroachDB node ${i}"
             return 3
         }
