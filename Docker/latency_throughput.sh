@@ -80,14 +80,14 @@ if [ "$dry_run" -eq 0 ]; then
             
             # Clean up after the last iteration of each protocol's thread sequence
             # This ensures we start fresh for the next protocol
-            do_clean_up=1
+            do_clean_up=0
             next_threads=$((threads * 2))
             if [ ${next_threads} -gt ${max_threads} ]; then
                 do_clean_up=1
             fi
             
             run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=${maxexecutiontime}
-            do_create_and_load=1
+            do_create_and_load=0
 
             # Check if average latency exceeded 1s (500 ms); if so, stop increasing threads
 	    city=$(cat latencies.csv | head -n 2 | tail -n 1 | awk -F, '{print $3}')
