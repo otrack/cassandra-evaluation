@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# In this workload, we change a parameter theta to increase the conflict rate from 0 to 0.1, by step of 0.01.
+# In this workload, we change a parameter theta to increase the conflict rate from 0 to 1.0, by step of 0.1.
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
 
@@ -34,7 +34,7 @@ done
 mkdir -p ${LOGDIR}/conflict
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
-thetas=$(seq -f "%.2f" 0 0.01 0.1)
+thetas=$(seq -f "%.2f" 0 0.1 1.0)
 workload="a" # this does not matter
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
 nodes=5

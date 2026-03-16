@@ -135,8 +135,8 @@ def main():
         if proto not in protocol_order:
             protocol_order.append(proto)
 
-    # x-axis: conflict rates from 0.0 to 0.1 step 0.01
-    x_values = [round(x, 2) for x in np.arange(0.0, 0.1001, 0.01)]
+    # x-axis: conflict rates from 0.0 to 1.0 step 0.1
+    x_values = [round(x, 1) for x in np.arange(0.0, 1.001, 0.1)]
 
     # For each protocol, compute average median_latency_ms per conflict rate
     data_by_protocol = {}
@@ -312,10 +312,10 @@ def main():
         f.write("      xlabel={Conflict rate ($\\theta$)},\n")
         f.write("      ymode=log,\n")
         f.write("      ylabel={Median latency (ms)},\n")
-        f.write("      xmin=0, xmax=0.1,\n")
+        f.write("      xmin=0, xmax=1.0,\n")
         f.write(f"     ymin={0:.2f}, ymax={ymax:.2f},\n")
-        f.write("      xtick={0,0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,0.1},\n")
-        f.write("      xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=2},\n")
+        f.write("      xtick={0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0},\n")
+        f.write("      xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=1},\n")
         f.write("      cycle list name=color list,\n")
         f.write("    ]\n\n")
 
@@ -357,7 +357,7 @@ def main():
                 # Choose anchor to avoid clipping at the left (x=0) and right (x=1) axis edges
                 if abs(x) < 1e-9:
                     anchor = "above right"
-                elif abs(x - 0.1) < 1e-9:
+                elif abs(x - 1.0) < 1e-6:
                     anchor = "above left"
                 else:
                     anchor = "above"
@@ -372,7 +372,7 @@ def main():
             # draw a horizontal line from x=0 to x=1 at the average optimum value
             f.write(f"      \\addplot+[gray, dashed, thick] table {{\n")
             f.write(f"        0.00 {avg_optimum:.2f}\n")
-            f.write(f"        0.10 {avg_optimum:.2f}\n")
+            f.write(f"        1.00 {avg_optimum:.2f}\n")
             f.write("      };\n")
 
         # include data replica location in caption (third entry in latencies.csv if present)
