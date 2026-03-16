@@ -39,8 +39,8 @@ workload="a" # this does not matter
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
 nodes=5
 replication_factor=${nodes}
-records=$(config records)
 threads=$(config threads)
+records=10000 # at least one per thread * DC plus one
 ops_per_thread=0
 
 if [ "$test_run" -eq 1 ]; then
