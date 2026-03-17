@@ -7,7 +7,8 @@ COCKROACHDB_YCSB_DIR=$(dirname "${BASH_SOURCE[0]}")
 cockroachdb_create_usertable() {
     local num_fields="$1"
     local replication_factor="$2"
-    local workload="$3"
+    local node_count="$3"
+    local workload="$4"
 
     if [[ -z "$num_fields" || -z "$replication_factor" ]]; then
         error "Usage: cockroachdb_create_usertable <num_fields> <replication_factor>"
@@ -52,5 +53,12 @@ cockroachdb_create_usertable() {
     else
         error "Error setting zone config (num_replicas=${replication_factor})."
         exit 1
+    fi
+
+    # Use a single shard?
+    if [ "$replication_factor" == "$node_count" ];
+    then
+	local shard_command="ALTER TABLE usertable CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 1073741824;"
+	docker exec "${container}" cockroach sql --insecure -e "${shard_command}"
     fi
 }

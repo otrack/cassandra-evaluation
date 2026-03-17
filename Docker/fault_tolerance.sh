@@ -43,11 +43,11 @@ duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (conf
 protocols="accord cockroachdb"
 nodes=3
 replication_factor=3
-workload_type="site.ycsb.workloads.CoreWorkload"
+workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.02
-workload="c"
-records=1000
-threads=100
+workload="a" # does not matter
+records=$(config records)
+threads=$(config threads)
 status_interval=1   # YCSB -s reporting interval in seconds
 
 if [ "$test_run" -eq 1 ]; then
