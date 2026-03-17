@@ -64,8 +64,8 @@ slowdown_end_s=$((slowdown_s + duration_s / 8))
 crash_s=$((3 * duration_s / 4))
 
 log "Fault-tolerance experiment: ${duration_minutes}min total"
-log "  Slowdown (+400ms latency on database-node1) from ${slowdown_s}s to ${slowdown_end_s}s"
-log "  Crash (docker kill database-node1 and ycsb-1) at ${crash_s}s"
+log "  Slowdown (+400ms latency on the leader(s)) from ${slowdown_s}s to ${slowdown_end_s}s"
+log "  Crash (docker kill the leader(s) and ycsb-1) at ${crash_s}s"
 
 if [ "$dry_run" -eq 0 ]; then
     for protocol in ${protocols}; do
@@ -123,31 +123,36 @@ if [ "$dry_run" -eq 0 ]; then
 	        -p conflict.theta=${theta}
         done
 
-        # Event 1: at X/4, add 400ms latency to database-node1 outbound traffic
+        # Event 1: at X/4, add 400ms latency to the leader(s) outbound traffic
         (
             sleep ${slowdown_s}
-            node1=$(config "node_name")1
-            log "Event 1 @ ${slowdown_s}s: Adding 400ms latency to ${node1}"
-            docker exec "${node1}" tc qdisc del dev eth0 root 2>/dev/null || true
-            docker exec "${node1}" tc qdisc add dev eth0 root netem delay 400ms
+            leaders=$(${pref}_get_leaders "${protocol}")
+            for leader in ${leaders}; do
+                log "Event 1 @ ${slowdown_s}s: Adding 400ms latency to ${leader}"
+                docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
+                docker exec "${leader}" tc qdisc add dev eth0 root netem delay 400ms
+            done
         ) &
         event1_pid=$!
 
-        # Event 1b: at X/4+X/8, remove the slowdown from database-node1
+        # Event 1b: at X/4+X/8, remove the slowdown from the leader(s)
         (
             sleep ${slowdown_end_s}
-            node1=$(config "node_name")1
-            log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${node1}"
-            docker exec "${node1}" tc qdisc del dev eth0 root 2>/dev/null || true
+            leaders=$(${pref}_get_leaders "${protocol}")
+            for leader in ${leaders}; do
+                log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${leader}"
+                docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
+            done
         ) &
         event1b_pid=$!
 
-        # Event 2: at 3X/4, pause database-node1 (to mimick an actual crash)
+        # Event 2: at 3X/4, kill the leader(s) (to mimick an actual crash)
         (
             sleep ${crash_s}
-            node1=$(config "node_name")1
-            log "Event 2 @ ${crash_s}s: Killing ${node1} and ycsb-1"
-            docker kill --signal=9 "${node1}" "ycsb-1" # mimick a crash
+            leaders=$(${pref}_get_leaders "${protocol}")
+            leaders_list=$(echo "${leaders}" | tr '\n' ' ' | sed 's/ $//')
+            log "Event 2 @ ${crash_s}s: Killing [${leaders_list}] and ycsb-1"
+            docker kill --signal=9 ${leaders} "ycsb-1" # mimick a crash
         ) &
         event2_pid=$!
 

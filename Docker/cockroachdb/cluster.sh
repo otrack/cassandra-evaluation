@@ -94,3 +94,17 @@ cockroachdb_get_port() {
     local port=26257
     echo ${port}
 }
+
+cockroachdb_get_leaders() {
+    # Returns all containers that hold at least one leaseholder for a range of
+    # the usertable.  The lease_holder column in crdb_internal.ranges is a
+    # node-ID (1-based integer) which maps directly to the container name.
+    local container="$(config "node_name")1"
+    local node_ids
+    node_ids=$(docker exec "${container}" cockroach sql --insecure --format=csv \
+        -e "SELECT DISTINCT lease_holder FROM crdb_internal.ranges WHERE table_name = 'usertable';" \
+        2>/dev/null | tail -n +2 | tr -d '[:space:]')
+    for node_id in ${node_ids}; do
+        echo "$(config "node_name")${node_id}"
+    done
+}

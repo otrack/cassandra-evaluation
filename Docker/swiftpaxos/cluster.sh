@@ -72,3 +72,25 @@ swiftpaxos_get_port() {
     local port=7087 # master
     echo ${port}
 }
+
+swiftpaxos_get_leaders() {
+    # For the paxos sub-protocol, find the leader by scanning container logs for
+    # the message "I am the leader".  For other sub-protocols (epaxos, curp, …)
+    # there is no single leader; fall back to database-node1.
+    local sub_protocol
+    sub_protocol=$(echo "$1" | awk -F- '{print $2}')
+    if [ "${sub_protocol}" = "paxos" ]; then
+        local node_count
+        node_count=$(swiftpaxos_get_node_count)
+        for i in $(seq 1 "${node_count}"); do
+            local container_name
+            container_name="$(config "node_name")${i}"
+            if docker logs --tail 1000 "${container_name}" 2>&1 | grep -q "I am the leader"; then
+                echo "${container_name}"
+                return
+            fi
+        done
+    fi
+    # Default: node 1
+    echo "$(config "node_name")1"
+}
