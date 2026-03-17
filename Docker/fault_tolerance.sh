@@ -41,15 +41,13 @@ mkdir -p ${LOGDIR}/fault_tolerance
 # Configuration
 duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
 protocols="accord cockroachdb"
-nodes=7
+nodes=3
 replication_factor=3
-workload_type="site.ycsb.workloads.ConflictWorkload"
-workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
+workload_type="site.ycsb.workloads.CoreWorkload"
 theta=0.02
-workload="a" # does not matter
-workload="ce"
-records=$(config records)
-threads=$(config threads)
+workload="c"
+records=1000
+threads=100
 status_interval=1   # YCSB -s reporting interval in seconds
 
 if [ "$test_run" -eq 1 ]; then
