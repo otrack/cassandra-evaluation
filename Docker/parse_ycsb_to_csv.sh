@@ -11,7 +11,7 @@ header="protocol,nodes,workload,conflict_rate,city,op,clients,tput,avg_latency_u
 for p in $(seq 1 100); do
     header="$header,p$p"
 done
-header="$header,failed"
+header="$header,failed,fast_path,medium_path,slow_path,ephemeral_path"
 echo "$header"
 
 # Process a single file, outputting CSV rows
@@ -25,15 +25,38 @@ process_file() {
         local protocol="${BASH_REMATCH[1]}"
         local nodes="${BASH_REMATCH[2]}"
         local workload="${BASH_REMATCH[3]}"
+        local timestamp="${BASH_REMATCH[4]}"
         local city="${BASH_REMATCH[5]}"
     else
         error "Ignoring ${filename}"
         return
     fi
 
+    # Read fast path ratios from the corresponding _fast_path_ratio.dat file
+    local dir
+    dir=$(dirname "$file")
+    local ratio_file="${dir}/${protocol}_${nodes}_${workload}_${timestamp}.dat_fast_path_ratio.dat"
+    local fast_path="NA"
+    local medium_path="NA"
+    local slow_path="NA"
+    local ephemeral_path="NA"
+    if [ -f "${ratio_file}" ]; then
+        local val
+        val=$(grep "^Fast ratio:" "${ratio_file}" | awk '{print $3}')
+        [ -n "${val}" ] && fast_path="${val}"
+        val=$(grep "^Medium ratio:" "${ratio_file}" | awk '{print $3}')
+        [ -n "${val}" ] && medium_path="${val}"
+        val=$(grep "^Slow ratio:" "${ratio_file}" | awk '{print $3}')
+        [ -n "${val}" ] && slow_path="${val}"
+        val=$(grep "^Ephemeral ratio:" "${ratio_file}" | awk '{print $3}')
+        [ -n "${val}" ] && ephemeral_path="${val}"
+    fi
+
     # Single awk pass: extract all needed values and generate CSV rows
     awk -v protocol="$protocol" -v nodes="$nodes" \
-        -v workload="$workload" -v city="$city" '
+        -v workload="$workload" -v city="$city" \
+        -v fast_path="$fast_path" -v medium_path="$medium_path" \
+        -v slow_path="$slow_path" -v ephemeral_path="$ephemeral_path" '
     BEGIN {
         clients       = "unknown"
         conflict_rate = "NA"
@@ -160,7 +183,7 @@ process_file() {
                 fail = (op in op_fail) ? op_fail[op] : 0
                 total = succ + fail
                 if (total > 0) failed_pct = fail / total * 100
-                print row "," sprintf("%.4f", failed_pct)
+                print row "," sprintf("%.4f", failed_pct) "," fast_path "," medium_path "," slow_path "," ephemeral_path
             }
         }
     }
