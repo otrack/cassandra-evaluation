@@ -537,3 +537,7 @@ The Docker/run_benchmark.sh script now reports the ratio of fast/medium/slow/eph
 (See the comment "Compute special execution path ratios" and lines below it in the script.)
 Add this information to the cvs file extracted from the logs with parse_ycsb_to_csv.sh.
 It can be added in the form of four columns "fast_path,medium_path,slow_path,ephemeral_path" after the "failed" column.
+
+# 17.03
+
+When injecting a slowdown (event 1) in /Docker/fault_tolerance.sh, the previous tc policies should be saved and later restored when the slowdown disappears (event 2).

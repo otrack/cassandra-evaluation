@@ -75,6 +75,6 @@ cassandra_get_port() {
 }
 
 cassandra_get_leaders() {
-    # Cassandra has no single designated leader; use database-node1 by convention.
-    echo "$(config "node_name")1"
+    # Cassandra has no single designated leader; use database-node3 by convention.
+    echo "$(config "node_name")3"
 }

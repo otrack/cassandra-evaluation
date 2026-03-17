@@ -139,10 +139,10 @@ if [ "$dry_run" -eq 0 ]; then
         log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${leader}"
         docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
 
-        # Event 2: at 3X/4, kill leader (to mimick an actual crash)
+        # Event 2: at 3X/4, suspend leader (to mimick an actual crash)
         sleep ${crash_s}
-        log "Event 2 @ ${crash_s}s: Killing ${leader} and ycsb-1"
-        docker kill --signal=9 ${leader} "ycsb-1" # mimick a crash
+        log "Event 2 @ ${crash_s}s: Killing ${leader}"
+        docker kill --signal=19 ${leader}
 
         # Wait for all YCSB clients to complete
         for i in $(seq 1 ${node_count}); do

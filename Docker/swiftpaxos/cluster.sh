@@ -91,6 +91,6 @@ swiftpaxos_get_leaders() {
             fi
         done
     fi
-    # Default: node 1
-    echo "$(config "node_name")1"
+    # Default: node 3
+    echo "$(config "node_name")3"
 }
