@@ -58,6 +58,8 @@ if [ "$test_run" -eq 1 ]; then
     compute_test_machine "${nodes}"
 fi
 
+duration_minutes=$((duration_minutes +1)) # to account for the warm-up time
+
 duration_s=$((duration_minutes * 60))
 slowdown_s=$((duration_s / 4))
 slowdown_end_s=$((slowdown_s + duration_s / 8))
@@ -120,7 +122,8 @@ if [ "$dry_run" -eq 0 ]; then
                 "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
                 -p maxexecutiontime=${duration_s} \
                 -p status.interval=${status_interval} \
-	        -p conflict.theta=${theta}
+	        -p conflict.theta=${theta} \
+		-p warmupexecutiontime=60
         done
 	
         # Event 1: at X/4, add 400ms latency to (some) leader outbound traffic
