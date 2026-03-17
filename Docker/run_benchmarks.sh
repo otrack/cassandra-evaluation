@@ -313,43 +313,43 @@ run_benchmark() {
 	wait_container "ycsb-${i}"
     done
 
+    # Compute special execution path ratios
     local fast_path_script="${DIR}/${pref}/${pref}_fast_path.sh"
-    if [ -f "${fast_path_script}" ]; then
-	local fast_ratio_sum=0
-	local medium_ratio_sum=0
-	local slow_ratio_sum=0
-	local ephemeral_ratio_sum=0
-	local ratio_count=0
 
-	for i in $(seq 1 1 ${node_count}); do
-	    container_name=$(config "node_name")$i
-	    fp_output=$("${fast_path_script}" "${container_name}" 2>/dev/null) || true
+    local fast_ratio_sum=0
+    local medium_ratio_sum=0
+    local slow_ratio_sum=0
+    local ephemeral_ratio_sum=0
+    local ratio_count=0
 
-	    fp_fast=$(echo "$fp_output" | grep "^Fast ratio:" | awk '{print $3}')
-	    fp_medium=$(echo "$fp_output" | grep "^Medium ratio:" | awk '{print $3}')
-	    fp_slow=$(echo "$fp_output" | grep "^Slow ratio:" | awk '{print $3}')
-	    fp_ephemeral=$(echo "$fp_output" | grep "^Ephemeral ratio:" | awk '{print $3}')
+    for i in $(seq 1 1 ${node_count}); do
+	container_name=$(config "node_name")$i
+	fp_output=$("${fast_path_script}" "${container_name}" 2>/dev/null) || true
 
-	    fp_fast=${fp_fast:-0}
-	    fp_medium=${fp_medium:-0}
-	    fp_slow=${fp_slow:-0}
-	    fp_ephemeral=${fp_ephemeral:-0}
+	fp_fast=$(echo "$fp_output" | grep "^Fast ratio:" | awk '{print $3}')
+	fp_medium=$(echo "$fp_output" | grep "^Medium ratio:" | awk '{print $3}')
+	fp_slow=$(echo "$fp_output" | grep "^Slow ratio:" | awk '{print $3}')
+	fp_ephemeral=$(echo "$fp_output" | grep "^Ephemeral ratio:" | awk '{print $3}')
 
-	    fast_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${fast_ratio_sum} + ${fp_fast}}")
-	    medium_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${medium_ratio_sum} + ${fp_medium}}")
-	    slow_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${slow_ratio_sum} + ${fp_slow}}")
-	    ephemeral_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${ephemeral_ratio_sum} + ${fp_ephemeral}}")
-	    ratio_count=$((ratio_count + 1))
-	done
+	fp_fast=${fp_fast:-0}
+	fp_medium=${fp_medium:-0}
+	fp_slow=${fp_slow:-0}
+	fp_ephemeral=${fp_ephemeral:-0}
 
-	if [ $ratio_count -gt 0 ]; then
-	    {
-		echo "Fast ratio: $(awk "BEGIN {printf \"%.4f\", ${fast_ratio_sum} / ${ratio_count}}")"
-		echo "Medium ratio: $(awk "BEGIN {printf \"%.4f\", ${medium_ratio_sum} / ${ratio_count}}")"
-		echo "Slow ratio: $(awk "BEGIN {printf \"%.4f\", ${slow_ratio_sum} / ${ratio_count}}")"
-		echo "Ephemeral ratio: $(awk "BEGIN {printf \"%.4f\", ${ephemeral_ratio_sum} / ${ratio_count}}")"
-	    } > "${output_file}_fast_path_ratio.dat"
-	fi
+	fast_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${fast_ratio_sum} + ${fp_fast}}")
+	medium_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${medium_ratio_sum} + ${fp_medium}}")
+	slow_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${slow_ratio_sum} + ${fp_slow}}")
+	ephemeral_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${ephemeral_ratio_sum} + ${fp_ephemeral}}")
+	ratio_count=$((ratio_count + 1))
+    done
+
+    if [ $ratio_count -gt 0 ]; then
+	{
+	    echo "Fast ratio: $(awk "BEGIN {printf \"%.4f\", ${fast_ratio_sum} / ${ratio_count}}")"
+	    echo "Medium ratio: $(awk "BEGIN {printf \"%.4f\", ${medium_ratio_sum} / ${ratio_count}}")"
+	    echo "Slow ratio: $(awk "BEGIN {printf \"%.4f\", ${slow_ratio_sum} / ${ratio_count}}")"
+	    echo "Ephemeral ratio: $(awk "BEGIN {printf \"%.4f\", ${ephemeral_ratio_sum} / ${ratio_count}}")"
+	} > "${output_file%.dat}_fast_path_ratio.dat"
     fi
 
     if [ $do_clean_up == "1" ];

@@ -517,3 +517,23 @@ Ephemeral ratio: 0.0
 For each such ratio, compute the average over all the containers.
 Then, these ratios are stored under ${output_file}_fast_path_ratio.dat.
 
+# 17.03
+
+In Docker/fault_tolerance.sh, the script slows down then crashes database-node1.
+This is arbitrary.
+Instead, we want that such events are applied to a leader of the replication protocol.
+
+For each of the replication protocol familly, i.e., cassandra, cockraochdb, and swiftpaxos, add a function family_get_leaders() in family/cluster.sh.
+This function takes as input the protocol used in the family.
+It returns the container hosting a leader (there might be many) of the replication protocol.
+More precisely,
+- for cockroachdb, it returns all the containers which one lease holder for a range of the usertable table (created in cockroachdb/ycsb.sh).
+- for swiftpaxos, if the protocol used is paxos, it should return the leader by parsing the log of all the containers, looking for the message "I am the leader"
+- for cassandra, this can be database-node1, as previously
+
+# 17.03
+
+The Docker/run_benchmark.sh script now reports the ratio of fast/medium/slow/ephemeral paths for each protocol.
+(See the comment "Compute special execution path ratios" and lines below it in the script.)
+Add this information to the cvs file extracted from the logs with parse_ycsb_to_csv.sh.
+It can be added in the form of four columns "fast_path,medium_path,slow_path,ephemeral_path" after the "failed" column.

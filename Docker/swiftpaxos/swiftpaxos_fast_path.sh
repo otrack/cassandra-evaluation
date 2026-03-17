@@ -9,7 +9,7 @@ LAST_LINE=$(docker logs "$CONTAINER_ID" 2>&1 | grep -E "weird [0-9]+; conflicted
 if [ -z "$LAST_LINE" ]; then
     echo "Fast ratio: 0.0"
     echo "Medium ratio: 0.0"
-    echo "Slow ratio: 0.0"
+    echo "Slow ratio: 1.0"
     echo "Ephemeral ratio: 0.0"
     exit 0
 fi
@@ -30,6 +30,6 @@ if [ "$TOTAL" -gt 0 ]; then
 else
     echo "Fast ratio: 0.0"
     echo "Medium ratio: 0.0"
-    echo "Slow ratio: 0.0"
+    echo "Slow ratio: 1.0"
     echo "Ephemeral ratio: 0.0"
 fi
