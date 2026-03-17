@@ -44,10 +44,10 @@ protocols="accord cockroachdb"
 nodes=3
 replication_factor=3
 workload_type="site.ycsb.workloads.ConflictWorkload"
-theta=0.02
+theta=0.01
 workload="a" # does not matter
-records=$(config records)
-threads=$(config threads)
+records=10000
+threads=100
 status_interval=1   # YCSB -s reporting interval in seconds
 
 if [ "$test_run" -eq 1 ]; then
