@@ -130,14 +130,22 @@ if [ "$dry_run" -eq 0 ]; then
         sleep ${slowdown_s}
 	leader=$(${pref}_get_leaders "${protocol}" | head -n 1)
 	log "Chosen leader is ${leader}"
+        # Save the leader's current tc policies before injecting the slowdown so
+        # they can be restored when the slowdown disappears.
+        docker exec "${leader}" bash -c \
+            "tc qdisc show dev eth0 > /tmp/tc_qdisc_save.txt && \
+             tc filter show dev eth0 2>/dev/null > /tmp/tc_filter_save.txt" \
+            || log "Warning: failed to save tc policies for ${leader}; restore after slowdown may be incomplete"
         log "Event 1 @ ${slowdown_s}s: Adding 400ms latency to ${leader}"
         docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
         docker exec "${leader}" tc qdisc add dev eth0 root netem delay 400ms
 
-        # Event 1b: at X/4+X/8, remove the slowdown from leader
+        # Event 1b: at X/4+X/8, remove the slowdown from leader and restore the
+        # tc policies that were in effect before the slowdown was injected.
         sleep ${slowdown_end_s}
-        log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${leader}"
+        log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${leader} and restoring tc policies"
         docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
+        python3 ${DIR}/restore_tc.py "${leader}"
 
         # Event 2: at 3X/4, suspend leader (to mimick an actual crash)
         sleep ${crash_s}
