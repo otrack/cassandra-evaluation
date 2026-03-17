@@ -126,7 +126,7 @@ run_ycsb() {
 	    true
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
 	then
-	    cockroachdb_create_usertable 10 "$replication_factor" "$workload_type"
+	    cockroachdb_create_usertable 10 "$replication_factor" "$node_count" "$workload_type"
 	else
 	    # Determine transaction mode
 	    local transaction_mode="bruh"
@@ -330,7 +330,6 @@ stop_benchmark() {
 
     protocol=$1
     node_count=$2
-
 
     pref=cassandra
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos"; then	
