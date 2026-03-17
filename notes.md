@@ -479,4 +479,41 @@ The scale of the y axis should be 0 to 500 ms.
 The two figures should fit side-by-side on a column in a two-column paper.
 You may remove the labels for the swap.py plot because they are the exact same as in closed_economy.py.
 
+# 17.03 - copilot
+
+Some replication protocols use special paths to execute client commands.
+The goal of this work is to update the experiments in /Docker to return this information.
+More precisely,
+
+- Create a script swiftpaxos/swiftpaxos_fast_path.sh to extract such an information for the protocols implemented by the swiftpaxos library.
+This script is modelled after accord_fast_path.sh.
+It returns the ratio of fast path by fetching the log of the container passed as an argument.
+In the log, the replication protocol ouputs information in the following form: 
+
+2026/03/17 13:26:50 weird 0; conflicted 1200; slow 0; fast 17329
+2026/03/17 13:26:51 weird 0; conflicted 1309; slow 0; fast 17331
+...
+
+Only the last line matters because it contains the most recent observation.
+The script extracts ratios that read as follows:
+
+Fast ratio: 0.927
+Medium ratio: 0.0
+Slow ratio: 0.073
+Ephemeral ratio: 0.0
+
+The fast ratio corresponds to fast / (slow + fast).
+The slow path ratio is computed similarly.
+The other two ratios are not computed by swiftpaxos, hence their values is set to 0.0.
+
+- Create a script cockroachdb/cockroachdb_fast_path.sh that always returns:
+
+Fast ratio: 0.0
+Medium ratio: 0.0
+Slow ratio: 1.0
+Ephemeral ratio: 0.0
+
+- In Docker/run_benchmark.sh, at the bottom of run_benchmark() call the scripts to fetch the ephemeral/fast/medium/slow path ratios for each of the container.
+For each such ratio, compute the average over all the containers.
+Then, these ratios are stored under ${output_file}_fast_path_ratio.dat.
 
