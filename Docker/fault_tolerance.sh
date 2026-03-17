@@ -118,12 +118,12 @@ if [ "$dry_run" -eq 0 ]; then
             nearby_database=$(config "node_name")${i}
             location=$(get_location $i ${DIR}/latencies.csv)
             run_ycsb "run" "${workload_type}" "${workload}" "${hosts}" "${port}" \
-                "${records}" 999999999 "${protocol}" "${replication_factor}" \
+                "${records}" 0 "${protocol}" "${replication_factor}" \
                 "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
                 -p maxexecutiontime=${duration_s} \
                 -p status.interval=${status_interval} \
 	        -p conflict.theta=${theta} \
-		-p warmupexecutiontime=60
+		-p warmupexecutiontime=60 &
         done
 	
         # Event 1: at X/4, add 400ms latency to (some) leader outbound traffic
