@@ -39,8 +39,9 @@ done
 mkdir -p ${LOGDIR}/fault_tolerance
 
 # Configuration
-duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
+duration_minutes=${DURATION_MINUTES:-4}    # X: total duration in minutes (configurable)
 protocols="accord cockroachdb"
+protocols="cockroachdb"
 nodes=3
 replication_factor=3
 workload_type="site.ycsb.workloads.ConflictWorkload"
@@ -100,6 +101,9 @@ if [ "$dry_run" -eq 0 ]; then
             exit 1
         fi
 
+        leader=$(${pref}_get_leaders "${protocol}" | head -n 1)
+	log "Chosen leader is ${leader}"
+	
         # Load YCSB data
         nearby_database=$(config "node_name")1
         run_ycsb "load" "${workload_type}" "${workload}" "${hosts}" "${port}" \
@@ -122,37 +126,29 @@ if [ "$dry_run" -eq 0 ]; then
                 -p status.interval=${status_interval} \
 	        -p conflict.theta=${theta}
         done
-
-        # Event 1: at X/4, add 400ms latency to the leader(s) outbound traffic
+	
+        # Event 1: at X/4, add 400ms latency to (some) leader outbound traffic
         (
             sleep ${slowdown_s}
-            leaders=$(${pref}_get_leaders "${protocol}")
-            for leader in ${leaders}; do
-                log "Event 1 @ ${slowdown_s}s: Adding 400ms latency to ${leader}"
-                docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
-                docker exec "${leader}" tc qdisc add dev eth0 root netem delay 400ms
-            done
+            log "Event 1 @ ${slowdown_s}s: Adding 400ms latency to ${leader}"
+            docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
+            docker exec "${leader}" tc qdisc add dev eth0 root netem delay 400ms
         ) &
         event1_pid=$!
 
-        # Event 1b: at X/4+X/8, remove the slowdown from the leader(s)
+        # Event 1b: at X/4+X/8, remove the slowdown from leader
         (
             sleep ${slowdown_end_s}
-            leaders=$(${pref}_get_leaders "${protocol}")
-            for leader in ${leaders}; do
-                log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${leader}"
-                docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
-            done
+            log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${leader}"
+            docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
         ) &
         event1b_pid=$!
 
-        # Event 2: at 3X/4, kill the leader(s) (to mimick an actual crash)
+        # Event 2: at 3X/4, kill leader (to mimick an actual crash)
         (
             sleep ${crash_s}
-            leaders=$(${pref}_get_leaders "${protocol}")
-            leaders_list=$(echo "${leaders}" | tr '\n' ' ' | sed 's/ $//')
-            log "Event 2 @ ${crash_s}s: Killing [${leaders_list}] and ycsb-1"
-            docker kill --signal=9 ${leaders} "ycsb-1" # mimick a crash
+            log "Event 2 @ ${crash_s}s: Killing ${leader} and ycsb-1"
+            docker kill --signal=9 ${leader} "ycsb-1" # mimick a crash
         ) &
         event2_pid=$!
 
