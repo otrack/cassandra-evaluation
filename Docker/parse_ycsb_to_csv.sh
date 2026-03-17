@@ -35,7 +35,7 @@ process_file() {
     # Read fast path ratios from the corresponding _fast_path_ratio.dat file
     local dir
     dir=$(dirname "$file")
-    local ratio_file="${dir}/${protocol}_${nodes}_${workload}_${timestamp}.dat_fast_path_ratio.dat"
+    local ratio_file="${dir}/${protocol}_${nodes}_${workload}_${timestamp}_fast_path_ratio.dat"
     local fast_path="NA"
     local medium_path="NA"
     local slow_path="NA"
