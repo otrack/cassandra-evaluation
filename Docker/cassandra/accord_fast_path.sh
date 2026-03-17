@@ -22,7 +22,7 @@ java -jar $JMXTERM_JAR -l $JMX_HOST -i /tmp/jmx_cmds.txt -n
 " 2>/dev/null | grep "^$attribute" | grep -oP '\d+'
 }
 
-for scope in ro rw rx; do
+for scope in rw ro; do
   FAST=$(jmx_get "org.apache.cassandra.metrics:name=FastPaths,scope=$scope,type=AccordCoordinator" Count)
   MEDIUM=$(jmx_get "org.apache.cassandra.metrics:name=MediumPaths,scope=$scope,type=AccordCoordinator" Count)
   SLOW=$(jmx_get "org.apache.cassandra.metrics:name=SlowPaths,scope=$scope,type=AccordCoordinator" Count)
@@ -31,32 +31,19 @@ for scope in ro rw rx; do
   MEDIUM=${MEDIUM:-0}
   SLOW=${SLOW:-0}
 
-  echo "=== Scope: $scope ==="
-  echo "  Fast:      $FAST"
-  echo "  Medium:    $MEDIUM"
-  echo "  Slow:      $SLOW"
-
   if [ "$scope" = "ro" ]; then
     EPHEMERAL=$(jmx_get "org.apache.cassandra.metrics:name=Ephemeral,scope=$scope,type=AccordCoordinator" Count)
     EPHEMERAL=${EPHEMERAL:-0}
-    echo "  Ephemeral: $EPHEMERAL"
     SCOPE_TOTAL=$((FAST + MEDIUM + SLOW + EPHEMERAL))
-    echo "  Total:     $SCOPE_TOTAL"
     if [ "$SCOPE_TOTAL" -gt 0 ]; then
-      echo "  Ephemeral ratio: $(awk "BEGIN {printf \"%.4f\", $EPHEMERAL/$SCOPE_TOTAL}")"
+	echo "Ephemeral ratio: $(awk "BEGIN {printf \"%.4f\", $EPHEMERAL/$SCOPE_TOTAL}")"
     fi
   else
     SCOPE_TOTAL=$((FAST + MEDIUM + SLOW))
-    echo "  Total:     $SCOPE_TOTAL"
+    if [ "$SCOPE_TOTAL" -gt 0 ]; then
+	echo "Fast ratio: $(awk "BEGIN {printf \"%.4f\", $FAST/$SCOPE_TOTAL}")"
+	echo "Medium ratio: $(awk "BEGIN {printf \"%.4f\", $MEDIUM/$SCOPE_TOTAL}")"
+	echo "Slow ratio: $(awk "BEGIN {printf \"%.4f\", $SLOW/$SCOPE_TOTAL}")"
+    fi
   fi
-
-  if [ "$scope" = "rw" ]; then
-      if [ "$SCOPE_TOTAL" -gt 0 ]; then
-	  echo "  Fast ratio: $(awk "BEGIN {printf \"%.4f\", $FAST/$SCOPE_TOTAL}")"
-	  if [ "$scope" = "rw" ]; then
-	      echo "  Medium ratio: $(awk "BEGIN {printf \"%.4f\", $MEDIUM/$SCOPE_TOTAL}")"
-	  fi
-      fi
-  fi
-  echo ""
 done
