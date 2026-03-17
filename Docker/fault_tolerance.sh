@@ -39,7 +39,7 @@ done
 mkdir -p ${LOGDIR}/fault_tolerance
 
 # Configuration
-duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
+duration_minutes=${DURATION_MINUTES:-11}    # X: total duration in minutes (configurable)
 protocols="accord cockroachdb"
 nodes=3
 replication_factor=3
@@ -51,7 +51,7 @@ threads=100
 status_interval=1   # YCSB -s reporting interval in seconds
 
 if [ "$test_run" -eq 1 ]; then
-    duration_minutes=2
+    duration_minutes=3
     original_machine=$(config machine)
     restore_machine() { sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"; }
     trap restore_machine EXIT
@@ -62,8 +62,8 @@ duration_minutes=$((duration_minutes +1)) # to account for the warm-up time
 
 duration_s=$((duration_minutes * 60))
 slowdown_s=$((duration_s / 4))
-slowdown_end_s=$((slowdown_s + duration_s / 8))
-crash_s=$((3 * duration_s / 4))
+slowdown_end_s=$((duration_s / 8))
+crash_s=$((3 * duration_s / 8))
 
 log "Fault-tolerance experiment: ${duration_minutes}min total"
 log "  Slowdown (+400ms latency on the leader) from ${slowdown_s}s to ${slowdown_end_s}s"
@@ -123,7 +123,7 @@ if [ "$dry_run" -eq 0 ]; then
                 -p maxexecutiontime=${duration_s} \
                 -p status.interval=${status_interval} \
 	        -p conflict.theta=${theta} \
-		-p warmupexecutiontime=60 &
+		-p warmupexecutiontime=10 &
         done
 	
         # Event 1: at X/4, add 400ms latency to (some) leader outbound traffic
