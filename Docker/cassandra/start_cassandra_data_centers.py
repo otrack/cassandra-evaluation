@@ -47,7 +47,7 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                     if gcp_row['name'] == machine:
                         nano_cpus = int(float(gcp_row['vcpus']) * 1e9)
                         memory_gb = float(gcp_row['memory'])
-                        mem_limit = int(memory_gb * 1024 * 1024 * 1024)
+                        mem_limit = int(memory_gb * 1024 * 1024 * 1024 * 4/5) # need some headroom
                         cassandra_xmx = f"{math.floor(memory_gb)}g"
                         break
         except FileNotFoundError:
