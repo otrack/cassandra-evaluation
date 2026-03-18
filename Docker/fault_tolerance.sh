@@ -39,7 +39,7 @@ done
 mkdir -p ${LOGDIR}/fault_tolerance
 
 # Configuration
-duration_minutes=${DURATION_MINUTES:-11}    # X: total duration in minutes (configurable)
+duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
 protocols="accord cockroachdb"
 nodes=3
 replication_factor=3
