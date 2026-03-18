@@ -541,3 +541,9 @@ It can be added in the form of four columns "fast_path,medium_path,slow_path,eph
 # 17.03
 
 When injecting a slowdown (event 1) in /Docker/fault_tolerance.sh, the previous tc policies should be saved and later restored when the slowdown disappears (event 2).
+
+# 18.03
+
+Make the following improvements to the plotting scripts:
+- cdf.pdf: remove the bottom plot about average tail latency. [DONE]
+- ycsb.pdf: cap the y-axis to 400ms (instead of the present 500ms) [DONE]
