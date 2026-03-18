@@ -58,8 +58,6 @@ if [ "$test_run" -eq 1 ]; then
     compute_test_machine "${nodes}"
 fi
 
-duration_minutes=$((duration_minutes +1)) # to account for the warm-up time
-
 duration_s=$((duration_minutes * 60))
 slowdown_s=$((duration_s / 4))
 slowdown_end_s=$((duration_s / 8))
