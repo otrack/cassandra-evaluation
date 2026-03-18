@@ -87,7 +87,7 @@ def main():
     all_throughputs = [v for _, tputs in protocol_data.values() for v in tputs]
     all_times = [t for times, _ in protocol_data.values() for t in times]
     ymax = max(all_throughputs) * 1.15
-    xmax = max(max(all_times), duration_s)
+    xmax = duration_s
 
     with open(output_tex, "w") as f:
         f.write("\\begin{figure}[htbp]\n")
