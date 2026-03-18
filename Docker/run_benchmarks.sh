@@ -205,7 +205,7 @@ YCSB_OPERATIONCOUNT=${operationcount}\n\
 YCSB_THREADS=${ycsb_threads}\n\
 YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldlength=4000 -p workload=${workload_type} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
     
-    start_container ${ycsb_image} ${container_name} "Starting test" ${output_file} ${docker_args}
+    start_container ${ycsb_image} ${container_name} "Starting" ${output_file} ${docker_args}
 
     if [ $? -eq 0 ]; then
         log "YCSB $action launched successfully."
