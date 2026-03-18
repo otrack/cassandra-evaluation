@@ -9,7 +9,7 @@ Generates a grouped bar chart:
   - One bar per protocol within each group, placed side-by-side
   - Each bar includes a standard deviation indicator (small solid horizontal
     line centred at the tip of the bar)
-  - Y-axis fixed from 0 to 500 ms
+  - Y-axis fixed from 0 to 400 ms
   - Protocols ordered slowest → fastest (highest → lowest median latency)
   - Protocol name shown at the top of each bar in the first workload group
     only, rotated 45 degrees
@@ -126,8 +126,8 @@ def main():
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
 
-    # Y-axis fixed at 0–500 ms as required
-    ymax = 500.0
+    # Y-axis fixed at 0–400 ms as required
+    ymax = 400.0
 
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")

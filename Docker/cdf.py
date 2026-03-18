@@ -408,46 +408,6 @@ def main():
                             f.write(f"          {val} {pct}\n")
                         f.write("          };\n")
 
-            # Finally, plot tail latency rows (zoom on [0.99, 1] of average distribution)
-            for wl_index, workload in enumerate(workloads):
-                for op_index, op in enumerate(all_ops):
-                    avg_latencies_dict = compute_average_latencies_across_cities(df_unfiltered, workload, op, num_nodes)
-
-                    f.write("        \\nextgroupplot[\n")
-                    if op_index == 0:
-                        f.write(f"          ylabel={{avg. tail}},\n")
-                    else:
-                        f.write("          yticklabels={{}},\n")
-                    if wl_index == n_wl - 1:
-                        f.write("          xlabel={{Latency (ms)}},\n")
-                    f.write(f"          ymin=0.99, ymax=1,\n")
-                    f.write(f"          ytick={{0.99,1}},\n")
-                    f.write(f"          xtick={{0,500,1000}},\n")
-                    f.write(f"          xmin={tail_min_lat:.2f}, xmax={1000:.2f},\n")
-                    # if avg_optimum is not None:
-                    #     f.write(f"          extra x ticks={{{avg_optimum:.2f}}},\n")
-                    #     f.write(f"          extra x tick labels={{Q}},\n")
-                    #     f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
-                    f.write("        ]\n")
-
-                    if not avg_latencies_dict:
-                        continue
-
-                    for proto_idx, proto in enumerate(protocol_order):
-                        if proto not in avg_latencies_dict:
-                            continue
-
-                        latencies = avg_latencies_dict[proto]
-                        if not latencies:
-                            continue
-
-                        col = get_protocol_color(proto, protocol_colors, proto_idx)
-                        f.write("          \\addplot+["+col+", mark=none] table {\n")
-                        for i, val in enumerate(latencies):
-                            pct = i/99
-                            f.write(f"          {val} {pct}\n")
-                        f.write("          };\n")
-
         f.write("      \\end{groupplot}\n")
         f.write("    \\end{tikzpicture}\n")
 
