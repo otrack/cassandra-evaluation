@@ -43,8 +43,8 @@ workloads="a b c d"
 protocol="accord"
 nodes=5
 replication_factor=${nodes}
-records=$(config records)
-threads=$(config threads)
+records=1000
+threads=50
 ops_per_thread=0
 
 # Helper to update accord.ephemeral_read_enabled in exp.config
