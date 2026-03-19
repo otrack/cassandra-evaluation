@@ -203,7 +203,7 @@ YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
 YCSB_RECORDCOUNT=${recordcount}\n\
 YCSB_OPERATIONCOUNT=${operationcount}\n\
 YCSB_THREADS=${ycsb_threads}\n\
-YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldlength=4000 -p workload=${workload_type} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
+YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=10 -p fieldlength=400 -p workload=${workload_type} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
     
     start_container ${ycsb_image} ${container_name} "Starting" ${output_file} ${docker_args}
 

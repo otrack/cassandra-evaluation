@@ -46,7 +46,7 @@ protocols="accord cockroachdb" # only backends that support transactions
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-nodes=5
+nodes=7
 replication_factor=3
 records=$(config records)
 threads=$(config threads)

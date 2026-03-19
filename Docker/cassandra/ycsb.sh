@@ -47,7 +47,7 @@ cassandra_create_usertable() {
     local create_table_command=""
     if [ "$workload_type" == "site.ycsb.workloads.ClosedEconomyWorkload" ]; then
 	create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 INT)"
-    else # site.ycsb.workloads.CoreWorkload"
+    else # site.ycsb.workloads.{CoreWorkload, SwapWorkload}"
 	create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 VARCHAR, field1 VARCHAR, field2 VARCHAR, field3 VARCHAR, field4 VARCHAR, field5 VARCHAR, field6 VARCHAR, field7 VARCHAR, field8 VARCHAR, field9 VARCHAR)";
     fi
     
