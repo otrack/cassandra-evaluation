@@ -55,10 +55,11 @@ cockroachdb_create_usertable() {
         exit 1
     fi
 
-    # Use a single shard?
-    if [[ "$replication_factor" == "$node_count" ]] && [[ "$workload" == "site.ycsb.workloads.ConflictWorkload" ]];
-    then
-	local shard_command="ALTER TABLE usertable CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 100073741824;"
-	docker exec "${container}" cockroach sql --insecure -e "${shard_command}"
-    fi
+    # # Use a single shard?
+    # # FIXME
+    # if [[ "$replication_factor" == "$node_count" ]] && [[ "$workload" == "site.ycsb.workloads.ConflictWorkload" ]];
+    # then
+    # 	local shard_command="ALTER TABLE usertable CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 100073741824;"
+    # 	docker exec "${container}" cockroach sql --insecure -e "${shard_command}"
+    # fi
 }
