@@ -8,13 +8,15 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--test]"
-    echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
-    echo "  --test     Use a 60s run time and right-size containers to fit this machine."
+    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST]"
+    echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
+    echo "  --test           Use a 60s run time and right-size containers to fit this machine."
+    echo "  --protocols=LIST Override the list of protocols to run (space-separated)."
 }
 
 dry_run=0
 test_run=0
+protocols_override=""
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
@@ -22,6 +24,9 @@ for arg in "$@"; do
             ;;
         --test)
             test_run=1
+            ;;
+        --protocols=*)
+            protocols_override="${arg#*=}"
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -36,6 +41,9 @@ mkdir -p ${LOGDIR}/cdf
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a"
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | paste -sd' ')
+if [ -n "$protocols_override" ]; then
+    protocols="$protocols_override"
+fi
 nodes=5
 replication_factor=${nodes}
 cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""
