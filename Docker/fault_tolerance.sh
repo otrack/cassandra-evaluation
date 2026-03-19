@@ -122,7 +122,7 @@ if [ "$dry_run" -eq 0 ]; then
         # Start YCSB run clients from each node (time-bounded via maxexecutiontime)
         for i in $(seq 1 ${node_count}); do
             nearby_database=$(config "node_name")${i}
-            location=$(get_location $i ${DIR}/latencies.csv)
+           location=$(get_location $i ${DIR}/latencies.csv)
             run_ycsb "run" "${workload_type}" "${workload}" "${hosts}" "${port}" \
                 "${records}" 0 "${protocol}" "${replication_factor}" \
                 "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
@@ -149,13 +149,13 @@ if [ "$dry_run" -eq 0 ]; then
         # Event 1b: at X/4+X/8, remove the slowdown from leader and restore the
         # tc policies that were in effect before the slowdown was injected.
         sleep ${slowdown_end_s}
-        log "Event 1b @ ${slowdown_end_s}s: Removing slowdown from ${leader} and restoring tc policies"
+        log "Event 1b @t1 = t0 + ${slowdown_end_s}s: Removing slowdown from ${leader} and restoring tc policies"
         docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
         python3 ${DIR}/restore_tc.py "${leader}"
 
         # Event 2: at 3X/4, suspend leader (to mimick an actual crash)
         sleep ${crash_s}
-        log "Event 2 @ ${crash_s}s: Killing ${leader}"
+        log "Event 2 @t2 = t1 + ${crash_s}s: Killing ${leader}"
         docker kill --signal=19 ${leader}
 
         # Wait for all YCSB clients to complete
