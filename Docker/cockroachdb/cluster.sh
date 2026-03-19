@@ -99,9 +99,16 @@ cockroachdb_get_leaders() {
     local container="$(config "node_name")1"
     local node_ids
     node_ids=$(docker exec "${container}" cockroach sql --insecure --format=csv \
-        -e "SELECT DISTINCT lease_holder FROM [SHOW RANGES FROM TABLE usertable WITH DETAILS];" \
-        2>/dev/null | tail -n +2 | tr -d '[:space:]')
+		      -e "SELECT DISTINCT lease_holder FROM [SHOW RANGES FROM TABLE usertable WITH DETAILS];" \
+		      2>/dev/null | tail -n +2 | tr -d '[:space:]')
     for node_id in ${node_ids}; do
-        echo "$(config "node_name")${node_id}"
+        # Map the CockroachDB node ID to the actual container name via its address
+        local addr
+        addr=$(docker exec "${container}" cockroach sql --insecure --format=csv \
+		      -e "SELECT address FROM crdb_internal.gossip_nodes WHERE node_id = ${node_id};" \
+		      2>/dev/null | tail -n +2 | tr -d '[:space:]')
+        # Extract hostname (container name) from address (format: hostname:port)
+        local hostname="${addr%%:*}"
+        echo "${hostname}"
     done
 }
