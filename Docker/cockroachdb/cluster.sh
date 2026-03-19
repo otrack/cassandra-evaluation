@@ -97,18 +97,15 @@ cockroachdb_get_port() {
 
 cockroachdb_get_leaders() {
     local container="$(config "node_name")1"
-    local node_ids
-    node_ids=$(docker exec "${container}" cockroach sql --insecure --format=csv \
-		      -e "SELECT DISTINCT lease_holder FROM [SHOW RANGES FROM TABLE usertable WITH DETAILS];" \
-		      2>/dev/null | tail -n +2 | tr -d '[:space:]')
-    for node_id in ${node_ids}; do
-        # Map the CockroachDB node ID to the actual container name via its address
-        local addr
-        addr=$(docker exec "${container}" cockroach sql --insecure --format=csv \
-		      -e "SELECT address FROM crdb_internal.gossip_nodes WHERE node_id = ${node_id};" \
-		      2>/dev/null | tail -n +2 | tr -d '[:space:]')
-        # Extract hostname (container name) from address (format: hostname:port)
-        local hostname="${addr%%:*}"
-        echo "${hostname}"
+    # Query lease holders AND map them to their advertised address (hostname) in one SQL query
+    local leaders
+    leaders=$(docker exec "${container}" cockroach sql --insecure --format=csv \
+        -e "SELECT DISTINCT g.address
+            FROM [SHOW RANGES FROM TABLE usertable WITH DETAILS] AS r
+            JOIN crdb_internal.gossip_nodes AS g ON r.lease_holder = g.node_id;" \
+        2>/dev/null | tail -n +2 | tr -d '[:space:]')
+    for addr in ${leaders}; do
+        # addr is like "node1:26257" — extract the hostname (= Docker container name)
+        echo "${addr%%:*}"
     done
 }
