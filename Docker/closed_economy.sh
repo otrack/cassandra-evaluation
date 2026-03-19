@@ -9,13 +9,15 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--test]"
-    echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
-    echo "  --test     Use a 60s run time and right-size containers to fit this machine."
+    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST]"
+    echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
+    echo "  --test           Use a 60s run time and right-size containers to fit this machine."
+    echo "  --protocols=LIST Override the list of protocols to run (space-separated)."
 }
 
 dry_run=0
 test_run=0
+protocols_override=""
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
@@ -23,6 +25,9 @@ for arg in "$@"; do
             ;;
         --test)
             test_run=1
+            ;;
+        --protocols=*)
+            protocols_override="${arg#*=}"
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -37,6 +42,9 @@ mkdir -p ${LOGDIR}/closed_economy
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
 protocols="accord cockroachdb" # only backend to support this
+if [ -n "$protocols_override" ]; then
+    protocols="$protocols_override"
+fi
 node_counts="3 5 7"
 replication_factor=3
 records=$(config records)

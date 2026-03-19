@@ -8,13 +8,15 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--no-test]"
-    echo "  --dry-run  Skip the experiments; only draw plots using existing data."
-    echo "  --no-test  Disable the --test flag (run full experiments)."
+    echo "Usage: $0 [--dry-run] [--no-test] [--protocols=LIST]"
+    echo "  --dry-run        Skip the experiments; only draw plots using existing data."
+    echo "  --no-test        Disable the --test flag (run full experiments)."
+    echo "  --protocols=LIST Override the list of protocols to run (space-separated)."
 }
 
 dry_run=0
 test_flag="--test"
+protocols_flag=""
 for arg in "$@"; do
     case "$arg" in
 	--dry-run)
@@ -22,6 +24,9 @@ for arg in "$@"; do
             ;;
         --no-test)
             test_flag=""
+            ;;
+        --protocols=*)
+            protocols_flag="$arg"
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -44,8 +49,8 @@ scripts=(
 
 for script in "${scripts[@]}"; do
     if [ "$dry_run" -eq 0 ]; then	
-	log "Running ${script} ${test_flag}..."
-	bash "${DIR}/${script}" ${test_flag}
+	log "Running ${script} ${test_flag} ${protocols_flag}..."
+	bash "${DIR}/${script}" ${test_flag} ${protocols_flag}
 	if [ $? -ne 0 ]; then
             log "ERROR: ${script} failed. Aborting."
             exit 1

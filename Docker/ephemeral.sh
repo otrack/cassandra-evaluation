@@ -13,9 +13,10 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--test]"
-    echo "  --dry-run  Skip the experiment run; only draw plots using existing data."
-    echo "  --test     Use a 60s run time and right-size containers to fit this machine."
+    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST]"
+    echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
+    echo "  --test           Use a 60s run time and right-size containers to fit this machine."
+    echo "  --protocols=LIST Accepted for compatibility; ignored (experiment always uses accord)."
 }
 
 dry_run=0
@@ -27,6 +28,8 @@ for arg in "$@"; do
             ;;
         --test)
             test_run=1
+            ;;
+        --protocols=*)
             ;;
         *)
             echo "Unknown parameter: $arg"
