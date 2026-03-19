@@ -163,7 +163,7 @@ if [ "$dry_run" -eq 0 ]; then
             wait_container "ycsb-${i}"
         done
 
-        # Cleanup - database-node1 may already be gone (docker kill + --rm)
+        # Cleanup
         for i in $(seq 1 ${node_count}); do
             docker stop "$(config 'node_name')${i}" 2>/dev/null || true
         done
