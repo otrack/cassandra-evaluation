@@ -52,7 +52,7 @@ fi
 nodes=5
 replication_factor=$nodes
 workload_type="site.ycsb.workloads.ConflictWorkload"
-theta=0.0 # no conflict
+theta=0.01 # no conflict
 workload="a" # does not matter
 records=10000
 threads=100
@@ -174,14 +174,14 @@ if [ "$dry_run" -eq 0 ]; then
 fi
 
 # Plot results for all protocols
-debug "Plotting..."
+debug "Plotting... (duration=${duration_s}, slowdown=${slowdown_s}, slowdown_end=${slowdown_end_s}, crash=${crash_s})"
 python3 ${DIR}/fault_tolerance.py \
     "${LOGDIR}/fault_tolerance" \
     ${protocols} \
     "${duration_s}" \
-    "${slowdown_s}" \
-    "${slowdown_end_s}" \
-    "${crash_s}" \
+    "$((slowdown_s - 10))" \
+    "$((slowdown_s + slowdown_end_s - 10))" \
+    "$((slowdown_s + slowdown_end_s + crash_s - 10))" \
     "${RESULTSDIR}/fault_tolerance.tex"
 
 pdflatex -jobname=fault_tolerance -output-directory=${RESULTSDIR} \

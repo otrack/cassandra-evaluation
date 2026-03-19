@@ -50,7 +50,7 @@ if [ -n "$protocols_override" ]; then
 fi
 nodes=5
 replication_factor=${nodes}
-records=$(config records)
+records=10000
 ops_per_thread=0
 if [ "$test_run" -eq 1 ]; then
     original_machine=$(config machine)

@@ -143,10 +143,10 @@ def main():
         f.write(
             "  \\caption{Aggregated YCSB throughput over time "
             f"({protocols_str}, {duration_s // 60}\\,min experiment). "
-            f"At $t={slowdown_s}$\\,s a 400\\,ms latency is added to the first node "
+            f"At $t={slowdown_s}$\\,s a 400\\,ms latency is added to CockroachDB's lease holder "
             f"(bright orange dashed line); the slowdown is removed at $t={slowdown_end_s}$\\,s "
             f"(dark orange dashed line). "
-            f"At $t={crash_s}$\\,s the first node is killed (black dashed line).}}\n"
+            f"At $t={crash_s}$\\,s the lease holder is killed (black dashed line).}}\n"
         )
         f.write("  \\label{fig:fault-tolerance}\n")
         f.write("\\end{figure}\n")
