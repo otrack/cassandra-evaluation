@@ -41,8 +41,8 @@ mkdir -p ${LOGDIR}/fault_tolerance
 # Configuration
 duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
 protocols="accord cockroachdb"
-nodes=3
-replication_factor=3
+nodes=5
+replication_factor=$nodes
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.01
 workload="a" # does not matter
