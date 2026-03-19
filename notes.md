@@ -547,3 +547,16 @@ When injecting a slowdown (event 1) in /Docker/fault_tolerance.sh, the previous 
 Make the following improvements to the plotting scripts:
 - cdf.pdf: remove the bottom plot about average tail latency. [DONE]
 - ycsb.pdf: cap the y-axis to 400ms (instead of the present 500ms) [DONE]
+
+# 19.03
+
+For all the experiments under /Docker (that is cdf.sh, closed_economy.sh, ephemeral.sh, etc., including run-all.sh which runs them all) add a new parameter "--protocols".
+This parameter takes a list of protocols that override the $protocols variable in these scripts.
+For instance, callling
+
+> ./cdf.sh --protocols="accord swiftpaxos-paxos" --test
+
+runs the cdf experiment in test mode using for only the accord and swiftpaxos-paxos prootocols.
+
+Notice that when "--dry-run" is passed, the experiment is skipped in full so this new parameter is just ignored.
+
