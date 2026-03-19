@@ -368,8 +368,7 @@ def main():
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
-        f.write("  \\label{fig:closed-economy-latency}\n")
-        f.write("  \\caption{Closed economy workload latency as a function of the protocol. For each protocol, from left to right, 3, 5 and 7 nodes. "
+        f.write("  \\caption{\\label{fig:closed-economy-latency}\n Closed economy workload latency as a function of the protocol. For each protocol, from left to right, 3, 5 and 7 nodes. "
                 "The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$), P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles.}\n")
         f.write("\\end{figure}\n")
 

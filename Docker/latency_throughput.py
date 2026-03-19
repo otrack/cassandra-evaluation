@@ -168,7 +168,7 @@ def main():
 
             f.write(f"      \\addplot+[{col}, mark=*, thick] table {{\n")
             for tput, lat in zip(data['throughputs'], data['latencies']):
-                if tput is not None and lat is not None:
+                if tput is not None and tput != 0 and lat != 0 and lat is not None:
                     f.write(f"        {tput:.2f} {lat:.2f}\n")
             f.write("      };\n\n")
 
