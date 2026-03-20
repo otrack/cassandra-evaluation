@@ -47,7 +47,7 @@ if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
 nodes=7
-replication_factor=3
+replication_factor=5
 records=$(config records)
 threads=$(config threads)
 # ops_per_thread=0 means operationcount=0 (unlimited); run duration is controlled by maxexecutiontime
