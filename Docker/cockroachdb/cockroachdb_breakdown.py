@@ -83,7 +83,13 @@ def parse_cockroachdb_traces(filepath):
             continue
         msg = cols[2]
         span = cols[5]
-        if '[NoTxn pos:' in msg and 'executing BindStmt' in msg and 'session recording' in span:
+        # A block starts either when BindStmt is in NoTxn state (cached prepared statement)
+        # or when the workload PrepareStmt is in NoTxn state (first execution before cache).
+        # SHOW TRACE FOR SESSION PrepareStmt is excluded to avoid false positives.
+        if '[NoTxn pos:' in msg and 'session recording' in span and (
+            'executing BindStmt' in msg or
+            ('executing PrepareStmt' in msg and 'SHOW TRACE' not in msg)
+        ):
             block_starts.append(idx)
 
     for bi, start_idx in enumerate(block_starts):
@@ -99,6 +105,22 @@ def parse_cockroachdb_traces(filepath):
 def _parse_one_cockroachdb_trace(lines):
     """
     Extract timing events from a single CockroachDB request trace block.
+
+    Key log lines used as boundaries
+    ---------------------------------
+    Processing start : ``[NoTxn pos:…] executing BindStmt`` (cached prepared stmt)
+                       OR ``[NoTxn pos:…] executing PrepareStmt`` (first execution,
+                       before the plan cache is populated; SHOW TRACE excluded)
+    Processing end   : ``execution starts: distributed engine``
+    Execution end    : ``writing batch with N requests``
+                       (works for both single-row auto-commit and multi-row
+                       explicit-transaction workloads such as ClosedEconomy)
+    Ordering start   : ``node received request: N Put`` / ``EndTxn``
+                       (write batch arriving at the leaseholder node)
+    Ordering end     : ``ack-ing replication success``
+    Request end      : first ``AutoCommit. err: <nil>`` after t_start
+                       (covers both implicit auto-commit and explicit transaction
+                       commit, and is always later than the ordering phase)
 
     Returns a dict {processing, execution, ordering, commit, total} in
     seconds, or None if any required event is missing or values are invalid.
@@ -119,13 +141,19 @@ def _parse_one_cockroachdb_trace(lines):
             continue
         msg = cols[2].strip()
 
-        if t_start is None and '[NoTxn pos:' in msg and 'executing BindStmt' in msg:
+        # t_start: accept BindStmt (cached) OR the workload PrepareStmt (cold)
+        if t_start is None and '[NoTxn pos:' in msg and (
+                'executing BindStmt' in msg or
+                ('executing PrepareStmt' in msg and 'SHOW TRACE' not in msg)):
             t_start = ts
 
         if t_exec_start is None and 'execution starts: distributed engine' in msg:
             t_exec_start = ts
 
-        if t_exec_end is None and 'writing batch with 1 requests and committing' in msg:
+        # t_exec_end: accept any number of requests (1 or more) and with or
+        # without "and committing" (multi-row explicit-transaction workloads
+        # such as ClosedEconomy write N rows without an inline commit here).
+        if t_exec_end is None and 'writing batch with' in msg:
             t_exec_end = ts
 
         if t_ord_start is None and 'node received request:' in msg and (
@@ -135,7 +163,11 @@ def _parse_one_cockroachdb_trace(lines):
         if t_ord_end is None and 'ack-ing replication success' in msg:
             t_ord_end = ts
 
-        if 'execution ends' in msg:
+        # t_end: first AutoCommit after t_start.  This is correct for both
+        # auto-commit single-statement workloads and explicit-transaction
+        # workloads like ClosedEconomy where "execution ends" fires before the
+        # Raft ordering phase.
+        if t_end is None and t_start is not None and 'AutoCommit. err: <nil>' in msg:
             t_end = ts
 
     if None in (t_start, t_exec_start, t_exec_end, t_ord_start, t_ord_end, t_end):
