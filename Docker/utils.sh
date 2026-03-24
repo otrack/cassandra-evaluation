@@ -79,8 +79,8 @@ start_container() {
     fi
     
     local cid
-    echo "docker run ${docker_args[@]} --name $cname $image ${container_cmd[@]}"
-    cid=$(docker run ${docker_args[@]} --log-opt max-size=10m  --log-opt max-file=3 --name $cname $image ${container_cmd[@]} 2>&1) || {
+    echo "docker run ${docker_args[@]} --name $cname --hostname $cname $image ${container_cmd[@]}"
+    cid=$(docker run ${docker_args[@]} --log-opt max-size=10m  --log-opt max-file=3 --name $cname --hostname $cname $image ${container_cmd[@]} 2>&1) || {
          error "docker run failed: ${cid}"
          return 3
     }
