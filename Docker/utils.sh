@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-BINDIR="${DIR}"
+DIR=$(dirname "${BASH_SOURCE[0]}")
 LOGDIR="${DIR}/logs"
 RESULTSDIR="${DIR}/results/"
 CONFIG_FILE="${DIR}/exp.config"
