@@ -22,12 +22,37 @@ java -jar $JMXTERM_JAR -l $JMX_HOST -i /tmp/jmx_cmds.txt -n
 " 2>/dev/null | grep "^$attribute" | awk -F'=' '{print $2}' | sed s/\;//g 
 }
 
-for scope in rw ro; do
-    attribute="50thPercentile"
-    PREACCEPT=$(jmx_get "org.apache.cassandra.metrics:name=PreAcceptLatency,scope=$scope,type=AccordCoordinator" ${attribute})
-    EXECUTE=$(jmx_get "org.apache.cassandra.metrics:name=ExecuteLatency,scope=$scope,type=AccordCoordinator" ${attribute}) # until stable
-    APPLY=$(jmx_get "org.apache.cassandra.metrics:name=ApplyLatency,scope=$scope,type=AccordCoordinator" ${attribute}) # end-to-end
-    echo "preaccept: ${PREACCEPT}"
-    echo "execute: ${EXECUTE}"
-    echo "apply: ${APPLY}"
-done
+attribute="50thPercentile"
+
+# fast commit
+FAST_COMMIT=$(jmx_get "org.apache.cassandra.metrics:name=PreAcceptLatency,scope=rw,type=AccordCoordinator" ${attribute})
+echo "fast_commit:${FAST_COMMIT}"
+
+# slow commit
+PREACCEPT_REQ=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_PRE_ACCEPT_REQ-WaitLatency,type=Messaging" ${attribute}) 
+PREACCEPT_RSP=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_PRE_ACCEPT_RSP-WaitLatency,type=Messaging" ${attribute})
+PREACCEPT=$(echo ${PREACCEPT_REQ} + ${PREACCEPT_RSP} | bc)
+ACCEPT_REQ=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_ACCEPT_REQ-WaitLatency,type=Messaging" ${attribute})
+ACCEPT_RSP=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_ACCEPT_RSP-WaitLatency,type=Messaging" ${attribute})
+SLOW_COMMIT=$(echo ${PREACCEPT_REQ} + ${PREACCEPT_RSP} + ${ACCEPT_REQ} + ${ACCEPT_RSP}  | bc)
+echo "slow_commit:${SLOW_COMMIT}"
+
+# ratios
+FAST=$(jmx_get "org.apache.cassandra.metrics:name=FastPaths,scope=rw,type=AccordCoordinator" Count)
+MEDIUM=$(jmx_get "org.apache.cassandra.metrics:name=MediumPaths,scope=rw,type=AccordCoordinator" Count)
+SLOW=$(jmx_get "org.apache.cassandra.metrics:name=SlowPaths,scope=rw,type=AccordCoordinator" Count)
+FAST=${FAST:-0}
+MEDIUM=${MEDIUM:-0}
+SLOW=${SLOW:-0}
+TOTAL=$((FAST + MEDIUM + SLOW))
+FAST_PATH_RATIO=$(awk "BEGIN {printf \"%.4f\", $FAST/$TOTAL}")
+
+COMMIT=$(echo "${FAST_COMMIT} * ${FAST_PATH_RATIO} + ${SLOW_COMMIT} * (1 - ${FAST_PATH_RATIO})" | bc)
+echo "commit:${COMMIT}"
+
+EXECUTE=$(jmx_get "org.apache.cassandra.metrics:name=ExecuteLatency,scope=rw,type=AccordCoordinator" ${attribute}) # until stable
+echo "ordering:$(echo "x=${EXECUTE} - ${COMMIT}; if (x <= 0) x=0; x" | bc)"
+
+APPLY=$(jmx_get "org.apache.cassandra.metrics:name=ApplyLatency,scope=rw,type=AccordCoordinator" ${attribute}) # end-to-end
+echo "execution:$(echo ${APPLY} - ${EXECUTE} | bc)"
+
