@@ -7,6 +7,7 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 
 source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
+source ${DIR}/cassandra/cassandra_breakdown.sh
 
 usage() {
     echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST]"
@@ -38,6 +39,7 @@ for arg in "$@"; do
 done
 
 mkdir -p ${LOGDIR}/closed_economy
+mkdir -p ${RESULTSDIR}/closed_economy
 
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
@@ -64,6 +66,9 @@ fi
 maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
+    # Write CSV header for breakdown results
+    echo "protocol,nodes,city,fast_commit,slow_commit,ordering,execution" > ${RESULTSDIR}/closed_economy/breakdown.csv
+
     for p in ${protocols}
     do
         # clean prior logs
@@ -76,8 +81,36 @@ if [ "$dry_run" -eq 0 ]; then
 	    fi
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/closed_economy/${p}_${nodes}_${workload}_${ts}.dat"
-	    # Each node count requires a fresh cluster, so always create and always clean up
-	    run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((t * ops_per_thread)) ${output_file} 1 1 -p maxexecutiontime=${maxexecutiontime}
+
+	    # Enable tracing for CockroachDB so breakdown data can be collected
+	    tracing_opts=()
+	    if [ "$p" == "cockroachdb" ]; then
+	        tracing_opts=("-p" "db.tracing=true")
+	    fi
+
+	    # Run benchmark without cluster cleanup so breakdown scripts can query the cluster
+	    run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} 1 0 "${tracing_opts[@]}" -p maxexecutiontime=${maxexecutiontime}
+
+	    # Collect city names for this node count
+	    cities_list=""
+	    for i in $(seq 1 ${nodes}); do
+	        loc=$(get_location $i ${DIR}/latencies.csv)
+	        cities_list="${cities_list} ${loc}"
+	    done
+
+	    # Compute performance breakdown and append to CSV
+	    if [ "$p" == "cockroachdb" ]; then
+	        python3 ${DIR}/cockroachdb/cockroachdb_breakdown.py \
+	            ${LOGDIR}/closed_economy ${workload} ${nodes} ${cities_list} | \
+	            awk -F',' -v n="${nodes}" '{print "cockroachdb," n "," $0}' >> ${RESULTSDIR}/closed_economy/breakdown.csv
+	    elif [ "$p" == "accord" ]; then
+	        compute_breakdown ${nodes} accord | \
+	            cut -d',' -f1-5 | \
+	            awk -F',' -v n="${nodes}" '{print "accord," n "," $0}' >> ${RESULTSDIR}/closed_economy/breakdown.csv
+	    fi
+
+	    # Clean up cluster after breakdown is computed
+	    stop_benchmark ${p} ${nodes}
         done
     done
 fi
@@ -86,7 +119,7 @@ debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/closed_economy/* > ${RESULTSDIR}/closed_economy.csv
 
 debug "Plotting..."
-python3 ${DIR}/closed_economy.py ${RESULTSDIR}/closed_economy.csv ${RESULTSDIR}/closed_economy.tex
+python3 ${DIR}/closed_economy.py ${RESULTSDIR}/closed_economy.csv ${RESULTSDIR}/closed_economy/breakdown.csv ${RESULTSDIR}/closed_economy.tex
 
 pdflatex -jobname=closed_economy -output-directory=${RESULTSDIR} \
 "\documentclass{article}\

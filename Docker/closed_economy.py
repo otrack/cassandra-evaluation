@@ -53,7 +53,7 @@ DEFAULT_OFFSET_STEP = 0.2  # fallback spacing when no protocols exist
 
 
 def usage_and_exit():
-    print("Usage: python closed_economy.py results.csv output.tex")
+    print("Usage: python closed_economy.py results.csv breakdown.csv output.tex")
     sys.exit(1)
 
 def calculate_offset_step(series_count):
@@ -227,12 +227,78 @@ def accord_latency_bounds(locations):
     worst_vals = [3 * slow_rtts[i] + execute_rtts[i] for i in range(n)]
     return float(np.mean(best_vals)), float(np.mean(worst_vals))
 
+def load_breakdown(breakdown_csv):
+    """Load breakdown data from breakdown.csv.
+
+    Returns a dict: {protocol: {nodes: {city: {fast_commit, slow_commit, ordering, execution}}}}
+    Values are in microseconds.
+    """
+    result = {}
+    try:
+        df = pd.read_csv(breakdown_csv)
+    except (FileNotFoundError, IOError):
+        return result
+
+    required = {'protocol', 'nodes', 'city', 'fast_commit', 'slow_commit', 'ordering', 'execution'}
+    if not required.issubset(df.columns):
+        return result
+
+    for _, row in df.iterrows():
+        proto = str(row['protocol']).strip()
+        try:
+            nodes = int(row['nodes'])
+        except (TypeError, ValueError):
+            continue
+        city = str(row['city']).strip()
+        try:
+            fc = float(row['fast_commit'])
+            sc = float(row['slow_commit'])
+            od = float(row['ordering'])
+            ex = float(row['execution'])
+        except (TypeError, ValueError):
+            continue
+        result.setdefault(proto, {}).setdefault(nodes, {})[city] = {
+            'fast_commit': fc,
+            'slow_commit': sc,
+            'ordering': od,
+            'execution': ex,
+        }
+    return result
+
+
+def compute_average_breakdown(breakdown_data, protocol, nodes):
+    """Return the average breakdown across all cities for (protocol, nodes).
+
+    Returns a dict {fast_commit, slow_commit, ordering, execution} in
+    microseconds, or None if no data are available.
+    """
+    cities_data = breakdown_data.get(protocol, {}).get(nodes, {})
+    if not cities_data:
+        return None
+    components = ['fast_commit', 'slow_commit', 'ordering', 'execution']
+    totals = {c: 0.0 for c in components}
+    n = len(cities_data)
+    for city_bd in cities_data.values():
+        for c in components:
+            totals[c] += city_bd.get(c, 0.0)
+    return {c: totals[c] / n for c in components}
+
+
+# nodes value used for the breakdown subplot (first/smallest experiment)
+DEFAULT_FIRST_NODES = 3
+BREAKDOWN_COMPONENTS = ['fast_commit', 'slow_commit', 'ordering', 'execution']
+BREAKDOWN_LABELS = ['Fast commit', 'Slow commit', 'Ordering', 'Execution']
+BREAKDOWN_PATTERNS = ['north east lines', 'north west lines', 'horizontal lines', 'vertical lines']
+BREAKDOWN_COLORS_LATEX = ['blue!40', 'red!60', 'green!50!black', 'orange!80']
+
+
 def main():
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 4:
         usage_and_exit()
 
     results_csv = sys.argv[1]
-    output_tikz = sys.argv[2]
+    breakdown_csv = sys.argv[2]
+    output_tikz = sys.argv[3]
 
     df = pd.read_csv(results_csv)
 
@@ -308,6 +374,25 @@ def main():
     else:
         ymax = 100
 
+    # Load breakdown data for the second plot
+    breakdown_data = load_breakdown(breakdown_csv)
+
+    # Compute breakdown averages for nodes=3 (first experiment)
+    first_nodes = min(node_counts) if node_counts else DEFAULT_FIRST_NODES
+    bd_protocols = sorted(breakdown_data.keys())
+    breakdown_avgs = {}
+    for proto in bd_protocols:
+        avg = compute_average_breakdown(breakdown_data, proto, first_nodes)
+        if avg is not None:
+            breakdown_avgs[proto] = avg
+
+    # Compute y-axis limit for breakdown chart (microseconds)
+    bd_all_vals = []
+    for proto, avg in breakdown_avgs.items():
+        total = sum(avg.values())
+        bd_all_vals.append(total)
+    bd_ymax = max(bd_all_vals) * 1.2 if bd_all_vals else 1000
+
     # Generate TikZ/pgfplots code for grouped latency range chart
     # Group by protocol on the x-axis with offsets per node count.
     series_count = len(node_counts)
@@ -368,20 +453,60 @@ def main():
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
-        f.write("  \\caption{\\label{fig:closed-economy-latency}\n Closed economy workload latency as a function of the protocol. For each protocol, from left to right, 3, 5 and 7 nodes. "
-                "The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$), P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles.}\n")
-        f.write("\\end{figure}\n")
 
-        # if accord_latencies:
-        #     f.write("\\medskip\n")
-        #     f.write("\\begin{tabular}{lrr}\n")
-        #     f.write("  \\hline\n")
-        #     f.write("  Nodes & Accord best-case latency (ms) & Accord worst-case latency (ms) \\\\\n")
-        #     f.write("  \\hline\n")
-        #     for nodes, best_latency, worst_latency in accord_latencies:
-        #         f.write(f"  {nodes} & {best_latency:.2f} & {worst_latency:.2f} \\\\\n")
-        #     f.write("  \\hline\n")
-        #     f.write("\\end{tabular}\n")
+        # Second plot: stacked bar breakdown for nodes=3
+        if breakdown_avgs:
+            bd_proto_list = sorted(breakdown_avgs.keys())
+            bd_proto_aliases = [protocol_aliases.get(p, p) for p in bd_proto_list]
+
+            f.write("  \\hspace{1cm}\n")
+            f.write("  \\begin{tikzpicture}[scale=.7]\n")
+
+            # Breakdown legend
+            bd_legend_entries = []
+            for comp, label, color in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX):
+                bd_legend_entries.append(
+                    r"\protect\tikz \protect\fill[{color}] (0,0) rectangle (0.3,0.3);"
+                    r"~{label}".format(color=color, label=label)
+                )
+            f.write("    {{\\small {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
+
+            f.write("    \\begin{axis}[\n")
+            f.write("      ybar stacked,\n")
+            f.write("      width=8cm, height=8cm,\n")
+            f.write("      bar width=0.5cm,\n")
+            f.write("      enlarge x limits=0.5,\n")
+            f.write("      ymajorgrids=true,\n")
+            f.write("      xlabel={Protocol},\n")
+            f.write("      ylabel={Average latency ($\\mu$s)},\n")
+            f.write(f"      ymin=0, ymax={bd_ymax:.2f},\n")
+            f.write("      xtick={" + ",".join(str(i) for i in range(len(bd_proto_list))) + "},\n")
+            f.write("      xticklabels={" + ",".join(bd_proto_aliases) + "},\n")
+            f.write("    ]\n\n")
+
+            for comp, label, color, pattern in zip(
+                BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX, BREAKDOWN_PATTERNS
+            ):
+                coords = []
+                for i, proto in enumerate(bd_proto_list):
+                    val = breakdown_avgs[proto].get(comp, 0.0)
+                    coords.append(f"({i}, {val:.2f})")
+                f.write(f"      \\addplot+[ybar, fill={color}, draw=black,"
+                        f" pattern={pattern}, pattern color={color}] coordinates {{\n")
+                f.write("        " + " ".join(coords) + "\n")
+                f.write("      };\n\n")
+
+            f.write("    \\end{axis}\n")
+            f.write("  \\end{tikzpicture}\n")
+
+        f.write("  \\caption{\\label{fig:closed-economy-latency}\n"
+                " Left: Closed economy workload latency as a function of the protocol."
+                " For each protocol, from left to right, 3, 5 and 7 nodes."
+                " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
+                " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
+                " Right: Average latency breakdown per phase for nodes=3,"
+                " averaged across all data centers.}\n")
+        f.write("\\end{figure}\n")
 
     print(f"Generated {output_tikz}")
 

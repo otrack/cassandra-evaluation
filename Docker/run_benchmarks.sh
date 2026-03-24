@@ -107,6 +107,21 @@ run_ycsb() {
         extra_opts=("${filtered_opts[@]}")
     fi
 
+    # Ignore db.tracing for non-CockroachDB protocols (only cockroachdb supports it)
+    if ! printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
+        local filtered_opts=()
+        local i=0
+        while [ $i -lt ${#extra_opts[@]} ]; do
+            if [ "${extra_opts[$i]}" == "-p" ] && [ $((i+1)) -lt ${#extra_opts[@]} ] && [[ "${extra_opts[$((i+1))]}" == db.tracing=* ]]; then
+                i=$((i+2))
+            else
+                filtered_opts+=("${extra_opts[$i]}")
+                i=$((i+1))
+            fi
+        done
+        extra_opts=("${filtered_opts[@]}")
+    fi
+
     local extra_opts_str=""
     if [ ${#extra_opts[@]} -gt 0 ]; then
       for o in "${extra_opts[@]}"; do
