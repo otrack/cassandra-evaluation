@@ -230,7 +230,7 @@ def accord_latency_bounds(locations):
 def load_breakdown(breakdown_csv):
     """Load breakdown data from breakdown.csv.
 
-    Returns a dict: {protocol: {nodes: {city: {fast_commit, slow_commit, ordering, execution}}}}
+    Returns a dict: {protocol: {nodes: {city: {fast_commit, slow_commit, commit, ordering, execution}}}}
     Values are in microseconds.
     """
     result = {}
@@ -239,7 +239,7 @@ def load_breakdown(breakdown_csv):
     except (FileNotFoundError, IOError):
         return result
 
-    required = {'protocol', 'nodes', 'city', 'fast_commit', 'slow_commit', 'ordering', 'execution'}
+    required = {'protocol', 'nodes', 'city', 'fast_commit', 'slow_commit', 'commit', 'ordering', 'execution'}
     if not required.issubset(df.columns):
         return result
 
@@ -253,6 +253,7 @@ def load_breakdown(breakdown_csv):
         try:
             fc = float(row['fast_commit'])
             sc = float(row['slow_commit'])
+            cm = float(row['commit'])
             od = float(row['ordering'])
             ex = float(row['execution'])
         except (TypeError, ValueError):
@@ -260,6 +261,7 @@ def load_breakdown(breakdown_csv):
         result.setdefault(proto, {}).setdefault(nodes, {})[city] = {
             'fast_commit': fc,
             'slow_commit': sc,
+            'commit': cm,
             'ordering': od,
             'execution': ex,
         }
@@ -269,13 +271,13 @@ def load_breakdown(breakdown_csv):
 def compute_average_breakdown(breakdown_data, protocol, nodes):
     """Return the average breakdown across all cities for (protocol, nodes).
 
-    Returns a dict {fast_commit, slow_commit, ordering, execution} in
+    Returns a dict {fast_commit, slow_commit, commit, ordering, execution} in
     microseconds, or None if no data are available.
     """
     cities_data = breakdown_data.get(protocol, {}).get(nodes, {})
     if not cities_data:
         return None
-    components = ['fast_commit', 'slow_commit', 'ordering', 'execution']
+    components = ['fast_commit', 'slow_commit', 'commit', 'ordering', 'execution']
     totals = {c: 0.0 for c in components}
     n = len(cities_data)
     for city_bd in cities_data.values():
@@ -286,10 +288,13 @@ def compute_average_breakdown(breakdown_data, protocol, nodes):
 
 # nodes value used for the breakdown subplot (first/smallest experiment)
 DEFAULT_FIRST_NODES = 3
-BREAKDOWN_COMPONENTS = ['fast_commit', 'slow_commit', 'ordering', 'execution']
-BREAKDOWN_LABELS = ['Fast commit', 'Slow commit', 'Ordering', 'Execution']
-BREAKDOWN_PATTERNS = ['north east lines', 'north west lines', 'horizontal lines', 'vertical lines']
-BREAKDOWN_COLORS_LATEX = ['blue!40', 'red!60', 'green!50!black', 'orange!80']
+# fast_commit and slow_commit are loaded from the CSV but consolidated into commit for plotting.
+# Plotting the average commit avoids showing two separate bars (fast/slow path) that may
+# be misleading; the weighted average commit is the single representative commit latency.
+BREAKDOWN_COMPONENTS = ['commit', 'ordering', 'execution']
+BREAKDOWN_LABELS = ['Commit', 'Ordering', 'Execution']
+BREAKDOWN_PATTERNS = ['north east lines', 'horizontal lines', 'vertical lines']
+BREAKDOWN_COLORS_LATEX = ['blue!40', 'green!50!black', 'orange!80']
 
 
 def main():
@@ -460,16 +465,17 @@ def main():
             bd_proto_aliases = [protocol_aliases.get(p, p) for p in bd_proto_list]
 
             f.write("  \\hspace{1cm}\n")
-            f.write("  \\begin{tikzpicture}[scale=.7]\n")
 
-            # Breakdown legend
+            # Breakdown legend (placed outside tikzpicture to avoid LR mode error)
             bd_legend_entries = []
             for comp, label, color in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX):
                 bd_legend_entries.append(
                     r"\protect\tikz \protect\fill[{color}] (0,0) rectangle (0.3,0.3);"
                     r"~{label}".format(color=color, label=label)
                 )
-            f.write("    {{\\small {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
+            f.write("  {{\\small {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
+
+            f.write("  \\begin{tikzpicture}[scale=.7]\n")
 
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")

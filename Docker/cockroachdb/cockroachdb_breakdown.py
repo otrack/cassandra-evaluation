@@ -233,11 +233,13 @@ def main():
             continue
         # Convert seconds to microseconds to match cassandra_breakdown.sh units.
         # fast_commit is always 0 (CockroachDB has no fast-path consensus).
+        # slow_commit equals the commit time since fast_commit is 0.
         fast_commit = 0
         slow_commit = bd['commit'] * 1e6
+        commit = slow_commit
         ordering = bd['ordering'] * 1e6
         execution = bd['execution'] * 1e6
-        print(f"{city},{fast_commit},{slow_commit:.2f},{ordering:.2f},{execution:.2f}")
+        print(f"{city},{fast_commit},{slow_commit:.2f},{commit:.2f},{ordering:.2f},{execution:.2f}")
 
 
 if __name__ == "__main__":
