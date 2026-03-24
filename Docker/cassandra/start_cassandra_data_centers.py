@@ -63,7 +63,6 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
             run_kwargs = dict(
                 image=cassandra_image,
                 name=container_name,
-                hostname=container_name,
                 network=network_name,
                 auto_remove=True,
                 security_opt=[
