@@ -56,13 +56,14 @@ cockroachdb_create_usertable() {
     fi
 
     # Optionally pin the lease holder to the geographically optimal location.
+    # It is in charge of _all_ the ranges.
     local fix_lh
     fix_lh=$(config "cockroachdb.fix_lease_holder")
     if [ "${fix_lh}" = "true" ]; then
         cockroachdb_fix_lease_holder "${node_count}"
     fi
 
-    # change range size if not default
+    # change range size if not the default one
     local range_max_bytes=$(config "cockroachdb.range_max_bytes")
     if [ ${range_max_bytes} -ne 536870912 ]; then
 	local shard_command="ALTER TABLE usertable CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = ${range_max_bytes};"

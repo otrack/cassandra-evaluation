@@ -48,28 +48,26 @@ if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
 node_counts="3 5 7"
+node_counts="3"
 replication_factor=3
 records=$(config records)
 threads=$(config threads)
 ops_per_thread=0
 
+original_machine=$(config machine)
+original_maxexecutiontime=$(config maxexecutiontime)
 original_fix_lh=$(config "cockroachdb.fix_lease_holder")
+restore_settings() {
+    sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"
+    sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
+    sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=${original_fix_lh}/" "${CONFIG_FILE}"
+}
+trap restore_settings EXIT
+
 if [ "$test_run" -eq 1 ]; then
-    original_machine=$(config machine)
-    original_maxexecutiontime=$(config maxexecutiontime)
-    restore_test_settings() {
-        sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"
-        sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
-        sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=${original_fix_lh}/" "${CONFIG_FILE}"
-    }
-    trap restore_test_settings EXIT
     sed -i "s/^maxexecutiontime=.*/maxexecutiontime=60/" "${CONFIG_FILE}"
-else
-    restore_test_settings() {
-        sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=${original_fix_lh}/" "${CONFIG_FILE}"
-    }
-    trap restore_test_settings EXIT
 fi
+
 maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then

@@ -182,10 +182,10 @@ PYEOF
     log "Pinning CockroachDB lease holder to ${best_city}..."
     local container
     container="$(config "node_name")1"
-    local stmt="ALTER TABLE usertable CONFIGURE ZONE USING lease_preferences = '[[\"+region=${best_city}\"]]';"
+    local stmt="ALTER TABLE usertable CONFIGURE ZONE USING constraints = '{+region=${best_city}: 1}', lease_preferences = '[[\"+region=${best_city}\"]]';"
     docker exec "${container}" cockroach sql --insecure -e "${stmt}"
     if [ $? -ne 0 ]; then
-        error "cockroachdb_fix_lease_holder: ALTER TABLE failed for region=${best_city}"
+        error "cockroachdb_fix_lease_holder: ${stmt} failed"
         return 1
     fi
     log "CockroachDB lease holder pinned to ${best_city}"
