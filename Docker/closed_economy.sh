@@ -48,7 +48,6 @@ if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
 node_counts="3 5 7"
-node_counts="3"
 replication_factor=3
 records=$(config records)
 threads=$(config threads)

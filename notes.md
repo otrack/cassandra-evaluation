@@ -586,7 +586,23 @@ ALTER TABLE usertable
   CONFIGURE ZONE USING
     lease_preferences = '[["+region=Hanoi"]]';
 - Use the function above to place ideally the lease holder in cockroachdb when executing Docker/closed_economy.sh.
-- The plot Docker/closed_economy.py is in charge of plotting the result of the experiment.
-It outputs two plots. 
-The left one should now cockroachdb*. 
-The right one should provide a comparison 
+For this, the cleanest way is to add a new parameter in exp.config called cockroachdb.best_location.
+By default it is set to false.
+This parameter is read is cluster.sh.
+If it is set (i.e., true) then the function above is called right after creating the table to place ideally the lease holder.
+In closed_economy.sh, the script should change exp.config to have cockroachdb.best_location set to true.
+- The plot Docker/closed_economy.py is in charge of showing the result of the experiment.
+In the right figure, for the moment, we only display the result for 3 sites.
+Add also the result for 5 and 7.
+The computation is the very same: one takes the average of the commit, ordering, and execute phase across the various nodes.
+
+# 25.03
+
+Some more changes are needed in the closed economy experiment:
+- The closed_economy.sh experiment should evaluate cockroachdb in two flavors:
+when the lease holder is pinned at the best location and holds all ranges which is the current setting,
+but also in another set-up when cockroachdb decides for everything using default settings.
+These two flavors should be reported as "CockroachDB" and "CockroachDB*" in the plots.
+To implement this, change the scripts closed_economy.sh and closed_economy.py appropriately.
+- Also, the plots computed by closed_economy.py should fit on a single line, which is currently not the case.
+Moreover, the y axis of the second plot (breakdown one) should be in millisecond, as the first one.
