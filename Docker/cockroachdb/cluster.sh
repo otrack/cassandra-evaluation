@@ -107,3 +107,86 @@ cockroachdb_get_leaders() {
         echo "$(config "node_name")${node_id}"
     done
 }
+
+# cockroachdb_fix_lease_holder <node_count>
+#
+# Pin the CockroachDB lease holder of "usertable" to the node whose location
+# minimises the round-trip latency to a Raft majority quorum.  The optimal
+# leader is the one for which the distance to the (majority-1)-th nearest peer
+# is smallest (i.e. the farthest node in the cheapest majority quorum is as
+# close as possible).  Geographic distances and the fiber-optic latency model
+# are the same as those used in distance.py / emulate_latency.py.
+cockroachdb_fix_lease_holder() {
+    if [ $# -ne 1 ]; then
+        echo "usage: cockroachdb_fix_lease_holder node_count"
+        exit 1
+    fi
+    local node_count=$1
+    local latencies_csv="${COCKROACHDB_DIR}/../latencies.csv"
+
+    log "Computing optimal CockroachDB lease holder for ${node_count} nodes..."
+
+    # Inline Python: find the city whose round-trip to majority quorum is minimal.
+    # Arguments are passed via sys.argv so the heredoc can remain single-quoted
+    # (no accidental bash variable expansion inside the Python text).
+    local best_city
+    best_city=$(python3 - "${node_count}" "${latencies_csv}" <<'PYEOF'
+import csv, math, sys
+
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+node_count    = int(sys.argv[1])
+latencies_csv = sys.argv[2]
+majority      = node_count // 2 + 1   # Raft majority quorum size
+
+locations = []
+with open(latencies_csv, newline='') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        locations.append((float(row['lat']), float(row['lon']), row['loc']))
+        if len(locations) >= node_count:
+            break
+
+best_city = None
+best_cost = float('inf')
+for i, (lat1, lon1, loc) in enumerate(locations):
+    # Distances from node i to every other node, sorted ascending
+    dists = sorted(
+        haversine(lat1, lon1, lat2, lon2)
+        for j, (lat2, lon2, _) in enumerate(locations) if i != j
+    )
+    # The leader commits when (majority-1) other nodes ACK.
+    # Cost = distance to the farthest of those needed nodes.
+    needed  = majority - 1
+    farthest = dists[needed - 1] if 0 < needed <= len(dists) else 0.0
+    if farthest < best_cost:
+        best_cost = farthest
+        best_city = loc
+
+print(best_city)
+PYEOF
+)
+
+    if [ -z "${best_city}" ]; then
+        error "cockroachdb_fix_lease_holder: failed to determine best location"
+        return 1
+    fi
+
+    log "Pinning CockroachDB lease holder to ${best_city}..."
+    local container
+    container="$(config "node_name")1"
+    local stmt="ALTER TABLE usertable CONFIGURE ZONE USING lease_preferences = '[[\"+region=${best_city}\"]]';"
+    docker exec "${container}" cockroach sql --insecure -e "${stmt}"
+    if [ $? -ne 0 ]; then
+        error "cockroachdb_fix_lease_holder: ALTER TABLE failed for region=${best_city}"
+        return 1
+    fi
+    log "CockroachDB lease holder pinned to ${best_city}"
+}

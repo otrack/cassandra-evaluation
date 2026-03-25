@@ -287,7 +287,6 @@ def compute_average_breakdown(breakdown_data, protocol, nodes):
 
 
 # nodes value used for the breakdown subplot (first/smallest experiment)
-DEFAULT_FIRST_NODES = 3
 # fast_commit and slow_commit are loaded from the CSV but consolidated into commit for plotting.
 # Plotting the average commit avoids showing two separate bars (fast/slow path) that may
 # be misleading; the weighted average commit is the single representative commit latency.
@@ -295,6 +294,8 @@ BREAKDOWN_COMPONENTS = ['commit', 'ordering', 'execution']
 BREAKDOWN_LABELS = ['Commit', 'Ordering', 'Execution']
 BREAKDOWN_PATTERNS = ['north east lines', 'horizontal lines', 'vertical lines']
 BREAKDOWN_COLORS_LATEX = ['blue!40', 'green!50!black', 'orange!80']
+# Node counts shown in the breakdown subplot (one stacked bar per protocol×nodes combination)
+BREAKDOWN_ALL_NODE_COUNTS = [3, 5, 7]
 
 
 def main():
@@ -382,20 +383,24 @@ def main():
     # Load breakdown data for the second plot
     breakdown_data = load_breakdown(breakdown_csv)
 
-    # Compute breakdown averages for nodes=3 (first experiment)
-    first_nodes = min(node_counts) if node_counts else DEFAULT_FIRST_NODES
+    # Compute breakdown averages for all node counts (3, 5, 7), one entry per
+    # (protocol, nodes) pair that has data.  The averages are taken across all
+    # cities (data centres) for that combination.
     bd_protocols = sorted(breakdown_data.keys())
-    breakdown_avgs = {}
+    breakdown_items = []          # ordered list of (proto, nodes) with data
+    breakdown_avgs_all = {}       # {(proto, nodes): avg_dict}
     for proto in bd_protocols:
-        avg = compute_average_breakdown(breakdown_data, proto, first_nodes)
-        if avg is not None:
-            breakdown_avgs[proto] = avg
+        for n in BREAKDOWN_ALL_NODE_COUNTS:
+            avg = compute_average_breakdown(breakdown_data, proto, n)
+            if avg is not None:
+                breakdown_avgs_all[(proto, n)] = avg
+                breakdown_items.append((proto, n))
 
     # Compute y-axis limit for breakdown chart (microseconds)
-    bd_all_vals = []
-    for proto, avg in breakdown_avgs.items():
-        total = sum(avg.values())
-        bd_all_vals.append(total)
+    bd_all_vals = [
+        sum(breakdown_avgs_all[(p, n)].get(c, 0.0) for c in BREAKDOWN_COMPONENTS)
+        for (p, n) in breakdown_items
+    ]
     bd_ymax = max(bd_all_vals) * 1.2 if bd_all_vals else 1000
 
     # Generate TikZ/pgfplots code for grouped latency range chart
@@ -459,10 +464,13 @@ def main():
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
 
-        # Second plot: stacked bar breakdown for nodes=3
-        if breakdown_avgs:
-            bd_proto_list = sorted(breakdown_avgs.keys())
-            bd_proto_aliases = [protocol_aliases.get(p, p) for p in bd_proto_list]
+        # Second plot: stacked bar breakdown for 3, 5, and 7 nodes.
+        # One bar per (protocol, node_count) combination, grouped by protocol.
+        if breakdown_items:
+            # X-tick labels: "<protocol_alias>/<nodes>" e.g. "CockroachDB/3"
+            item_labels = [
+                f"{protocol_aliases.get(p, p)}/{n}" for (p, n) in breakdown_items
+            ]
 
             f.write("  \\hspace{1cm}\n")
 
@@ -480,22 +488,23 @@ def main():
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
             f.write("      width=8cm, height=8cm,\n")
-            f.write("      bar width=0.5cm,\n")
-            f.write("      enlarge x limits=0.5,\n")
+            f.write("      bar width=0.3cm,\n")
+            f.write("      enlarge x limits=0.3,\n")
             f.write("      ymajorgrids=true,\n")
-            f.write("      xlabel={Protocol},\n")
+            f.write("      xlabel={Protocol / Nodes},\n")
             f.write("      ylabel={Average latency ($\\mu$s)},\n")
             f.write(f"      ymin=0, ymax={bd_ymax:.2f},\n")
-            f.write("      xtick={" + ",".join(str(i) for i in range(len(bd_proto_list))) + "},\n")
-            f.write("      xticklabels={" + ",".join(bd_proto_aliases) + "},\n")
+            f.write("      xtick={" + ",".join(str(i) for i in range(len(breakdown_items))) + "},\n")
+            f.write("      xticklabels={" + ",".join(item_labels) + "},\n")
+            f.write("      x tick label style={rotate=45, anchor=east},\n")
             f.write("    ]\n\n")
 
             for comp, label, color, pattern in zip(
                 BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX, BREAKDOWN_PATTERNS
             ):
                 coords = []
-                for i, proto in enumerate(bd_proto_list):
-                    val = breakdown_avgs[proto].get(comp, 0.0)
+                for i, (proto, n) in enumerate(breakdown_items):
+                    val = breakdown_avgs_all.get((proto, n), {}).get(comp, 0.0)
                     coords.append(f"({i}, {val:.2f})")
                 f.write(f"      \\addplot+[ybar, fill={color}, draw=black,"
                         f" pattern={pattern}, pattern color={color}] coordinates {{\n")
@@ -510,7 +519,7 @@ def main():
                 " For each protocol, from left to right, 3, 5 and 7 nodes."
                 " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
                 " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
-                " Right: Average latency breakdown per phase for nodes=3,"
+                " Right: Average latency breakdown per phase for 3, 5, and 7 nodes,"
                 " averaged across all data centers.}\n")
         f.write("\\end{figure}\n")
 

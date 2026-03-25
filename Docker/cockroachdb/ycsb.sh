@@ -55,6 +55,13 @@ cockroachdb_create_usertable() {
         exit 1
     fi
 
+    # Optionally pin the lease holder to the geographically optimal location.
+    local fix_lh
+    fix_lh=$(config "cockroachdb.fix_lease_holder")
+    if [ "${fix_lh}" = "true" ]; then
+        cockroachdb_fix_lease_holder "${node_count}"
+    fi
+
     # # Use a single shard?
     # # FIXME
     # if [[ "$replication_factor" == "$node_count" ]] && [[ "$workload" == "site.ycsb.workloads.ConflictWorkload" ]];
