@@ -19,16 +19,17 @@ cockroachdb_start_cluster() {
     
     # Start the first node (which initializes the cluster)
     local first_node=$(config "node_name")1
+    local city=$(cat ${DIR}/latencies.csv | head -n 2 | tail -n 1 | awk -F, '{print $3}')
     # Note: Using "--" to separate Docker options from container command
     start_container ${image} ${first_node} "initial startup completed" ${LOGDIR}/cockroachdb_node1.log \
-        --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
-        -- start --insecure --store=type=mem,size=${max_mem_gb}GB --join=${first_node} || {
+        --rm -d --network ${network} -p 8080:8080 --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
+        -- start --insecure --store=type=mem,size=${max_mem_gb}GB --join=${first_node} --locality=region=${city},zone=1 || {
         error "Failed to start first CockroachDB node"
         return 1
     }
     
     # Initialize the cluster
-    local first_ip=$(get_container_ip ${first_node})
+    local first_ip=$(get_container_ip ${first_node})    
     docker exec ${first_node} ./cockroach init --insecure --host=${first_node} || {
         error "Failed to initialize CockroachDB cluster"
         return 2
@@ -38,10 +39,11 @@ cockroachdb_start_cluster() {
     # Start remaining nodes
     for i in $(seq 2 $node_count); do
         local container_name=$(config "node_name")${i}
+	city=$(cat ${DIR}/latencies.csv | head -n $((i+1)) | tail -n 1 | awk -F, '{print $3}')
         # Note: Using "--" to separate Docker options from container command
         start_container ${image} ${container_name} "nodeID" ${LOGDIR}/cockroachdb_node${i}.log \
             --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
-            -- start --insecure --store=type=mem,size=${max_mem_gb}GB --join=${first_ip} || {
+            -- start --insecure --store=type=mem,size=${max_mem_gb}GB --join=${first_ip} --locality=region=${city},zone=1 || {
             error "Failed to start CockroachDB node ${i}"
             return 3
         }
