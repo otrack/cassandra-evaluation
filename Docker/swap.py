@@ -13,7 +13,7 @@ import sys
 import pandas as pd
 import numpy as np
 
-from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, sort_protocols_for_plotting
 
 
 def usage_and_exit():
@@ -71,11 +71,9 @@ def main():
         print("No valid latency data found in results CSV.")
         sys.exit(1)
 
-    # Get unique protocols in order of appearance
-    protocol_order = []
-    for proto in df['protocol'].unique():
-        if proto not in protocol_order:
-            protocol_order.append(proto)
+    # Get unique protocols sorted (accord last) for consistent plot draw order.
+    raw_protocols = list(dict.fromkeys(df['protocol'].tolist()))
+    protocol_order = sort_protocols_for_plotting(raw_protocols)
 
     # S values from 3 to 8
     s_values = sorted(df['s_val'].unique().tolist())
@@ -83,7 +81,7 @@ def main():
     # For each protocol, compute median latency per S value
     # (mean across all nodes/cities for the same S value)
     data_by_protocol = {}
-    for proto in protocol_order:
+    for proto in raw_protocols:
         dfp = df[df['protocol'] == proto]
         latencies = []
         for s in s_values:
@@ -118,7 +116,7 @@ def main():
         f.write("  \\centering\n")
         f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=8cm, height=8cm,\n")
+        f.write("      width=8cm, height=4cm,\n")
         f.write("      grid=both,\n")
         f.write("      xlabel={Number of swapped items ($S$)},\n")
         f.write("      ylabel={Median latency (ms)},\n")
@@ -126,6 +124,8 @@ def main():
         f.write(f"      ymin={ymin:.2f}, ymax={ymax:.2f},\n")
         f.write("      xtick={" + ",".join(str(s) for s in s_values) + "},\n")
         f.write("      cycle list name=color list,\n")
+        f.write("      tick label style={font=\\tiny},\n")
+        f.write("      label style={font=\\tiny},\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):

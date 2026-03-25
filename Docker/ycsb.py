@@ -20,7 +20,7 @@ Generates a grouped bar chart:
 import sys
 import pandas as pd
 
-from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_legend, sort_protocols_for_plotting
 
 
 def usage_and_exit():
@@ -114,13 +114,10 @@ def main():
                 std = 0.0
             data[workload][proto] = (median, std)
 
-    # Sort protocols slowest → fastest (highest median latency first) so that
-    # within each group the tallest bar is on the left.
-    proto_median_lat = {
-        proto: sum(data[wl][proto][0] for wl in workloads) / (len(workloads) or 1)
-        for proto in protocol_order
-    }
-    protocol_order.sort(key=lambda p: proto_median_lat[p], reverse=True)
+    # Sort protocols by protocols.csv order for consistent legend and captions.
+    legend_order = sort_protocols_for_legend(protocol_order)
+    # For plotting, Accord is drawn last so its bars overwrite others visually.
+    plot_order = sort_protocols_for_plotting(protocol_order)
 
     # Colours from the unified protocol color schema
     protocol_colors = load_protocol_colors()
@@ -132,13 +129,13 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
-        f.write(make_protocol_legend(protocol_order, protocol_colors,
+        f.write(make_protocol_legend(legend_order, protocol_colors,
                                      protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}[scale=.75]\n")
         f.write("    \\begin{axis}[\n")
         f.write("      ybar,\n")
         f.write("      bar width=0.2cm,\n")
-        f.write("      width=11cm, height=8cm,\n")
+        f.write("      width=11cm, height=6cm,\n")
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
@@ -147,13 +144,15 @@ def main():
         f.write("      xtick=data,\n")
         f.write("      xticklabels={" + ",".join(workloads) + "},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
+        f.write("      tick label style={font=\\tiny},\n")
+        f.write("      label style={font=\\tiny},\n")
         f.write("    ]\n\n")
 
-        for idx, proto in enumerate(protocol_order):
+        for idx, proto in enumerate(plot_order):
             col = get_protocol_color(proto, protocol_colors, idx)
             f.write(f"      \\addplot+[fill={col}, draw=black,\n")
             f.write(f"        error bars/.cd, y dir=both, y explicit,\n")
-            f.write(f"        error mark=-, error bar style={{solid, line width=0.8pt}},\n")
+            f.write(f"        error mark=-, error bar style={{solid, black, line width=0.8pt}},\n")
             f.write(f"      ] coordinates {{\n")
             for wl_idx, workload in enumerate(workloads):
                 median, std = data[workload].get(proto, (0.0, 0.0))

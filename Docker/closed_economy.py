@@ -17,7 +17,7 @@ import sys
 import pandas as pd
 import numpy as np
 
-from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_legend, sort_protocols_for_plotting
 
 MAX_PERCENTILE = 100
 UNKNOWN_VALUE = "unknown"
@@ -336,8 +336,9 @@ def main():
             lambda row, p=percentile: percentile_value(row, p), axis=1
         )
 
-    # Get unique protocols and node counts, sorted
-    protocols = sorted(df_rmw['protocol'].unique().tolist())
+    # Get unique protocols and node counts; sort protocols by protocols.csv order.
+    protocols_legend = sort_protocols_for_legend(df_rmw['protocol'].unique().tolist())
+    protocols_plot   = sort_protocols_for_plotting(df_rmw['protocol'].unique().tolist())
     node_counts = sorted(df_rmw['nodes_int'].unique().tolist())
 
     latencies_path = os.path.join(os.path.dirname(__file__), "latencies.csv")
@@ -352,7 +353,7 @@ def main():
 
     # Compute average latency per protocol and node count
     data = {}
-    for proto in protocols:
+    for proto in protocols_plot:
         data[proto] = {}
         for nodes in node_counts:
             subset = df_rmw[(df_rmw['protocol'] == proto) & (df_rmw['nodes_int'] == nodes)]
@@ -371,7 +372,7 @@ def main():
 
     # Compute y-axis limits
     all_vals = []
-    for proto in protocols:
+    for proto in protocols_plot:
         for nodes in node_counts:
             for metric in LATENCY_METRICS:
                 val = data[proto].get(nodes, {}).get(metric)
@@ -388,7 +389,8 @@ def main():
     # Compute breakdown averages for all node counts (3, 5, 7), one entry per
     # (protocol, nodes) pair that has data.  The averages are taken across all
     # cities (data centres) for that combination.
-    bd_protocols = sorted(breakdown_data.keys())
+    # Sort breakdown protocols in protocols.csv order with Accord last.
+    bd_protocols = sort_protocols_for_plotting(list(breakdown_data.keys()))
     breakdown_items = []          # ordered list of (proto, nodes) with data
     breakdown_avgs_all = {}       # {(proto, nodes): avg_dict}
     for proto in bd_protocols:
@@ -413,8 +415,8 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
-        # Protocol legend
-        f.write(make_protocol_legend(protocols, protocol_colors,
+        # Protocol legend in protocols.csv order
+        f.write(make_protocol_legend(protocols_legend, protocol_colors,
                                      protocol_aliases=protocol_aliases))
         # Breakdown legend — placed before both tikzpictures so the two plots
         # remain on the same line (no forced line-break between them).
@@ -425,26 +427,28 @@ def main():
                     r"\protect\tikz \protect\fill[{color}] (0,0) rectangle (0.3,0.3);"
                     r"~{label}".format(color=color, label=label)
                 )
-            f.write("  {{\\small {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
+            f.write("  {{\\tiny {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
 
         f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=8cm, height=8cm,\n")
+        f.write("      width=8cm, height=6cm,\n")
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
         f.write("      xlabel={Protocol},\n")
         f.write("      ylabel={Latency (ms)},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
-        f.write("      xtick={" + ",".join(str(i) for i in range(len(protocols))) + "},\n")
-        f.write("      xticklabels={" + ",".join(protocols) + "},\n")
+        f.write("      xtick={" + ",".join(str(i) for i in range(len(protocols_plot))) + "},\n")
+        f.write("      xticklabels={" + ",".join(protocols_plot) + "},\n")
+        f.write("      tick label style={font=\\tiny},\n")
+        f.write("      label style={font=\\tiny},\n")
         f.write("    ]\n\n")
 
         # Center node count offsets around each protocol position.
         offsets = [
             (idx - (len(node_counts) - 1) / 2) * offset_step for idx in range(len(node_counts))
         ]
-        for proto_idx, proto in enumerate(protocols):
+        for proto_idx, proto in enumerate(protocols_plot):
             col = get_protocol_color(proto, protocol_colors, proto_idx)
             for node_idx, nodes in enumerate(node_counts):
                 offset = offsets[node_idx]
@@ -492,7 +496,7 @@ def main():
 
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
-            f.write("      width=8cm, height=8cm,\n")
+            f.write("      width=8cm, height=6cm,\n")
             f.write("      bar width=0.3cm,\n")
             f.write("      enlarge x limits=0.3,\n")
             f.write("      ymajorgrids=true,\n")
@@ -501,7 +505,9 @@ def main():
             f.write(f"      ymin=0, ymax={bd_ymax:.2f},\n")
             f.write("      xtick={" + ",".join(str(i) for i in range(len(breakdown_items))) + "},\n")
             f.write("      xticklabels={" + ",".join(item_labels) + "},\n")
-            f.write("      x tick label style={rotate=45, anchor=east},\n")
+            f.write("      x tick label style={rotate=45, anchor=east, font=\\tiny},\n")
+            f.write("      tick label style={font=\\tiny},\n")
+            f.write("      label style={font=\\tiny},\n")
             f.write("    ]\n\n")
 
             for comp, label, color, pattern in zip(
