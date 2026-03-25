@@ -309,7 +309,7 @@ def main():
 
         f.write("      \\begin{groupplot}[\n")
         f.write(f"        group style={{group size={n_ops} by {total_rows}, horizontal sep=1.2cm, vertical sep=0.8cm}},\n")
-        f.write("        width=5cm, height=5cm,\n")
+        f.write("        width=7cm, height=5cm,\n")
         f.write("        grid=both,\n")
         f.write("        ymajorgrids=true,\n")
         f.write("        xmajorgrids=true,\n")

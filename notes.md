@@ -606,3 +606,14 @@ These two flavors should be reported as "CockroachDB" and "CockroachDB*" in the 
 To implement this, change the scripts closed_economy.sh and closed_economy.py appropriately.
 - Also, the plots computed by closed_economy.py should fit on a single line, which is currently not the case.
 Moreover, the y axis of the second plot (breakdown one) should be in millisecond, as the first one.
+
+# 25.03
+
+A handful of small changes are needed in the Docker experiments:
+- The caption of the figures should always list protocols in the same order. Currently, this is not the case.  It should always be the order defined in protocols.csv.
+- In all plotting scripts, Accord should be plotted last so that it(s) curve(s) overwrite the others'. 
+- In ycsb.sh, the bar for standard deviation are in different colors. Please always use black everywhere. This is readable.
+- To remove blanks, shrink the height of the plots computed in the following experiments:
+ycsb (~25% less), latency_throughput (~10% less), closed_economy (~25% less), swap (~50% less) and fault_tolerance (~30% less).
+- Use a Latex tiny font everywhere but captions.
+
