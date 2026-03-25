@@ -292,7 +292,7 @@ def compute_average_breakdown(breakdown_data, protocol, nodes):
 # be misleading; the weighted average commit is the single representative commit latency.
 BREAKDOWN_COMPONENTS = ['commit', 'ordering', 'execution']
 BREAKDOWN_LABELS = ['Commit', 'Ordering', 'Execution']
-BREAKDOWN_PATTERNS = ['north east lines', 'horizontal lines', 'vertical lines']
+BREAKDOWN_PATTERNS = ['north east lines', 'horizontal lines', 'north west lines']
 # Node counts shown in the breakdown subplot (one stacked bar per protocol×nodes combination)
 BREAKDOWN_ALL_NODE_COUNTS = [3, 5, 7]
 # Breakdown CSV values are stored in microseconds; convert to milliseconds for plotting.
@@ -508,7 +508,7 @@ def main():
 
         f.write("  \\begin{tikzpicture}[scale=.6]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=6.5cm, height=6cm,\n")
+        f.write("      width=8cm, height=6cm,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
         f.write("      ymode=log,\n")
@@ -575,8 +575,8 @@ def main():
                         f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
-        f.write(f"    \\node[font=\\tiny] at (1.2,-.5) {{1 client/DC}};\n")
-        f.write(f"    \\node[font=\\tiny] at (4,-.5) {{{multi_client_threads} clients/DC}};\n")
+        f.write(f"    \\node[font=\\tiny] at (1.5,-.5) {{1 client/DC}};\n")
+        f.write(f"    \\node[font=\\tiny] at (5,-.5) {{{multi_client_threads} clients/DC}};\n")
         
         f.write("  \\end{tikzpicture}\n")
 
@@ -602,10 +602,9 @@ def main():
             f.write("      enlarge x limits=0.15,\n")
             f.write("      bar width=0.2cm,\n")
             f.write("      ymajorgrids=true,\n")
-            f.write("      ylabel=\\empty,\n")
+            f.write("      ylabel={Latency (ms)},\n")
             f.write(f"     ymin=0, ymax={breakdown_ymax:.2f},\n")
             f.write("      xticklabel=\\empty,\n")
-            f.write("      yticklabel=\\empty\n")
             f.write("    ]\n\n")
 
             # Emit one \addplot per (bar, phase).  Each \addplot lists ALL bar
@@ -637,14 +636,13 @@ def main():
 
         if has_multi:
             left_caption = (
-                " Left: Closed economy workload latency for client/DC=1 (left of dashed line)"
-                f" and client/DC={multi_client_threads} (right of dashed line)."
+                f" Left: Closed economy workload latency for one and {multi_client_threads} clients per DC."
                 " For each protocol, from left to right, 3, 5 and 7 nodes."
                 " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
                 " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
-                " CockroachDB* pins the lease holder at the geographically optimal location."
+                " CockroachDB+ pins the (unique) lease holder at the geographically optimal location."
             )
-        else:
+        else: # FIXME
             left_caption = (
                 " Left: Closed economy workload latency as a function of the protocol."
                 " For each protocol, from left to right, 3, 5 and 7 nodes."
@@ -655,7 +653,7 @@ def main():
 
         if breakdown_items:
             right_caption = (
-                " Right: Average latency breakdown per phase (ms) for 3, 5, and 7 nodes,"
+                " Right: Latency breakdown per protocol phase for 3, 5, and 7 nodes,"
                 " averaged across all data centers."
             )
         else:
