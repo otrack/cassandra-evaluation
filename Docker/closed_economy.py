@@ -503,10 +503,9 @@ def main():
             (idx - (len(node_counts) - 1) / 2) * offset_step for idx in range(len(node_counts))
         ]
 
-        f.write("  \\begin{tikzpicture}[scale=.7]\n")
+        f.write("  \\begin{tikzpicture}[scale=.6]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=7cm, height=6cm,\n")
-        f.write("      enlarge x limits=0.15,\n")
+        f.write("      width=6.5cm, height=6cm,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
         f.write("      ymode=log,\n")
@@ -573,7 +572,7 @@ def main():
                         f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
-        f.write(f"    \\node[font=\\tiny] at (1.4,-.5) {{1 client/DC}};\n")
+        f.write(f"    \\node[font=\\tiny] at (1.2,-.5) {{1 client/DC}};\n")
         f.write(f"    \\node[font=\\tiny] at (4,-.5) {{{multi_client_threads} clients/DC}};\n")
         
         f.write("  \\end{tikzpicture}\n")
@@ -584,12 +583,12 @@ def main():
                 f"{protocol_aliases.get(p, p)}/{n}" for (p, n) in breakdown_items
             ]
 
-            f.write("  \\begin{tikzpicture}[scale=.7]\n")
+            f.write("  \\begin{tikzpicture}[scale=.6]\n")
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
-            f.write("      width=7cm, height=6cm,\n")
+            f.write("      width=6cm, height=6cm,\n")
             f.write("      enlarge x limits=0.15,\n")
-            f.write("      bar width=0.3cm,\n")
+            f.write("      bar width=0.2cm,\n")
             f.write("      ymajorgrids=true,\n")
             f.write("      ymode=log,\n")
             f.write("      ylabel=\\empty,\n")
@@ -614,7 +613,7 @@ def main():
                 f.write("      };\n\n")
 
             f.write("    \\end{axis}\n")
-            f.write(f"    \\node[font=\\tiny] at (3,-.5) {{breakdown (1 client/DC)}};\n")
+            f.write(f"    \\node[font=\\tiny] at (2.5,-.5) {{breakdown (1 client/DC)}};\n")
             f.write("  \\end{tikzpicture}\n")
 
         if has_multi:
