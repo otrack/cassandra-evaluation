@@ -292,8 +292,7 @@ def compute_average_breakdown(breakdown_data, protocol, nodes):
 # be misleading; the weighted average commit is the single representative commit latency.
 BREAKDOWN_COMPONENTS = ['commit', 'ordering', 'execution']
 BREAKDOWN_LABELS = ['Commit', 'Ordering', 'Execution']
-BREAKDOWN_PATTERNS = ['north east lines', 'horizontal lines', 'vertical lines']
-BREAKDOWN_COLORS_LATEX = ['blue!40', 'green!50!black', 'orange!80']
+BREAKDOWN_PATTERNS = ['north east lines', 'horizontal lines', 'north west lines']
 # Node counts shown in the breakdown subplot (one stacked bar per protocol×nodes combination)
 BREAKDOWN_ALL_NODE_COUNTS = [3, 5, 7]
 # Breakdown CSV values are stored in microseconds; convert to milliseconds for plotting.
@@ -461,11 +460,15 @@ def main():
         # Breakdown legend placed before both tikzpictures so both plots remain on the same line.
         if breakdown_items:
             bd_legend_entries = []
-            for comp, label, color in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX):
-                bd_legend_entries.append(
-                    r"\protect\tikz \protect\fill[{color}] (0,0) rectangle (0.3,0.3);"
-                    r"~{label}".format(color=color, label=label)
-                )
+            for label, pattern in zip(BREAKDOWN_LABELS, BREAKDOWN_PATTERNS):
+                # Show a small hatched swatch. Fill and pattern color are both gray
+                # since the actual bar color varies by protocol; the pattern alone
+                # identifies the phase.
+                swatch = (
+                    r"\protect\tikz \protect\fill[fill=gray!40, pattern={pattern}, pattern color=gray!80]"
+                    r" (0,0) rectangle (0.3,0.3);~{label}"
+                ).format(pattern=pattern, label=label)
+                bd_legend_entries.append(swatch)
             f.write("  {{\\tiny {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
 
         # ---- Left subplot: comparison of single-client vs multi-client latency ----
@@ -505,7 +508,7 @@ def main():
 
         f.write("  \\begin{tikzpicture}[scale=.6]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=6.5cm, height=6cm,\n")
+        f.write("      width=8cm, height=6cm,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
         f.write("      ymode=log,\n")
@@ -572,8 +575,8 @@ def main():
                         f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
-        f.write(f"    \\node[font=\\tiny] at (1.2,-.5) {{1 client/DC}};\n")
-        f.write(f"    \\node[font=\\tiny] at (4,-.5) {{{multi_client_threads} clients/DC}};\n")
+        f.write(f"    \\node[font=\\tiny] at (1.5,-.5) {{1 client/DC}};\n")
+        f.write(f"    \\node[font=\\tiny] at (5,-.5) {{{multi_client_threads} clients/DC}};\n")
         
         f.write("  \\end{tikzpicture}\n")
 
@@ -583,6 +586,15 @@ def main():
                 f"{protocol_aliases.get(p, p)}/{n}" for (p, n) in breakdown_items
             ]
 
+            # Compute ymax from the maximum total-bar height (sum of all components)
+            # across all (proto, nodes) pairs, so the y-axis fits the data.
+            bd_totals = []
+            for proto, n in breakdown_items:
+                avgs = breakdown_avgs_all.get((proto, n), {})
+                total = sum(avgs.get(c, 0.0) for c in BREAKDOWN_COMPONENTS) / MICROS_TO_MILLIS
+                bd_totals.append(total)
+            breakdown_ymax = max(bd_totals) * 1.2 if bd_totals else 100.0
+
             f.write("  \\begin{tikzpicture}[scale=.6]\n")
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
@@ -590,27 +602,33 @@ def main():
             f.write("      enlarge x limits=0.15,\n")
             f.write("      bar width=0.2cm,\n")
             f.write("      ymajorgrids=true,\n")
-            f.write("      ymode=log,\n")
-            f.write("      ylabel=\\empty,\n")
-            f.write(f"     ymin=0, ymax={left_ymax:.2f},\n")
+            f.write("      ylabel={Latency (ms)},\n")
+            f.write(f"     ymin=0, ymax={breakdown_ymax:.2f},\n")
             f.write("      xticklabel=\\empty,\n")
-            f.write("      yticklabel=\\empty\n")
             f.write("    ]\n\n")
 
-            for comp, label, color, pattern in zip(
-                BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX, BREAKDOWN_PATTERNS
-            ):
-                coords = []
-                for i, (proto, n) in enumerate(breakdown_items):
+            # Emit one \addplot per (bar, phase).  Each \addplot lists ALL bar
+            # positions so that pgfplots' per-x-value stack accumulator is
+            # initialised for every position in every \addplot; non-relevant
+            # positions receive height 0 so the accumulated stack for those
+            # positions is not disturbed.  This guarantees that every bar starts
+            # at y=0 regardless of the order the \addplot commands are emitted.
+            # fill and pattern color are both set to the protocol color so that
+            # the bar appears in the correct protocol color.
+            n_bars = len(breakdown_items)
+            for i, (proto, n) in enumerate(breakdown_items):
+                proto_color = get_protocol_color(proto, protocol_colors, i)
+                for comp, pattern in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_PATTERNS):
                     # Convert from microseconds (stored in CSV) to milliseconds.
-                    val = breakdown_avgs_all.get((proto, n), {}).get(comp, 0.0) / MICROS_TO_MILLIS
-                    if val == 0:
-                        val = 1 # cause of the log scale
-                    coords.append(f"({i}, {val:.3f})")
-                f.write(f"      \\addplot+[ybar, fill={color}, draw=black,"
-                        f" pattern={pattern}, pattern color={color}] coordinates {{\n")
-                f.write("        " + " ".join(coords) + "\n")
-                f.write("      };\n\n")
+                    val_i = breakdown_avgs_all.get((proto, n), {}).get(comp, 0.0) / MICROS_TO_MILLIS
+                    f.write(f"      \\addplot+[ybar, fill={proto_color}, draw=black,"
+                            f" pattern={pattern}, pattern color={proto_color}] coordinates {{\n")
+                    for j in range(n_bars):
+                        if j == i:
+                            f.write(f"        ({j}, {val_i:.3f})\n")
+                        else:
+                            f.write(f"        ({j}, 0)\n")
+                    f.write("      };\n\n")
 
             f.write("    \\end{axis}\n")
             f.write(f"    \\node[font=\\tiny] at (2.5,-.5) {{breakdown (1 client/DC)}};\n")
@@ -618,14 +636,13 @@ def main():
 
         if has_multi:
             left_caption = (
-                " Left: Closed economy workload latency for client/DC=1 (left of dashed line)"
-                f" and client/DC={multi_client_threads} (right of dashed line)."
+                f" Left: Closed economy workload latency for one and {multi_client_threads} clients per DC."
                 " For each protocol, from left to right, 3, 5 and 7 nodes."
                 " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
                 " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
-                " CockroachDB* pins the lease holder at the geographically optimal location."
+                " CockroachDB+ pins the (unique) lease holder at the geographically optimal location."
             )
-        else:
+        else: # FIXME
             left_caption = (
                 " Left: Closed economy workload latency as a function of the protocol."
                 " For each protocol, from left to right, 3, 5 and 7 nodes."
@@ -636,7 +653,7 @@ def main():
 
         if breakdown_items:
             right_caption = (
-                " Right: Average latency breakdown per phase (ms) for 3, 5, and 7 nodes,"
+                " Right: Latency breakdown per protocol phase for 3, 5, and 7 nodes,"
                 " averaged across all data centers."
             )
         else:

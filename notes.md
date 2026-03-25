@@ -607,7 +607,7 @@ To implement this, change the scripts closed_economy.sh and closed_economy.py ap
 - Also, the plots computed by closed_economy.py should fit on a single line, which is currently not the case.
 Moreover, the y axis of the second plot (breakdown one) should be in millisecond, as the first one.
 
-# 25.03
+# 25.03 - copilot
 
 A handful of small changes are needed in the Docker experiments:
 - The caption of the figures should always list protocols in the same order. Currently, this is not the case.  It should always be the order defined in protocols.csv.
@@ -617,7 +617,7 @@ A handful of small changes are needed in the Docker experiments:
 ycsb (~25% less), latency_throughput (~10% less), closed_economy (~25% less), swap (~50% less) and fault_tolerance (~30% less).
 - Use a Latex tiny font everywhere but captions.
 
-# 25.03
+# 25.03 - copilot
 
 One more change is needed in the closed economy experiment (Docker/closed_economy.sh).
 Please follow the instructions below.
@@ -628,10 +628,20 @@ For these additional runs, we also run all the three algorithms (Accord, Cockroa
 
 For thesse additional, we do not provide a breakdown because, as said above, this is not practical. Consequently, desactivate tracing for cockroachdb and do not run the breakdown script for Accord.
 
-# 25.03
+# 25.03 - meeting
 
 TODO:
 add commit time to Fig. 9
 mail to B. what are the needed metrics to plot slow/fast paths
 Fig. 11: worst/best-case for crdb
 double-check Fig. 13 (try w. a bigger data set and theta=0.0) [FEDOR]
+
+
+# 25.03 - copilot
+
+In closed_economy.py, the color of each stack should be the one of the corresponding protocol.
+Fix this by emitting one `\addplot` per (bar position, phase), each containing a single coordinate.
+Each `\addplot` uses `fill=<protocol_color>` directly so every bar gets its protocol's color.
+The `pattern color` still uses the phase color so patterns differentiate commit/ordering/execution.
+This avoids the colormap/scatter approach which does not work with `ybar stacked` in pgfplots.
+
