@@ -50,7 +50,7 @@ fi
 node_counts="3 5 7"
 replication_factor=3
 records=$(config records)
-threads=$(config threads)
+threads=50
 single_client_threads=1  # 1 thread/DC for tracing+breakdown; second set uses threads from config
 ops_per_thread=0
 

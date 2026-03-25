@@ -124,8 +124,8 @@ def main():
         f.write(f"      ymin={ymin:.2f}, ymax={ymax:.2f},\n")
         f.write("      xtick={" + ",".join(str(s) for s in s_values) + "},\n")
         f.write("      cycle list name=color list,\n")
-        f.write("      tick label style={font=\\tiny},\n")
-        f.write("      label style={font=\\tiny},\n")
+        f.write("      tick label style={font=\\small},\n")
+        f.write("      label style={font=\\small},\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(protocol_order):
