@@ -465,9 +465,8 @@ def main():
         # Protocol legend in protocols.csv order
         f.write(make_protocol_legend(protocols_legend, protocol_colors,
                                      protocol_aliases=protocol_aliases))
-        # Breakdown legend — placed before both tikzpictures when showing breakdown.
-        # When showing multi-client comparison, only the protocol legend is needed.
-        if not has_multi and breakdown_items:
+        # Breakdown legend placed before both tikzpictures so both plots remain on the same line.
+        if breakdown_items:
             bd_legend_entries = []
             for comp, label, color in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX):
                 bd_legend_entries.append(
@@ -476,65 +475,11 @@ def main():
                 )
             f.write("  {{\\tiny {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
 
-        # ---- Left subplot: single-client latency with percentile markers ----
-        f.write("  \\begin{tikzpicture}[scale=.7]\n")
-        f.write("    \\begin{axis}[\n")
-        f.write("      width=8cm, height=6cm,\n")
-        f.write("      enlarge x limits=0.25,\n")
-        f.write("      grid=major,\n")
-        f.write("      ymajorgrids=true,\n")
-        f.write("      xlabel={Protocol},\n")
-        f.write("      ylabel={Latency (ms)},\n")
-        f.write(f"      ymin=0, ymax={ymax:.2f},\n")
-        f.write("      xtick={" + ",".join(str(i) for i in range(len(protocols_plot))) + "},\n")
-        f.write("      xticklabels={" + ",".join(protocols_plot) + "},\n")
-        f.write("      tick label style={font=\\tiny},\n")
-        f.write("      label style={font=\\tiny},\n")
-        f.write("    ]\n\n")
-
-        # Center node count offsets around each protocol position.
-        offsets = [
-            (idx - (len(node_counts) - 1) / 2) * offset_step for idx in range(len(node_counts))
-        ]
-        for proto_idx, proto in enumerate(protocols_plot):
-            col = get_protocol_color(proto, protocol_colors, proto_idx)
-            for node_idx, nodes in enumerate(node_counts):
-                offset = offsets[node_idx]
-                avg_val = data[proto].get(nodes, {}).get("avg")
-                best_val = data[proto].get(nodes, {}).get("best")
-                worst_val = data[proto].get(nodes, {}).get("worst")
-                if avg_val is None or best_val is None or worst_val is None:
-                    continue
-                # Only compare bounds once we know all values are present.
-                # Skip inconsistent data where bounds do not enclose the average.
-                if not (best_val <= avg_val <= worst_val):
-                    continue
-                x = proto_idx + offset
-                # Two coordinates at the same x-position draw a vertical line for best/worst.
-                f.write(f"      \\addplot+[mark=-, color={col}, solid, forget plot] coordinates {{\n")
-                f.write(f"        ({x:.2f}, {best_val:.2f})\n")
-                f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
-                f.write("      };\n\n")
-                f.write(f"      \\addplot+[only marks, mark=*, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
-                f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
-                f.write("      };\n\n")
-                for metric in MARKER_METRICS:
-                    mark = METRIC_MARKS[metric]
-                    val = data[proto].get(nodes, {}).get(metric)
-                    if val is None:
-                        continue
-                    f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
-                    f.write(f"        ({x:.2f}, {val:.2f})\n")
-                    f.write("      };\n\n")
-
-        f.write("    \\end{axis}\n")
-        f.write("  \\end{tikzpicture}\n")
-
-        f.write("  \\hspace{1cm}\n")
-
+        # ---- Left subplot: comparison of single-client vs multi-client latency ----
+        # Two groups separated by a vertical dashed line.
+        # When no multi-client data, falls back to single-client only (no separator).
+        n = len(all_protocols_right)
         if has_multi:
-            # ---- Right subplot: comparison of single-client vs multi-client median latency ----
-            n = len(all_protocols_right)
             section_gap = 1.0  # gap between the two sections (for the dashed separator)
             section2_offset = n + section_gap
             dashed_x = n - 0.5 + section_gap / 2.0   # midpoint of the gap between sections
@@ -542,56 +487,76 @@ def main():
             label2_x = section2_offset + (n - 1) / 2.0  # centre of section 2
 
             # Compute y-axis range from both sections
-            right_vals = []
+            left_vals = []
             for proto in all_protocols_right:
                 for nodes in node_counts:
                     for src in (data, data_multi):
-                        v = src.get(proto, {}).get(nodes, {}).get("avg")
-                        if v is not None:
-                            right_vals.append(v)
-            right_ymax = max(right_vals) * 1.2 if right_vals else ymax
+                        for metric in LATENCY_METRICS:
+                            v = src.get(proto, {}).get(nodes, {}).get(metric)
+                            if v is not None:
+                                left_vals.append(v)
+            left_ymax = max(left_vals) * 1.2 if left_vals else ymax
 
             xtick_positions = list(range(n)) + [section2_offset + i for i in range(n)]
             xticklabels = [protocol_aliases.get(p, p) for p in all_protocols_right] * 2
+        else:
+            # No multi-client data: show single-client group only
+            left_ymax = ymax
+            xtick_positions = list(range(n))
+            xticklabels = [protocol_aliases.get(p, p) for p in all_protocols_right]
 
-            f.write("  \\begin{tikzpicture}[scale=.7]\n")
-            f.write("    \\begin{axis}[\n")
-            f.write("      width=8cm, height=6cm,\n")
-            f.write("      enlarge x limits=0.15,\n")
-            f.write("      grid=major,\n")
-            f.write("      ymajorgrids=true,\n")
-            f.write("      xlabel={Protocol},\n")
-            f.write("      ylabel={Latency (ms)},\n")
-            f.write(f"      ymin=0, ymax={right_ymax:.2f},\n")
-            f.write("      xtick={" + ",".join(f"{x}" for x in xtick_positions) + "},\n")
-            f.write("      xticklabels={" + ",".join(xticklabels) + "},\n")
-            f.write("      x tick label style={rotate=45, anchor=east},\n")
-            f.write("      tick label style={font=\\tiny},\n")
-            f.write("      label style={font=\\tiny},\n")
-            f.write("    ]\n\n")
+        # Center node count offsets around each protocol position.
+        offsets = [
+            (idx - (len(node_counts) - 1) / 2) * offset_step for idx in range(len(node_counts))
+        ]
 
-            # Section 1: single-client data
-            for proto_idx, proto in enumerate(all_protocols_right):
-                col = get_protocol_color(proto, protocol_colors, proto_idx)
-                for node_idx, nodes in enumerate(node_counts):
-                    offset = offsets[node_idx]
-                    avg_val = data.get(proto, {}).get(nodes, {}).get("avg")
-                    best_val = data.get(proto, {}).get(nodes, {}).get("best")
-                    worst_val = data.get(proto, {}).get(nodes, {}).get("worst")
-                    if avg_val is None:
+        f.write("  \\begin{tikzpicture}[scale=.7]\n")
+        f.write("    \\begin{axis}[\n")
+        f.write("      width=8cm, height=6cm,\n")
+        f.write("      enlarge x limits=0.15,\n")
+        f.write("      grid=major,\n")
+        f.write("      ymajorgrids=true,\n")
+        f.write("      xlabel={Protocol},\n")
+        f.write("      ylabel={Latency (ms)},\n")
+        f.write(f"      ymin=0, ymax={left_ymax:.2f},\n")
+        f.write("      xtick={" + ",".join(f"{x}" for x in xtick_positions) + "},\n")
+        f.write("      xticklabels={" + ",".join(xticklabels) + "},\n")
+        f.write("      x tick label style={rotate=45, anchor=east},\n")
+        f.write("      tick label style={font=\\tiny},\n")
+        f.write("      label style={font=\\tiny},\n")
+        f.write("    ]\n\n")
+
+        # Section 1: single-client data
+        for proto_idx, proto in enumerate(all_protocols_right):
+            col = get_protocol_color(proto, protocol_colors, proto_idx)
+            for node_idx, nodes in enumerate(node_counts):
+                offset = offsets[node_idx]
+                avg_val = data.get(proto, {}).get(nodes, {}).get("avg")
+                best_val = data.get(proto, {}).get(nodes, {}).get("best")
+                worst_val = data.get(proto, {}).get(nodes, {}).get("worst")
+                if avg_val is None:
+                    continue
+                x = proto_idx + offset
+                if best_val is not None and worst_val is not None and best_val <= avg_val <= worst_val:
+                    f.write(f"      \\addplot+[mark=-, color={col}, solid, forget plot] coordinates {{\n")
+                    f.write(f"        ({x:.2f}, {best_val:.2f})\n")
+                    f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
+                    f.write("      };\n\n")
+                f.write(f"      \\addplot+[only marks, mark=*, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
+                f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
+                f.write("      };\n\n")
+                for metric in MARKER_METRICS:
+                    mark = METRIC_MARKS[metric]
+                    val = data.get(proto, {}).get(nodes, {}).get(metric)
+                    if val is None:
                         continue
-                    x = proto_idx + offset
-                    if best_val is not None and worst_val is not None and best_val <= avg_val <= worst_val:
-                        f.write(f"      \\addplot+[mark=-, color={col}, solid, forget plot] coordinates {{\n")
-                        f.write(f"        ({x:.2f}, {best_val:.2f})\n")
-                        f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
-                        f.write("      };\n\n")
-                    f.write(f"      \\addplot+[only marks, mark=*, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
-                    f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
+                    f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
+                    f.write(f"        ({x:.2f}, {val:.2f})\n")
                     f.write("      };\n\n")
 
+        if has_multi:
             # Vertical dashed line separating the two sections
-            f.write(f"      \\addplot[black, dashed, thick] coordinates {{({dashed_x:.2f},0) ({dashed_x:.2f},{right_ymax:.2f})}};\n\n")
+            f.write(f"      \\addplot[black, dashed, thick] coordinates {{({dashed_x:.2f},0) ({dashed_x:.2f},{left_ymax:.2f})}};\n\n")
 
             # Section 2: multi-client data
             for proto_idx, proto in enumerate(all_protocols_right):
@@ -612,22 +577,31 @@ def main():
                     f.write(f"      \\addplot+[only marks, mark=*, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
                     f.write(f"        ({x:.2f}, {avg_val:.2f})\n")
                     f.write("      };\n\n")
+                    for metric in MARKER_METRICS:
+                        mark = METRIC_MARKS[metric]
+                        val = data_multi.get(proto, {}).get(nodes, {}).get(metric)
+                        if val is None:
+                            continue
+                        f.write(f"      \\addplot+[only marks, mark={mark}, color={col}, mark options=fill={col}, forget plot] coordinates {{\n")
+                        f.write(f"          ({x:.2f}, {val:.2f})\n")
+                        f.write("      };\n\n")
 
             # Section labels below the x-axis
             f.write(f"      \\node[anchor=north, yshift=-10pt, font=\\tiny] at (axis cs:{label1_x:.2f},0) {{client/DC=1}};\n")
             f.write(f"      \\node[anchor=north, yshift=-10pt, font=\\tiny] at (axis cs:{label2_x:.2f},0) {{client/DC={multi_client_threads}}};\n")
 
-            f.write("    \\end{axis}\n")
-            f.write("  \\end{tikzpicture}\n")
+        f.write("    \\end{axis}\n")
+        f.write("  \\end{tikzpicture}\n")
 
-        elif breakdown_items:
-            # ---- Right subplot: stacked bar breakdown (shown when no multi-client data) ----
+        f.write("  \\hspace{1cm}\n")
+
+        # ---- Right subplot: stacked bar breakdown (single-client data) ----
+        if breakdown_items:
             item_labels = [
                 f"{protocol_aliases.get(p, p)}/{n}" for (p, n) in breakdown_items
             ]
 
             f.write("  \\begin{tikzpicture}[scale=.7]\n")
-
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
             f.write("      width=8cm, height=6cm,\n")
@@ -661,12 +635,24 @@ def main():
             f.write("  \\end{tikzpicture}\n")
 
         if has_multi:
-            right_caption = (
-                f" Right: Median operation latency for client/DC=1 (left of dashed line)"
+            left_caption = (
+                " Left: Closed economy workload latency for client/DC=1 (left of dashed line)"
                 f" and client/DC={multi_client_threads} (right of dashed line)."
-                f" Each group shows protocols in the same order as the left figure."
+                " For each protocol, from left to right, 3, 5 and 7 nodes."
+                " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
+                " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
+                " CockroachDB* pins the lease holder at the geographically optimal location."
             )
-        elif breakdown_items:
+        else:
+            left_caption = (
+                " Left: Closed economy workload latency as a function of the protocol."
+                " For each protocol, from left to right, 3, 5 and 7 nodes."
+                " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
+                " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
+                " CockroachDB* pins the lease holder at the geographically optimal location."
+            )
+
+        if breakdown_items:
             right_caption = (
                 " Right: Average latency breakdown per phase (ms) for 3, 5, and 7 nodes,"
                 " averaged across all data centers."
@@ -675,12 +661,7 @@ def main():
             right_caption = ""
 
         f.write("  \\caption{\\label{fig:closed-economy-latency}\n"
-                " Left: Closed economy workload latency as a function of the protocol."
-                " For each protocol, from left to right, 3, 5 and 7 nodes."
-                " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
-                " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
-                " CockroachDB* pins the lease holder at the geographically optimal location."
-                f"{right_caption}}}\n")
+                f"{left_caption}{right_caption}}}\n")
         f.write("\\end{figure}\n")
 
     print(f"Generated {output_tikz}")
