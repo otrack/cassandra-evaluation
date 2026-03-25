@@ -43,7 +43,7 @@ mkdir -p ${RESULTSDIR}/closed_economy
 
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
-protocols="accord cockroachdb" # only backend to support this
+protocols="accord cockroachdb cockroachdb-opt" # only backends to support this
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
@@ -70,14 +70,20 @@ fi
 maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
-    # Enable optimal lease holder placement for CockroachDB for this experiment.
-    sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
-
     # Write CSV header for breakdown results
     echo "protocol,nodes,city,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/closed_economy/breakdown.csv
 
     for p in ${protocols}
     do
+        # Set fix_lease_holder based on CockroachDB flavor:
+        #   cockroachdb-opt → lease holder pinned at geographically optimal location
+        #   all others (cockroachdb, accord) → default settings
+        if [[ "$p" == "cockroachdb-opt" ]]; then
+            sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
+        else
+            sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=false/" "${CONFIG_FILE}"
+        fi
+
         # clean prior logs
         rm -f ${LOGDIR}/closed_economy/*${p}*
         
@@ -89,9 +95,9 @@ if [ "$dry_run" -eq 0 ]; then
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/closed_economy/${p}_${nodes}_${workload}_${ts}.dat"
 
-	    # Enable tracing for CockroachDB so breakdown data can be collected
+	    # Enable tracing for CockroachDB (both flavors) so breakdown data can be collected
 	    tracing_opts=()
-	    if [ "$p" == "cockroachdb" ]; then
+	    if [[ "$p" == cockroachdb* ]]; then
 	        tracing_opts=("-p" "db.tracing=true")
 	    fi
 
@@ -106,10 +112,10 @@ if [ "$dry_run" -eq 0 ]; then
 	    done
 
 	    # Compute performance breakdown and append to CSV
-	    if [ "$p" == "cockroachdb" ]; then
+	    if [[ "$p" == cockroachdb* ]]; then
 	        python3 ${DIR}/cockroachdb/cockroachdb_breakdown.py \
-	            ${LOGDIR}/closed_economy ${workload} ${nodes} ${cities_list} | \
-	            awk -F',' -v n="${nodes}" '{print "cockroachdb," n "," $0}' >> ${RESULTSDIR}/closed_economy/breakdown.csv
+	            ${p} ${LOGDIR}/closed_economy ${workload} ${nodes} ${cities_list} | \
+	            awk -F',' -v n="${nodes}" -v proto="${p}" '{print proto "," n "," $0}' >> ${RESULTSDIR}/closed_economy/breakdown.csv
 	    elif [ "$p" == "accord" ]; then
 	        compute_breakdown ${nodes} accord | \
 	            awk -F',' '{

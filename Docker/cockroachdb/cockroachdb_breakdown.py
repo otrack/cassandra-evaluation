@@ -195,25 +195,25 @@ def _parse_one_cockroachdb_trace(lines):
 # File discovery and per-city breakdown
 # ---------------------------------------------------------------------------
 
-def find_log_files(logdir, nodes, workload, city):
+def find_log_files(logdir, nodes, workload, city, protocol="cockroachdb"):
     """
-    Return all log files matching ``{logdir}/cockroachdb_{nodes}_{workload}_*_{city}.dat``.
+    Return all log files matching ``{logdir}/{protocol}_{nodes}_{workload}_*_{city}.dat``.
     """
-    pattern = os.path.join(logdir, f"cockroachdb_{nodes}_{workload}_*_{city}.dat")
+    pattern = os.path.join(logdir, f"{protocol}_{nodes}_{workload}_*_{city}.dat")
     return sorted(glob_module.glob(pattern))
 
 
-def compute_city_breakdown(logdir, nodes, workload, city):
+def compute_city_breakdown(logdir, nodes, workload, city, protocol="cockroachdb"):
     """
     Compute the average latency breakdown for the given city.
 
     Returns a dict {processing, execution, ordering, commit, total, n_traces}
     or None if no data are found.
     """
-    files = find_log_files(logdir, nodes, workload, city)
+    files = find_log_files(logdir, nodes, workload, city, protocol)
     if not files:
         print(
-            f"WARNING: No log file for cockroachdb/{city} "
+            f"WARNING: No log file for {protocol}/{city} "
             f"(workload={workload}, nodes={nodes})",
             file=sys.stderr,
         )
@@ -243,24 +243,25 @@ def compute_city_breakdown(logdir, nodes, workload, city):
 # ---------------------------------------------------------------------------
 
 def main():
-    if len(sys.argv) < 5:
+    if len(sys.argv) < 6:
         print(
-            "Usage: python3 cockroachdb_breakdown.py <logdir> <workload> <nodes> <city1> [<city2> ...]",
+            "Usage: python3 cockroachdb_breakdown.py <protocol> <logdir> <workload> <nodes> <city1> [<city2> ...]",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    logdir = sys.argv[1]
-    workload = sys.argv[2]
+    protocol = sys.argv[1]
+    logdir = sys.argv[2]
+    workload = sys.argv[3]
     try:
-        nodes = int(sys.argv[3])
+        nodes = int(sys.argv[4])
     except ValueError:
-        print(f"ERROR: nodes must be an integer, got '{sys.argv[3]}'", file=sys.stderr)
+        print(f"ERROR: nodes must be an integer, got '{sys.argv[4]}'", file=sys.stderr)
         sys.exit(1)
-    cities = sys.argv[4:]
+    cities = sys.argv[5:]
 
     for city in cities:
-        bd = compute_city_breakdown(logdir, nodes, workload, city)
+        bd = compute_city_breakdown(logdir, nodes, workload, city, protocol)
         if bd is None:
             continue
         # Convert seconds to microseconds to match cassandra_breakdown.sh units.

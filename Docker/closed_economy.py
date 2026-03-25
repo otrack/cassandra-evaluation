@@ -296,6 +296,8 @@ BREAKDOWN_PATTERNS = ['north east lines', 'horizontal lines', 'vertical lines']
 BREAKDOWN_COLORS_LATEX = ['blue!40', 'green!50!black', 'orange!80']
 # Node counts shown in the breakdown subplot (one stacked bar per protocol×nodes combination)
 BREAKDOWN_ALL_NODE_COUNTS = [3, 5, 7]
+# Breakdown CSV values are stored in microseconds; convert to milliseconds for plotting.
+MICROS_TO_MILLIS = 1000.0
 
 
 def main():
@@ -396,9 +398,9 @@ def main():
                 breakdown_avgs_all[(proto, n)] = avg
                 breakdown_items.append((proto, n))
 
-    # Compute y-axis limit for breakdown chart (microseconds)
+    # Compute y-axis limit for breakdown chart (milliseconds — divide μs by 1000)
     bd_all_vals = [
-        sum(breakdown_avgs_all[(p, n)].get(c, 0.0) for c in BREAKDOWN_COMPONENTS)
+        sum(breakdown_avgs_all[(p, n)].get(c, 0.0) / MICROS_TO_MILLIS for c in BREAKDOWN_COMPONENTS)
         for (p, n) in breakdown_items
     ]
     bd_ymax = max(bd_all_vals) * 1.2 if bd_all_vals else 1000
@@ -411,8 +413,20 @@ def main():
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        # Protocol legend
         f.write(make_protocol_legend(protocols, protocol_colors,
                                      protocol_aliases=protocol_aliases))
+        # Breakdown legend — placed before both tikzpictures so the two plots
+        # remain on the same line (no forced line-break between them).
+        if breakdown_items:
+            bd_legend_entries = []
+            for comp, label, color in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX):
+                bd_legend_entries.append(
+                    r"\protect\tikz \protect\fill[{color}] (0,0) rectangle (0.3,0.3);"
+                    r"~{label}".format(color=color, label=label)
+                )
+            f.write("  {{\\small {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
+
         f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=8cm, height=8cm,\n")
@@ -474,15 +488,6 @@ def main():
 
             f.write("  \\hspace{1cm}\n")
 
-            # Breakdown legend (placed outside tikzpicture to avoid LR mode error)
-            bd_legend_entries = []
-            for comp, label, color in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX):
-                bd_legend_entries.append(
-                    r"\protect\tikz \protect\fill[{color}] (0,0) rectangle (0.3,0.3);"
-                    r"~{label}".format(color=color, label=label)
-                )
-            f.write("  {{\\small {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
-
             f.write("  \\begin{tikzpicture}[scale=.7]\n")
 
             f.write("    \\begin{axis}[\n")
@@ -492,7 +497,7 @@ def main():
             f.write("      enlarge x limits=0.3,\n")
             f.write("      ymajorgrids=true,\n")
             f.write("      xlabel={Protocol / Nodes},\n")
-            f.write("      ylabel={Average latency ($\\mu$s)},\n")
+            f.write("      ylabel={Latency (ms)},\n")
             f.write(f"      ymin=0, ymax={bd_ymax:.2f},\n")
             f.write("      xtick={" + ",".join(str(i) for i in range(len(breakdown_items))) + "},\n")
             f.write("      xticklabels={" + ",".join(item_labels) + "},\n")
@@ -504,8 +509,9 @@ def main():
             ):
                 coords = []
                 for i, (proto, n) in enumerate(breakdown_items):
-                    val = breakdown_avgs_all.get((proto, n), {}).get(comp, 0.0)
-                    coords.append(f"({i}, {val:.2f})")
+                    # Convert from microseconds (stored in CSV) to milliseconds.
+                    val = breakdown_avgs_all.get((proto, n), {}).get(comp, 0.0) / MICROS_TO_MILLIS
+                    coords.append(f"({i}, {val:.3f})")
                 f.write(f"      \\addplot+[ybar, fill={color}, draw=black,"
                         f" pattern={pattern}, pattern color={color}] coordinates {{\n")
                 f.write("        " + " ".join(coords) + "\n")
@@ -519,7 +525,8 @@ def main():
                 " For each protocol, from left to right, 3, 5 and 7 nodes."
                 " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
                 " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
-                " Right: Average latency breakdown per phase for 3, 5, and 7 nodes,"
+                " CockroachDB* pins the lease holder at the geographically optimal location."
+                " Right: Average latency breakdown per phase (ms) for 3, 5, and 7 nodes,"
                 " averaged across all data centers.}\n")
         f.write("\\end{figure}\n")
 
