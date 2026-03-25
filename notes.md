@@ -560,3 +560,60 @@ runs the cdf experiment in test mode using for only the accord and swiftpaxos-pa
 
 Notice that when "--dry-run" is passed, the experiment is skipped in full so this new parameter is just ignored.
 
+# 24.03
+
+The objective of this task is to create a plot of the performance breakdown for Cockroachdb and Accord when executing Docker/closed_economy.sh.
+For this, you should leverage two prior scripts: 
+- breakdown.py which already computes a breakdown for CockroachDB (in this script, the part for Accord is *not* working)
+- cassandra/cassandra_breakdown.sh which computes a breakdown for Accord
+Please follow these steps carefully to do the task:
+1) Remove the use of breakdown.py in cdf.sh and ignore the tracing parameter for accord/cassandra in run_benchmark.sh 
+2) Move breakdown.py to cockroachdb/cockroachdb_breakdown.py. In this script, remove the part related to Accord and the ploting part which is of no use now. The script should now output something similar to cassandra/cassandra_breakdown.sh, i.e., five lines of the following form: city,fast_commit,slow_commit,ordering,execution. Notice that, since there is no fast path in the protocol, it should be always set fast_commit to 0. The slow commit time is simply equal to commit time which is retrieved from the tracing capabilities of Cockroachdb/Cockroachdb_Breakdown, as previously computed in breakdown.py.
+3) In closed_economy.sh, the call to run_benchmark should not clean-up the cluster. Instead, when the experiment ends, the script call the appropriate script to compute the performance breakdown and store this information under results/closed_economy/breakdown.csv. Please add an appropriate header to this file. Do not forget to raise the tracing flag when calling run_benchmark.sh so that cockroachdb collect useful information for the performance breakdown at the clients.
+4) Adjust the code of closed_economy.py to add another plot on the right of the existing one. This plot is a stacked histogram similar in spirit to what breakdown.py was previously  doiung (so you may re-use the old code there). It shows time spent in each phase by the two protocols. To have something readable, report the average time across all DCs (cities) spent in each phase for the first experiment, i.e., nodes=replication_factor=3.
+
+# 25.03
+
+Let's improve the script Docker/closed_economy.sh. 
+The end goal is twofolds: add an optimal cockroachdb deployment in the comparison, and better present the results.
+For this,
+- Add a function cockroachdb_fix_lease_holder to cockroachdb/cluster.sh. 
+This function fixes the lease holder at the best location (assuming there is a single data range), and using as input the total number of nodes.
+First, the script computes the best Paxos leader location using the distance among peers--this is provided by the functions defined in distance.py and emulate_latency.py.
+Then, it alters the table "usertable" which is created by cockroachdb/ycsb.sh using an appropriate statement.
+For instance, if Hanoi is the best location, then it the statement should be:
+ALTER TABLE usertable
+  CONFIGURE ZONE USING
+    lease_preferences = '[["+region=Hanoi"]]';
+- Use the function above to place ideally the lease holder in cockroachdb when executing Docker/closed_economy.sh.
+For this, the cleanest way is to add a new parameter in exp.config called cockroachdb.best_location.
+By default it is set to false.
+This parameter is read is cluster.sh.
+If it is set (i.e., true) then the function above is called right after creating the table to place ideally the lease holder.
+In closed_economy.sh, the script should change exp.config to have cockroachdb.best_location set to true.
+- The plot Docker/closed_economy.py is in charge of showing the result of the experiment.
+In the right figure, for the moment, we only display the result for 3 sites.
+Add also the result for 5 and 7.
+The computation is the very same: one takes the average of the commit, ordering, and execute phase across the various nodes.
+
+# 25.03
+
+Some more changes are needed in the closed economy experiment:
+- The closed_economy.sh experiment should evaluate cockroachdb in two flavors:
+when the lease holder is pinned at the best location and holds all ranges which is the current setting,
+but also in another set-up when cockroachdb decides for everything using default settings.
+These two flavors should be reported as "CockroachDB" and "CockroachDB*" in the plots.
+To implement this, change the scripts closed_economy.sh and closed_economy.py appropriately.
+- Also, the plots computed by closed_economy.py should fit on a single line, which is currently not the case.
+Moreover, the y axis of the second plot (breakdown one) should be in millisecond, as the first one.
+
+# 25.03
+
+A handful of small changes are needed in the Docker experiments:
+- The caption of the figures should always list protocols in the same order. Currently, this is not the case.  It should always be the order defined in protocols.csv.
+- In all plotting scripts, Accord should be plotted last so that it(s) curve(s) overwrite the others'. 
+- In ycsb.sh, the bar for standard deviation are in different colors. Please always use black everywhere. This is readable.
+- To remove blanks, shrink the height of the plots computed in the following experiments:
+ycsb (~25% less), latency_throughput (~10% less), closed_economy (~25% less), swap (~50% less) and fault_tolerance (~30% less).
+- Use a Latex tiny font everywhere but captions.
+

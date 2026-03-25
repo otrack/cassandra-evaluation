@@ -70,6 +70,50 @@ def get_protocol_color(protocol, protocol_colors, fallback_idx=0):
     return DEFAULT_COLOR_CYCLE[fallback_idx % len(DEFAULT_COLOR_CYCLE)]
 
 
+def load_protocol_order(csv_path=None):
+    """Return the full list of protocols in the order they appear in protocols.csv."""
+    if csv_path is None:
+        csv_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "protocols.csv"
+        )
+    order = []
+    try:
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                proto = row.get("protocol", "").strip()
+                if proto:
+                    order.append(proto)
+    except (FileNotFoundError, IOError):
+        pass
+    return order
+
+
+def sort_protocols_for_legend(protocols_list, csv_path=None):
+    """Sort *protocols_list* in the order defined in protocols.csv.
+
+    Protocols not found in protocols.csv are appended at the end in their
+    original relative order.  Use this ordering for legends and captions.
+    """
+    order = load_protocol_order(csv_path)
+    order_set = set(order)
+    known = [p for p in order if p in set(protocols_list)]
+    unknown = [p for p in protocols_list if p not in order_set]
+    return known + unknown
+
+
+def sort_protocols_for_plotting(protocols_list, csv_path=None):
+    """Sort *protocols_list* in protocols.csv order with Accord moved last.
+
+    Accord is drawn last so its curves/bars overwrite others in the plot,
+    making it visually prominent.
+    """
+    base = sort_protocols_for_legend(protocols_list, csv_path)
+    non_accord = [p for p in base if p != 'accord']
+    accord_list = [p for p in base if p == 'accord']
+    return non_accord + accord_list
+
+
 def _escape_latex(text):
     """Escape special LaTeX characters in a string."""
     replacements = [
@@ -122,7 +166,7 @@ def make_protocol_legend(protocol_order, protocol_colors, indent="  ",
         return ""
 
     if n <= 4:
-        return "{indent}{{\\small {content}}}\\\\[4pt]\n".format(
+        return "{indent}{{\\tiny {content}}}\\\\[4pt]\n".format(
             indent=indent,
             content=r"\quad ".join(entries),
         )
@@ -132,6 +176,6 @@ def make_protocol_legend(protocol_order, protocol_colors, indent="  ",
     line1 = r"\quad ".join(entries[:split])
     line2 = r"\quad ".join(entries[split:])
     return (
-        "{indent}{{\\small {l1}}}\\\\[2pt]\n"
-        "{indent}{{\\small {l2}}}\\\\[4pt]\n"
+        "{indent}{{\\tiny {l1}}}\\\\[2pt]\n"
+        "{indent}{{\\tiny {l2}}}\\\\[4pt]\n"
     ).format(indent=indent, l1=line1, l2=line2)

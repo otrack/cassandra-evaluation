@@ -119,5 +119,4 @@ pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
  \thispagestyle{empty}\centering\input{cdf.tex}\
  \end{document}" > /dev/null
 
-debug "Plotting breakdown..."
-python3 ${DIR}/breakdown.py ${LOGDIR}/cdf ${workloads} ${nodes} ${cities} ${RESULTSDIR}/breakdown
+

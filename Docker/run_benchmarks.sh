@@ -92,12 +92,29 @@ run_ycsb() {
     shift 13
     local extra_opts=( "$@" )
 
-    # When loading, ignore maxexecutiontime so the load phase can always finish
+    # When loading, ignore maxexecutiontime and db.tracing so the load phase can always finish
+    # (tracing is too slow during loading and not needed)
     if [ "$action" == "load" ]; then
         local filtered_opts=()
         local i=0
         while [ $i -lt ${#extra_opts[@]} ]; do
-            if [ "${extra_opts[$i]}" == "-p" ] && [ $((i+1)) -lt ${#extra_opts[@]} ] && [[ "${extra_opts[$((i+1))]}" == maxexecutiontime=* ]]; then
+            if [ "${extra_opts[$i]}" == "-p" ] && [ $((i+1)) -lt ${#extra_opts[@]} ] && \
+               { [[ "${extra_opts[$((i+1))]}" == maxexecutiontime=* ]] || [[ "${extra_opts[$((i+1))]}" == db.tracing=* ]]; }; then
+                i=$((i+2))
+            else
+                filtered_opts+=("${extra_opts[$i]}")
+                i=$((i+1))
+            fi
+        done
+        extra_opts=("${filtered_opts[@]}")
+    fi
+
+    # Ignore db.tracing for non-CockroachDB protocols (only cockroachdb supports it)
+    if ! printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
+        local filtered_opts=()
+        local i=0
+        while [ $i -lt ${#extra_opts[@]} ]; do
+            if [ "${extra_opts[$i]}" == "-p" ] && [ $((i+1)) -lt ${#extra_opts[@]} ] && [[ "${extra_opts[$((i+1))]}" == db.tracing=* ]]; then
                 i=$((i+2))
             else
                 filtered_opts+=("${extra_opts[$i]}")

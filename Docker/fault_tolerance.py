@@ -16,7 +16,7 @@ import re
 import glob
 from collections import defaultdict
 
-from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_legend, sort_protocols_for_plotting
 
 
 def parse_status_lines(logfile):
@@ -92,24 +92,29 @@ def main():
     with open(output_tex, "w") as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
-        # Protocol legend above the plot (only for protocols that have data)
-        present_protocols = [p for p in protocols if p in protocol_data]
+        # Protocol legend above the plot (only for protocols that have data),
+        # sorted in protocols.csv order for consistent caption ordering.
+        present_protocols = sort_protocols_for_legend(
+            [p for p in protocols if p in protocol_data]
+        )
         f.write(make_protocol_legend(present_protocols, protocol_colors,
                                      protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=12cm, height=6cm,\n")
+        f.write("      width=12cm, height=4cm,\n")
         f.write("      grid=both,\n")
         f.write("      xlabel={Time (seconds)},\n")
         f.write("      ylabel={Throughput (ops/sec)},\n")
         f.write(f"      xmin=0, xmax={xmax},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
         f.write("      legend pos=outer north east,\n")
-        f.write("      legend style={font=\\small},\n")
+        f.write("      legend style={font=\\tiny},\n")
+        f.write("      tick label style={font=\\tiny},\n")
+        f.write("      label style={font=\\tiny},\n")
         f.write("    ]\n\n")
 
-        # One throughput curve per protocol
-        for idx, protocol in enumerate(protocols):
+        # One throughput curve per protocol, Accord drawn last for visual prominence.
+        for idx, protocol in enumerate(sort_protocols_for_plotting(protocols)):
             if protocol not in protocol_data:
                 continue
             col = get_protocol_color(protocol, protocol_colors, idx)
@@ -139,7 +144,9 @@ def main():
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
-        protocols_str = ", ".join(protocols)
+        # List protocols in protocols.csv order using their display aliases.
+        caption_protocols = sort_protocols_for_legend(protocols)
+        protocols_str = ", ".join(protocol_aliases.get(p, p) for p in caption_protocols)
         f.write(
             "  \\caption{Aggregated YCSB throughput over time "
             f"({protocols_str}, {duration_s // 60}\\,min experiment). "

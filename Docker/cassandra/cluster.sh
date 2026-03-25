@@ -74,6 +74,12 @@ cassandra_get_port() {
     echo ${port}
 }
 
+cassandra_get_dc() {
+    local container=$1
+    docker inspect "$container" -f '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+        | grep '^CASSANDRA_DC=' | cut -d'=' -f2
+}
+
 cassandra_get_leaders() {
     # Cassandra has no single designated leader; use database-node3 by convention.
     echo "$(config "node_name")3"

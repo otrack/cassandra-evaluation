@@ -14,7 +14,7 @@ import sys
 import pandas as pd
 import numpy as np
 
-from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_legend, sort_protocols_for_plotting
 
 
 def usage_and_exit():
@@ -85,16 +85,16 @@ def main():
         print("No rows with valid latency data.")
         sys.exit(1)
 
-    # Get unique protocols in order of appearance
-    protocol_order = []
-    for proto in df['protocol'].unique():
-        if proto not in protocol_order:
-            protocol_order.append(proto)
+    # Get unique protocols sorted by protocols.csv order for consistent legend/caption.
+    raw_protocols = list(dict.fromkeys(df['protocol'].tolist()))
+    protocol_order = sort_protocols_for_legend(raw_protocols)
+    # For plotting, Accord is drawn last so its curve overwrites others.
+    plot_order = sort_protocols_for_plotting(raw_protocols)
 
     # For each protocol, aggregate by number of clients
     # Group by protocol and clients, compute average throughput and latency
     data_by_protocol = {}
-    for proto in protocol_order:
+    for proto in raw_protocols:
         dfp = df[df['protocol'] == proto]
         
         # Group by number of clients
@@ -153,16 +153,18 @@ def main():
                                      protocol_aliases=protocol_aliases))
         f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=12cm, height=8cm,\n")
+        f.write("      width=12cm, height=7cm,\n")
         f.write("      grid=both,\n")
         f.write("      xlabel={Throughput (ops/sec)},\n")
         f.write("      ylabel={Median Latency (ms)},\n")
         f.write(f"      xmin={xmin:.2f}, xmax={xmax:.2f},\n")
         f.write(f"      ymin={ymin:.2f}, ymax={500},\n")
         f.write("      cycle list name=color list,\n")
+        f.write("      tick label style={font=\\tiny},\n")
+        f.write("      label style={font=\\tiny},\n")
         f.write("    ]\n\n")
 
-        for idx, proto in enumerate(protocol_order):
+        for idx, proto in enumerate(plot_order):
             col = get_protocol_color(proto, protocol_colors, idx)
             data = data_by_protocol[proto]
 
