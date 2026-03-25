@@ -424,14 +424,7 @@ def main():
             if avg is not None:
                 breakdown_avgs_all[(proto, n)] = avg
                 breakdown_items.append((proto, n))
-
-    # Compute y-axis limit for breakdown chart (milliseconds — divide μs by 1000)
-    bd_all_vals = [
-        sum(breakdown_avgs_all[(p, n)].get(c, 0.0) / MICROS_TO_MILLIS for c in BREAKDOWN_COMPONENTS)
-        for (p, n) in breakdown_items
-    ]
-    bd_ymax = max(bd_all_vals) * 1.2 if bd_all_vals else 1000
-
+                
     # Compute multi-client data for the comparison right subplot
     all_protocols_right = protocols_plot  # default: same as left
     data_multi = {}
@@ -512,21 +505,17 @@ def main():
 
         f.write("  \\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=8cm, height=6cm,\n")
+        f.write("      width=7cm, height=6cm,\n")
         f.write("      enlarge x limits=0.15,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
-        f.write("      xlabel={Protocol},\n")
+        f.write("      ymode=log,\n")
         f.write("      ylabel={Latency (ms)},\n")
-        f.write(f"      ymin=0, ymax={left_ymax:.2f},\n")
-        f.write("      xtick={" + ",".join(f"{x}" for x in xtick_positions) + "},\n")
-        f.write("      xticklabels={" + ",".join(xticklabels) + "},\n")
-        f.write("      x tick label style={rotate=45, anchor=east},\n")
-        f.write("      tick label style={font=\\tiny},\n")
-        f.write("      label style={font=\\tiny},\n")
+        f.write(f"     ymin=0, ymax={left_ymax:.2f},\n")
+        f.write("      xticklabel=\\empty\n")
         f.write("    ]\n\n")
 
-        # Section 1: single-client data
+        # Part 1: single-client data
         for proto_idx, proto in enumerate(all_protocols_right):
             col = get_protocol_color(proto, protocol_colors, proto_idx)
             for node_idx, nodes in enumerate(node_counts):
@@ -555,10 +544,7 @@ def main():
                     f.write("      };\n\n")
 
         if has_multi:
-            # Vertical dashed line separating the two sections
-            f.write(f"      \\addplot[black, dashed, thick] coordinates {{({dashed_x:.2f},0) ({dashed_x:.2f},{left_ymax:.2f})}};\n\n")
-
-            # Section 2: multi-client data
+            # Part 2: multi-client data
             for proto_idx, proto in enumerate(all_protocols_right):
                 col = get_protocol_color(proto, protocol_colors, proto_idx)
                 for node_idx, nodes in enumerate(node_counts):
@@ -586,14 +572,11 @@ def main():
                         f.write(f"          ({x:.2f}, {val:.2f})\n")
                         f.write("      };\n\n")
 
-            # Section labels below the x-axis
-            f.write(f"      \\node[anchor=north, yshift=-10pt, font=\\tiny] at (axis cs:{label1_x:.2f},0) {{client/DC=1}};\n")
-            f.write(f"      \\node[anchor=north, yshift=-10pt, font=\\tiny] at (axis cs:{label2_x:.2f},0) {{client/DC={multi_client_threads}}};\n")
-
         f.write("    \\end{axis}\n")
+        f.write(f"    \\node[font=\\tiny] at (1.4,-.5) {{1 client/DC}};\n")
+        f.write(f"    \\node[font=\\tiny] at (4,-.5) {{{multi_client_threads} clients/DC}};\n")
+        
         f.write("  \\end{tikzpicture}\n")
-
-        f.write("  \\hspace{1cm}\n")
 
         # ---- Right subplot: stacked bar breakdown (single-client data) ----
         if breakdown_items:
@@ -604,18 +587,15 @@ def main():
             f.write("  \\begin{tikzpicture}[scale=.7]\n")
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
-            f.write("      width=8cm, height=6cm,\n")
+            f.write("      width=7cm, height=6cm,\n")
+            f.write("      enlarge x limits=0.15,\n")
             f.write("      bar width=0.3cm,\n")
-            f.write("      enlarge x limits=0.3,\n")
             f.write("      ymajorgrids=true,\n")
-            f.write("      xlabel={Protocol / Nodes},\n")
-            f.write("      ylabel={Latency (ms)},\n")
-            f.write(f"      ymin=0, ymax={bd_ymax:.2f},\n")
-            f.write("      xtick={" + ",".join(str(i) for i in range(len(breakdown_items))) + "},\n")
-            f.write("      xticklabels={" + ",".join(item_labels) + "},\n")
-            f.write("      x tick label style={rotate=45, anchor=east, font=\\tiny},\n")
-            f.write("      tick label style={font=\\tiny},\n")
-            f.write("      label style={font=\\tiny},\n")
+            f.write("      ymode=log,\n")
+            f.write("      ylabel=\\empty,\n")
+            f.write(f"     ymin=0, ymax={left_ymax:.2f},\n")
+            f.write("      xticklabel=\\empty,\n")
+            f.write("      yticklabel=\\empty\n")
             f.write("    ]\n\n")
 
             for comp, label, color, pattern in zip(
@@ -625,6 +605,8 @@ def main():
                 for i, (proto, n) in enumerate(breakdown_items):
                     # Convert from microseconds (stored in CSV) to milliseconds.
                     val = breakdown_avgs_all.get((proto, n), {}).get(comp, 0.0) / MICROS_TO_MILLIS
+                    if val == 0:
+                        val = 1 # cause of the log scale
                     coords.append(f"({i}, {val:.3f})")
                 f.write(f"      \\addplot+[ybar, fill={color}, draw=black,"
                         f" pattern={pattern}, pattern color={color}] coordinates {{\n")
@@ -632,6 +614,7 @@ def main():
                 f.write("      };\n\n")
 
             f.write("    \\end{axis}\n")
+            f.write(f"    \\node[font=\\tiny] at (3,-.5) {{breakdown (1 client/DC)}};\n")
             f.write("  \\end{tikzpicture}\n")
 
         if has_multi:

@@ -617,3 +617,21 @@ A handful of small changes are needed in the Docker experiments:
 ycsb (~25% less), latency_throughput (~10% less), closed_economy (~25% less), swap (~50% less) and fault_tolerance (~30% less).
 - Use a Latex tiny font everywhere but captions.
 
+# 25.03
+
+One more change is needed in the closed economy experiment (Docker/closed_economy.sh).
+Please follow the instructions below.
+
+Currently the number of client is one per DC. This is necessary to have a detailed breakdown with CockroachDB. Indeed, when tracing is on, this outputs a lot of data. Nonetheless, it would be interesting to add another set of runs where the number of clients is the default one, that is as defined in exp.config (currently, threads=10 in this file). 
+
+For these additional runs, we also run all the three algorithms (Accord, CockroachDB, and CockroachDB*). They are plotted together with the ones for a single client per DC in the right-hand side figure. To separate the two set of runs, draw a vertical dashed line between them. Change also the y-axis label of the figure. For the first set of plots, it should read as "client/DC=1", while the second set of runs should be "client/DC=X", where X is the value read from exp.config. 
+
+For thesse additional, we do not provide a breakdown because, as said above, this is not practical. Consequently, desactivate tracing for cockroachdb and do not run the breakdown script for Accord.
+
+# 25.03
+
+TODO:
+add commit time to Fig. 9
+mail to B. what are the needed metrics to plot slow/fast paths
+Fig. 11: worst/best-case for crdb
+double-check Fig. 13 (try w. a bigger data set and theta=0.0) [FEDOR]
