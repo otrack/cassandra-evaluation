@@ -292,8 +292,10 @@ def compute_average_breakdown(breakdown_data, protocol, nodes):
 # be misleading; the weighted average commit is the single representative commit latency.
 BREAKDOWN_COMPONENTS = ['commit', 'ordering', 'execution']
 BREAKDOWN_LABELS = ['Commit', 'Ordering', 'Execution']
+# Patterns overlay the protocol fill color; use black lines so the background
+# (= protocol color) always shows through regardless of the protocol.
 BREAKDOWN_PATTERNS = ['north east lines', 'horizontal lines', 'vertical lines']
-BREAKDOWN_COLORS_LATEX = ['blue!40', 'green!50!black', 'orange!80']
+BREAKDOWN_PATTERN_COLORS = ['black', 'black', 'black']
 # Node counts shown in the breakdown subplot (one stacked bar per protocol×nodes combination)
 BREAKDOWN_ALL_NODE_COUNTS = [3, 5, 7]
 # Breakdown CSV values are stored in microseconds; convert to milliseconds for plotting.
@@ -461,11 +463,13 @@ def main():
         # Breakdown legend placed before both tikzpictures so both plots remain on the same line.
         if breakdown_items:
             bd_legend_entries = []
-            for comp, label, color in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX):
-                bd_legend_entries.append(
-                    r"\protect\tikz \protect\fill[{color}] (0,0) rectangle (0.3,0.3);"
-                    r"~{label}".format(color=color, label=label)
-                )
+            for label, pattern in zip(BREAKDOWN_LABELS, BREAKDOWN_PATTERNS):
+                # Show a small hatched swatch so the viewer can match pattern → phase.
+                swatch = (
+                    r"\protect\tikz \protect\fill[pattern={pattern}, pattern color=black]"
+                    r" (0,0) rectangle (0.3,0.3);~{label}"
+                ).format(pattern=pattern, label=label)
+                bd_legend_entries.append(swatch)
             f.write("  {{\\tiny {}}}\\\\[4pt]\n".format(r"\quad ".join(bd_legend_entries)))
 
         # ---- Left subplot: comparison of single-client vs multi-client latency ----
@@ -583,6 +587,15 @@ def main():
                 f"{protocol_aliases.get(p, p)}/{n}" for (p, n) in breakdown_items
             ]
 
+            # Compute ymax from the maximum total-bar height (sum of all components)
+            # across all (proto, nodes) pairs, so the y-axis fits the data.
+            bd_totals = []
+            for proto, n in breakdown_items:
+                avgs = breakdown_avgs_all.get((proto, n), {})
+                total = sum(avgs.get(c, 0.0) for c in BREAKDOWN_COMPONENTS) / MICROS_TO_MILLIS
+                bd_totals.append(total)
+            breakdown_ymax = max(bd_totals) * 1.2 if bd_totals else 100.0
+
             f.write("  \\begin{tikzpicture}[scale=.6]\n")
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
@@ -590,28 +603,25 @@ def main():
             f.write("      enlarge x limits=0.15,\n")
             f.write("      bar width=0.2cm,\n")
             f.write("      ymajorgrids=true,\n")
-            f.write("      ymode=log,\n")
             f.write("      ylabel=\\empty,\n")
-            f.write(f"     ymin=0, ymax={left_ymax:.2f},\n")
+            f.write(f"     ymin=0, ymax={breakdown_ymax:.2f},\n")
             f.write("      xticklabel=\\empty,\n")
             f.write("      yticklabel=\\empty\n")
             f.write("    ]\n\n")
 
-            # Emit one \addplot per (bar, phase) so each bar can be filled with
-            # its protocol color.  pgfplots tracks the stack height per x
-            # position independently, so stacking works correctly even when the
-            # \addplot commands for the same x are not consecutive.
+            # Emit one \addplot per (bar, phase) so each bar is filled with its
+            # protocol color.  pgfplots maintains a separate stack per x position,
+            # so the three consecutive \addplot commands for the same x correctly
+            # build the commit / ordering / execution stack.
+            # Pattern lines (always black) overlay the fill so the protocol color
+            # remains visible as the background of each segment.
             for i, (proto, n) in enumerate(breakdown_items):
                 proto_color = get_protocol_color(proto, protocol_colors, i)
-                for comp, label, bd_color, pattern in zip(
-                    BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX, BREAKDOWN_PATTERNS
-                ):
+                for comp, pattern in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_PATTERNS):
                     # Convert from microseconds (stored in CSV) to milliseconds.
                     val = breakdown_avgs_all.get((proto, n), {}).get(comp, 0.0) / MICROS_TO_MILLIS
-                    if val == 0:
-                        val = 1  # log scale requires a positive value
                     f.write(f"      \\addplot+[ybar, fill={proto_color}, draw=black,"
-                            f" pattern={pattern}, pattern color={bd_color}] coordinates {{\n")
+                            f" pattern={pattern}, pattern color=black] coordinates {{\n")
                     f.write(f"        ({i}, {val:.3f})\n")
                     f.write("      };\n\n")
 
