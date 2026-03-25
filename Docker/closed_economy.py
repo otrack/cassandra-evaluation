@@ -605,6 +605,7 @@ def main():
             f.write("      xticklabel=\\empty,\n")
             f.write("      yticklabel=\\empty,\n")
             f.write(f"      colormap={{protocolcolors}}{{{colormap_def}}},\n")
+            f.write(f"      scatter, scatter src=x,\n")
             f.write(f"      point meta min=0, point meta max={max(n_bars - 1, 1)}\n")
             f.write("    ]\n\n")
 
@@ -618,8 +619,8 @@ def main():
                     if val == 0:
                         val = 1 # cause of the log scale
                     coords.append(f"({i}, {val:.3f}) [{i}]")
-                f.write(f"      \\addplot+[ybar, fill=mapped color, point meta=explicit, draw=black,"
-                        f" pattern={pattern}, pattern color={color}] coordinates {{\n")
+                f.write(f"      \\addplot+[ybar, draw=black"
+                        f" ] coordinates {{\n")
                 f.write("        " + " ".join(coords) + "\n")
                 f.write("      };\n\n")
 
