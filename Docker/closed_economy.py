@@ -583,15 +583,6 @@ def main():
                 f"{protocol_aliases.get(p, p)}/{n}" for (p, n) in breakdown_items
             ]
 
-            # Build a colormap with one entry per bar position, using the
-            # protocol color for each (proto, nodes) pair in breakdown_items.
-            colormap_entries = []
-            for bd_idx, (bd_proto, _bd_n) in enumerate(breakdown_items):
-                col = get_protocol_color(bd_proto, protocol_colors, bd_idx)
-                colormap_entries.append(f"color=({col})")
-            colormap_def = " ".join(colormap_entries)
-            n_bars = len(breakdown_items)
-
             f.write("  \\begin{tikzpicture}[scale=.6]\n")
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
@@ -603,26 +594,26 @@ def main():
             f.write("      ylabel=\\empty,\n")
             f.write(f"     ymin=0, ymax={left_ymax:.2f},\n")
             f.write("      xticklabel=\\empty,\n")
-            f.write("      yticklabel=\\empty,\n")
-            f.write(f"      colormap={{protocolcolors}}{{{colormap_def}}},\n")
-            f.write(f"      scatter, scatter src=x,\n")
-            f.write(f"      point meta min=0, point meta max={max(n_bars - 1, 1)}\n")
+            f.write("      yticklabel=\\empty\n")
             f.write("    ]\n\n")
 
-            for comp, label, color, pattern in zip(
-                BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX, BREAKDOWN_PATTERNS
-            ):
-                coords = []
-                for i, (proto, n) in enumerate(breakdown_items):
+            # Emit one \addplot per (bar, phase) so each bar can be filled with
+            # its protocol color.  pgfplots tracks the stack height per x
+            # position independently, so stacking works correctly even when the
+            # \addplot commands for the same x are not consecutive.
+            for i, (proto, n) in enumerate(breakdown_items):
+                proto_color = get_protocol_color(proto, protocol_colors, i)
+                for comp, label, bd_color, pattern in zip(
+                    BREAKDOWN_COMPONENTS, BREAKDOWN_LABELS, BREAKDOWN_COLORS_LATEX, BREAKDOWN_PATTERNS
+                ):
                     # Convert from microseconds (stored in CSV) to milliseconds.
                     val = breakdown_avgs_all.get((proto, n), {}).get(comp, 0.0) / MICROS_TO_MILLIS
                     if val == 0:
-                        val = 1 # cause of the log scale
-                    coords.append(f"({i}, {val:.3f}) [{i}]")
-                f.write(f"      \\addplot+[ybar, draw=black"
-                        f" ] coordinates {{\n")
-                f.write("        " + " ".join(coords) + "\n")
-                f.write("      };\n\n")
+                        val = 1  # log scale requires a positive value
+                    f.write(f"      \\addplot+[ybar, fill={proto_color}, draw=black,"
+                            f" pattern={pattern}, pattern color={bd_color}] coordinates {{\n")
+                    f.write(f"        ({i}, {val:.3f})\n")
+                    f.write("      };\n\n")
 
             f.write("    \\end{axis}\n")
             f.write(f"    \\node[font=\\tiny] at (2.5,-.5) {{breakdown (1 client/DC)}};\n")

@@ -640,6 +640,8 @@ double-check Fig. 13 (try w. a bigger data set and theta=0.0) [FEDOR]
 # 25.03 - copilot
 
 In closed_economy.py, the color of each stack should be the one of the corresponding protocol.
-Fix this by 1) removing "fill={color}" in line 610, and 2) defining a colormap in the surrounding axis environment with the appropriate colors. 
-Notice that we keep the patterns because they explain which phase it is.
+Fix this by emitting one `\addplot` per (bar position, phase), each containing a single coordinate.
+Each `\addplot` uses `fill=<protocol_color>` directly so every bar gets its protocol's color.
+The `pattern color` still uses the phase color so patterns differentiate commit/ordering/execution.
+This avoids the colormap/scatter approach which does not work with `ybar stacked` in pgfplots.
 
