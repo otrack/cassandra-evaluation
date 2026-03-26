@@ -109,14 +109,16 @@ pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\
+ \usepackage{ifthen}\
  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
  \usetikzlibrary{shapes,arrows}\
  \usepgflibrary{shapes.symbols}\
  \usetikzlibrary{shapes.symbols}\
  \usetikzlibrary{patterns}\
  \usetikzlibrary{matrix, positioning, pgfplots.groupplots}\
+ \newboolean{details}\setboolean{details}{true}\
  \begin{document}\
  \thispagestyle{empty}\centering\input{cdf.tex}\
- \end{document}" > /dev/null
+ \end{document}"
 
 

@@ -298,7 +298,7 @@ def main():
     protocol_aliases = load_protocol_aliases()
 
     with open(output_tikz, 'w') as f:
-        f.write("\\begin{figure}[htbp]\n")
+        f.write("\\begin{figure}[t]\n")
         f.write("    \\centering\n")
 
         # --- Protocol legend at the top of the figure ---
@@ -331,7 +331,7 @@ def main():
 
                         if dfw.empty:
                             continue
-
+                        f.write("        \\ifdetails")
                         f.write("        \\nextgroupplot[\n")
                         if op_index == 0:
                             if actual_n_cities == 1 and not include_average:
@@ -366,6 +366,7 @@ def main():
                                 pct = i/99
                                 f.write(f"          {val} {pct}\n")
                             f.write("          };\n")
+                        f.write("          \\fi\n")
 
         # Then, plot average rows (after cities)
         if include_average:
@@ -417,7 +418,7 @@ def main():
         if include_average and no_cities:
             caption_start = f"CDF of average operation latencies for YCSB {(workloads_escaped)}."
         elif include_average:
-            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} at {cities_escaped} (and average)."
+            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} \\ifdetails at {cities_escaped} (and average)\\fi."
         else:
             caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} at {cities_escaped}."
 

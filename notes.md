@@ -635,7 +635,8 @@ add commit time to Fig. 9
 mail to B. what are the needed metrics to plot slow/fast paths
 Fig. 11: worst/best-case for crdb
 double-check Fig. 13 (try w. a bigger data set and theta=0.0) [FEDOR]
-
+intro: add some citations about commit+ordering protocols
+related work: explain Tiga
 
 # 25.03 - copilot
 

@@ -127,7 +127,7 @@ def main():
     ymax = 400.0
 
     with open(output_tikz, 'w') as f:
-        f.write("\\begin{figure}[htbp]\n")
+        f.write("\\begin{figure}[t]\n")
         f.write("  \\centering\n")
         f.write(make_protocol_legend(legend_order, protocol_colors,
                                      protocol_aliases=protocol_aliases))
@@ -144,8 +144,8 @@ def main():
         f.write("      xtick=data,\n")
         f.write("      xticklabels={" + ",".join(workloads) + "},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
-        f.write("      tick label style={font=\\tiny},\n")
-        f.write("      label style={font=\\tiny},\n")
+        f.write("      tick label style={font=\\small},\n")
+        f.write("      label style={font=\\small},\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(plot_order):
