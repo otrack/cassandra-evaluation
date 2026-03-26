@@ -321,7 +321,48 @@ def main():
         f.write("        scale=.75,\n")
         f.write("      ]\n")
 
-        # First, plot city rows
+        # First, plot average rows
+        if include_average:
+            for wl_index, workload in enumerate(workloads):
+                for op_index, op in enumerate(all_ops):
+                    # Compute average latencies from unfiltered data (all cities)
+                    avg_latencies_dict = compute_average_latencies_across_cities(df_unfiltered, workload, op, num_nodes)
+
+                    f.write("        \\nextgroupplot[\n")
+                    if op_index == 0:
+                        if no_cities:
+                            f.write(f"          ylabel={{{workload}}},\n")
+                        else:
+                            f.write(f"          ylabel={{All sites}},\n")
+                    else:
+                        f.write("          yticklabels={{}},\n")
+                    if wl_index == 0:
+                        f.write(f"          title={{{op}}},\n")
+                    if avg_optimum is not None:
+                        f.write(f"          extra x ticks={{{avg_optimum:.2f}}},\n")
+                        f.write(f"          extra x tick labels={{Q}},\n")
+                        f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
+                    f.write("        ]\n")
+
+                    if not avg_latencies_dict:
+                        continue
+
+                    for proto_idx, proto in enumerate(protocol_order):
+                        if proto not in avg_latencies_dict:
+                            continue
+
+                        latencies = avg_latencies_dict[proto]
+                        if not latencies:
+                            continue
+
+                        col = get_protocol_color(proto, protocol_colors, proto_idx)
+                        f.write("          \\addplot+["+col+", mark=none] table {\n")
+                        for i, val in enumerate(latencies):
+                            pct = i/99
+                            f.write(f"          {val} {pct}\n")
+                        f.write("          };\n")
+        
+        # Then, plot city rows
         if not no_cities:
             for city_index, city in enumerate(cities):
                 for wl_index, workload in enumerate(workloads):
@@ -340,8 +381,6 @@ def main():
                                 f.write(f"          ylabel={{{city}}},\n")
                         else:
                             f.write("          yticklabels={{}},\n")
-                        if city_index == 0 and wl_index == 0:
-                            f.write(f"          title={{{op}}},\n")
                         if not include_average and city_index == n_cities - 1 and wl_index == n_wl - 1:
                             f.write("          xlabel={{Latency (ms)}},\n")
                         if city in city_optimums:
@@ -368,47 +407,6 @@ def main():
                             f.write("          };\n")
                         f.write("          \\fi\n")
 
-        # Then, plot average rows (after cities)
-        if include_average:
-            for wl_index, workload in enumerate(workloads):
-                for op_index, op in enumerate(all_ops):
-                    # Compute average latencies from unfiltered data (all cities)
-                    avg_latencies_dict = compute_average_latencies_across_cities(df_unfiltered, workload, op, num_nodes)
-
-                    f.write("        \\nextgroupplot[\n")
-                    if op_index == 0:
-                        if no_cities:
-                            f.write(f"          ylabel={{{workload}}},\n")
-                        else:
-                            f.write(f"          ylabel={{average}},\n")
-                    else:
-                        f.write("          yticklabels={{}},\n")
-                    if no_cities and wl_index == 0:
-                        f.write(f"          title={{{op}}},\n")
-                    if avg_optimum is not None:
-                        f.write(f"          extra x ticks={{{avg_optimum:.2f}}},\n")
-                        f.write(f"          extra x tick labels={{Q}},\n")
-                        f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
-                    f.write("        ]\n")
-
-                    if not avg_latencies_dict:
-                        continue
-
-                    for proto_idx, proto in enumerate(protocol_order):
-                        if proto not in avg_latencies_dict:
-                            continue
-
-                        latencies = avg_latencies_dict[proto]
-                        if not latencies:
-                            continue
-
-                        col = get_protocol_color(proto, protocol_colors, proto_idx)
-                        f.write("          \\addplot+["+col+", mark=none] table {\n")
-                        for i, val in enumerate(latencies):
-                            pct = i/99
-                            f.write(f"          {val} {pct}\n")
-                        f.write("          };\n")
-
         f.write("      \\end{groupplot}\n")
         f.write("    \\end{tikzpicture}\n")
 
@@ -416,9 +414,9 @@ def main():
         cities_escaped = ", ".join([escape_latex(c) for c in actual_cities])
         workloads_escaped = ", ".join([escape_latex(w.upper()) for w in workloads])
         if include_average and no_cities:
-            caption_start = f"CDF of average operation latencies for YCSB {(workloads_escaped)}."
+            caption_start = f"CDF of operation latencies for YCSB across all sites {(workloads_escaped)}."
         elif include_average:
-            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} \\ifdetails at {cities_escaped} (and average)\\fi."
+            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} acrosss all sites \\ifdetails and at {cities_escaped}\\fi."
         else:
             caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} at {cities_escaped}."
 
@@ -427,7 +425,7 @@ def main():
         if city_optimums or avg_optimum:
             f.write(" ")
             f.write(r"\textcolor{gray}{Q}~denotes the closest-quorum latency bound.")
-        f.write("    \\label{fig:workload-cdf}}\n")
+        f.write("    \\label{fig:workload-cdf\\ifdetails-ext\\fi}}\n")
         f.write("\\end{figure}\n")
 
 if __name__ == "__main__":
