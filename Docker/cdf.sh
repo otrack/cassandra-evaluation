@@ -119,6 +119,6 @@ pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
  \newboolean{details}\setboolean{details}{true}\
  \begin{document}\
  \thispagestyle{empty}\centering\input{cdf.tex}\
- \end{document}"
+ \end{document}"  > /dev/null
 
 
