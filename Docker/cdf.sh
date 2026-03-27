@@ -110,6 +110,8 @@ pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
  \usepackage{pgfplots}\
  \usepackage{tikz}\
  \usepackage{ifthen}\
+ \usepackage{xspace}\
+ \newcommand{\Accord}{\textsc{Entente}\xspace}\
  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
  \usetikzlibrary{shapes,arrows}\
  \usepgflibrary{shapes.symbols}\

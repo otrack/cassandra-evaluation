@@ -100,6 +100,8 @@ python3 ${DIR}/ycsb.py ${RESULTSDIR}/ycsb.csv ${workloads} ${nodes} ${RESULTSDIR
 pdflatex -jobname=ycsb -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
+ \usepackage{xspace}\
+ \newcommand{\Accord}{\textsc{Entente}\xspace}\
  \usepackage{tikz}\
  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
  \usetikzlibrary{shapes,arrows}\

@@ -124,6 +124,8 @@ python3 ${DIR}/ephemeral.py ${RESULTSDIR}/ephemeral.csv ${workloads} ${nodes} ${
 pdflatex -jobname=ephemeral -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{booktabs}\
+ \usepackage{xspace}\
+ \newcommand{\Accord}{\textsc{Entente}\xspace}\
  \begin{document}\
  \thispagestyle{empty}\centering\input{ephemeral.tex}\
  \end{document}" > /dev/null

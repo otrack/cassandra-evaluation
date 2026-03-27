@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 
 from emulate_latency import haversine, estimate_latency
-from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend,sort_protocols_for_plotting
 
 def usage_and_exit():
     print("Usage: python conflict.py results.csv workload1 [workload2 ...] num_nodes latencies.csv output.tex")
@@ -134,6 +134,7 @@ def main():
     for proto in df_valid['protocol'].unique():
         if proto not in protocol_order:
             protocol_order.append(proto)
+    protocol_order = sort_protocols_for_plotting(protocol_order)
 
     # x-axis: conflict rates from 0.0 to 1.0 step 0.1
     x_values = [round(x, 1) for x in np.arange(0.0, 1.001, 0.1)]

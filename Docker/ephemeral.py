@@ -131,9 +131,8 @@ def main():
         f.write("    \\bottomrule\n")
         f.write("  \\end{tabular}\n")
         f.write(
-            f"  \\caption{{Average operation latency (ms, averaged over all clients and\n"
-            f"    operations) and speed-up when ephemeral reads are enabled in Accord\n"
-            f"    (YCSB workloads {workloads_str}).}}\n"
+            f"  \\caption{{Average operation latency\n"
+            f"    and speed-up when ephemeral reads are enabled in \\Accord.}}\n"
              "  \\label{tab:ephemeral}\n"
         )
         f.write("\\end{table}\n")

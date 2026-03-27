@@ -117,7 +117,6 @@ def sort_protocols_for_plotting(protocols_list, csv_path=None):
 def _escape_latex(text):
     """Escape special LaTeX characters in a string."""
     replacements = [
-        ('\\', '\\textbackslash{}'),
         ('&', '\\&'),
         ('%', '\\%'),
         ('$', '\\$'),

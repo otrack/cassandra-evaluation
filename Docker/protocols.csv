@@ -1,5 +1,5 @@
 protocol,color,alias
-accord,red,Accord
+accord,red,\Accord
 cassandra-paxos,blue,Cassandra
 cockroachdb,green!50!black,CockroachDB
 cockroachdb-opt,teal,CockroachDB+
