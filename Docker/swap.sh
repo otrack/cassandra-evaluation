@@ -118,12 +118,6 @@ if [ "$dry_run" -eq 0 ]; then
                 rm -rf "${tmp_logdir}"
             elif [ "$p" == "accord" ]; then
                 compute_breakdown ${nodes} accord | \
-                    awk -F',' '{
-                        # Field mapping from cassandra_breakdown.sh output:
-                        # $1=city, $2=fast_commit, $3=slow_commit, $4=commit, $5=ordering, $6=execution
-                        # ordering is 0 for accord (commit serves as the ordering phase)
-                        print $1","$2","$3","$4",0,"$5
-                    }' | \
                     awk -F',' -v s="${s}" '{print "accord," s "," $0}' >> ${RESULTSDIR}/swap/breakdown.csv
             fi
 
