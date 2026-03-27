@@ -51,7 +51,7 @@ fi
 nodes=7
 replication_factor=3
 records=$(config records)
-threads=$(config threads)
+threads=1
 # ops_per_thread=0 means operationcount=0 (unlimited); run duration is controlled by maxexecutiontime
 ops_per_thread=0
 s_values=$(seq 3 8)
