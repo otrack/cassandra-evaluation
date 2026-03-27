@@ -121,18 +121,19 @@ if [ "$dry_run" -eq 0 ]; then
 
         # Start YCSB run clients from each node (time-bounded via maxexecutiontime)
         for i in $(seq 1 ${node_count}); do
+
             nearby_database=$(config "node_name")${i}
             location=$(get_location $i ${DIR}/latencies.csv)
             run_ycsb "run" "${workload_type}" "${workload}" "${hosts}" "${port}" \
                 "${records}" 0 "${protocol}" "${replication_factor}" \
                 "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
-                "-p maxexecutiontime=${duration_s}" \
-                "-p status.interval=${status_interval}" \
-	        "-p conflict.theta=${theta}" \
-		"-p updateproportion=1.0" \
-		"-p readproportion=0.0" \
-		"-p conflict.shift=$(( (record / node_count) * (i - 1) ))" \
-		"-p warmupexecutiontime=10" &
+                -p maxexecutiontime=${duration_s} \
+                -p status.interval=${status_interval} \
+	        -p conflict.theta=${theta} \
+		-p updateproportion=1.0 \
+		-p readproportion=0.0 \
+		-p conflict.shift=$(( (record / node_count) * (i - 1) )) \
+		-p warmupexecutiontime=10 &
         done
 	
         # Event 1: at X/4, add 400ms latency to (some) leader outbound traffic
