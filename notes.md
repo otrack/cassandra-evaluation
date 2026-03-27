@@ -646,3 +646,17 @@ Each `\addplot` uses `fill=<protocol_color>` directly so every bar gets its prot
 The `pattern color` still uses the phase color so patterns differentiate commit/ordering/execution.
 This avoids the colormap/scatter approach which does not work with `ybar stacked` in pgfplots.
 
+# 27.03 - copilot
+
+In closed_economy.sh, three protocols are compared: Accord, CockroachDB, and CockroachDB+.
+CockroachDB+ stands for the best possible placement for CockroachDB: the best location in the system (quorum-wise) owns all leases.
+The goal of this task is to replace CockroachDB with CockroachDB-:
+this time, the worth location owns all leases.
+
+To do this task, you should proceed as follows:
+- Add a boolean argument to cockroachdb_fix_lease_holder() in cluster.sh.
+If this argument is set, then the best lease holder is chosen, and otherwise the worst.
+- Add a protocol named "cockroachdb-bad" to protocols.csv with a green-ish color.
+Similarly to cockroachdb-opt, filter out this protocol from the protocols variable used in the cdf, ycsb, conflict, and latency_throughput.
+- Replace cockroachdb with cockroachdb-bad in closed_economy.sh
+

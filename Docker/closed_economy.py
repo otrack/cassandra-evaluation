@@ -361,7 +361,7 @@ def main():
     has_multi = not df_multi.empty
 
     # Get unique protocols and node counts; sort protocols by protocols.csv order.
-    protocols_legend = sort_protocols_for_legend(df_single['protocol'].unique().tolist())
+    protocols_legend = sort_protocols_for_plotting(df_single['protocol'].unique().tolist())
     protocols_plot   = sort_protocols_for_plotting(df_single['protocol'].unique().tolist())
     node_counts = sorted(df_single['nodes_int'].unique().tolist())
 
