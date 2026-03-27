@@ -45,7 +45,7 @@ mkdir -p ${LOGDIR}/fault_tolerance
 
 # Configuration
 duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
-protocols="accord cockroachdb"
+protocols="accord cockroachdb-opt"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
