@@ -45,7 +45,7 @@ mkdir -p ${LOGDIR}/fault_tolerance
 
 # Configuration
 duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
-protocols="accord cockroachdb"
+protocols="accord cockroachdb-opt"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
@@ -58,13 +58,24 @@ records=10000 # at least one item per client thread
 threads=100
 status_interval=1   # YCSB -s reporting interval in seconds
 
+original_machine=$(config machine)
+original_maxexecutiontime=$(config maxexecutiontime)
+original_fix_lh=$(config "cockroachdb.fix_lease_holder")
+restore_settings() {
+    sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"
+    sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
+    sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=${original_fix_lh}/" "${CONFIG_FILE}"
+}
+trap restore_settings EXIT
+
 if [ "$test_run" -eq 1 ]; then
     duration_minutes=3
     original_machine=$(config machine)
-    restore_machine() { sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"; }
-    trap restore_machine EXIT
     compute_test_machine "${nodes}"
 fi
+
+# set a single lease at the optimal location
+sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
 
 duration_s=$((duration_minutes * 60))
 slowdown_s=$((duration_s / 4))
