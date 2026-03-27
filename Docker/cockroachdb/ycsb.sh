@@ -55,12 +55,14 @@ cockroachdb_create_usertable() {
         exit 1
     fi
 
-    # Optionally pin the lease holder to the geographically optimal location.
-    # It is in charge of _all_ the ranges.
+    # Optionally pin the lease holder to the geographically best (true) or
+    # worst (bad) location.  It is in charge of _all_ the ranges.
     local fix_lh
     fix_lh=$(config "cockroachdb.fix_lease_holder")
     if [ "${fix_lh}" = "true" ]; then
-        cockroachdb_fix_lease_holder "${node_count}"
+        cockroachdb_fix_lease_holder "${node_count}" true
+    elif [ "${fix_lh}" = "bad" ]; then
+        cockroachdb_fix_lease_holder "${node_count}" false
     fi
 
     # change range size if not the default one

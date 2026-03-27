@@ -43,7 +43,7 @@ mkdir -p ${RESULTSDIR}/closed_economy
 
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
-protocols="accord cockroachdb cockroachdb-opt" # only backends to support this
+protocols="accord cockroachdb-bad cockroachdb-opt" # only backends to support this
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
@@ -78,10 +78,13 @@ if [ "$dry_run" -eq 0 ]; then
     for p in ${protocols}
     do
         # Set fix_lease_holder based on CockroachDB flavor:
-        #   cockroachdb-opt → lease holder pinned at geographically optimal location
-        #   all others (cockroachdb, accord) → default settings
+        #   cockroachdb-opt → lease holder pinned at geographically best location
+        #   cockroachdb-bad → lease holder pinned at geographically worst location
+        #   all others (accord) → default settings
         if [[ "$p" == "cockroachdb-opt" ]]; then
             sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
+        elif [[ "$p" == "cockroachdb-bad" ]]; then
+            sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=bad/" "${CONFIG_FILE}"
         else
             sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=false/" "${CONFIG_FILE}"
         fi
@@ -140,6 +143,8 @@ if [ "$dry_run" -eq 0 ]; then
     do
         if [[ "$p" == "cockroachdb-opt" ]]; then
             sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
+        elif [[ "$p" == "cockroachdb-bad" ]]; then
+            sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=bad/" "${CONFIG_FILE}"
         else
             sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=false/" "${CONFIG_FILE}"
         fi
