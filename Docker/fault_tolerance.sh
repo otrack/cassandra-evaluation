@@ -149,6 +149,7 @@ if [ "$dry_run" -eq 0 ]; then
 	# 2. Fetch the leader in the background (as it can be long...)
 	tmp_file=$(mktemp)
 	{
+	    sleep 30 # wait that the system stabilizes
 	    leader=$(${pref}_get_leaders "${protocol}" | head -n 1)
 	    log "Chosen leader is ${leader}"
 	    echo "$leader" > "$tmp_file"

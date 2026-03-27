@@ -54,7 +54,7 @@ java -jar $JMXTERM_JAR -l $JMX_HOST -i /tmp/jmx_cmds.txt -n
        ACCEPT_REQ=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_ACCEPT_REQ-WaitLatency,type=Messaging" ${attribute})
        ACCEPT_RSP=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_ACCEPT_RSP-WaitLatency,type=Messaging" ${attribute})
        SLOW_COMMIT=$(echo ${PREACCEPT_REQ} + ${PREACCEPT_RSP} + ${ACCEPT_REQ} + ${ACCEPT_RSP}  | bc)
-       echo -n "${SLOW_COMMIT},"
+       echo -n "${SLOW_COMMIT// /},"
        
        COMMIT=$(jmx_get "org.apache.cassandra.metrics:name=CommitLatency,scope=rw,type=AccordCoordinator" ${attribute})
        echo -n "${COMMIT// /},"
