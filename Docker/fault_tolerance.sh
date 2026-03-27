@@ -150,6 +150,7 @@ if [ "$dry_run" -eq 0 ]; then
 	tmp_file=$(mktemp)
 	{
 	    leader=$(${pref}_get_leaders "${protocol}" | head -n 1)
+	    log "Chosen leader is ${leader}"
 	    echo "$leader" > "$tmp_file"
 	} &
 	leader_pid=$!
@@ -157,7 +158,6 @@ if [ "$dry_run" -eq 0 ]; then
         # Event 1: at X/4, add 400ms latency to (some) leader outbound traffic
         sleep ${slowdown_s}
 	wait $leader_pid; leader=$(cat "$tmp_file"); rm "$tmp_file"
-	log "Chosen leader is ${leader}"
         # Save the leader's current tc policies before injecting the slowdown so
         # they can be restored when the slowdown disappears.
         docker exec "${leader}" bash -c \
