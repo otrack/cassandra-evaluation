@@ -132,7 +132,7 @@ if [ "$dry_run" -eq 0 ]; then
 	        -p conflict.theta=${theta} \
 		-p updateproportion=1.0 \
 		-p readproportion=0.0 \
-		-p conflict.shift=$(( (record / node_count) * (i - 1) )) \
+		-p conflict.shift=$(( (records / node_count) * (i - 1) )) \
 		-p warmupexecutiontime=10 &
         done
 	
