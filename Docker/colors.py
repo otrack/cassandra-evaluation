@@ -175,6 +175,6 @@ def make_protocol_legend(protocol_order, protocol_colors, indent="  ",
     line1 = r"\quad ".join(entries[:split])
     line2 = r"\quad ".join(entries[split:])
     return (
-        "{indent}{{\\tiny {l1}}}\\\\[2pt]\n"
-        "{indent}{{\\tiny {l2}}}\\\\[4pt]\n"
+        "{indent}{{\\tiny {l1}}}\\\\[-4pt]\n"
+        "{indent}{{\\tiny {l2}}}\\\\[0pt]\n"
     ).format(indent=indent, l1=line1, l2=line2)

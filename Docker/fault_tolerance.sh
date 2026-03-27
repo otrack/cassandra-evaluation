@@ -52,7 +52,7 @@ fi
 nodes=5
 replication_factor=$nodes
 workload_type="site.ycsb.workloads.ConflictWorkload"
-theta=0.01 # no conflict
+theta=0.00 # no conflict
 workload="a" # does not matter
 records=10000 # at least one item per client thread
 threads=100
