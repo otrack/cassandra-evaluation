@@ -115,7 +115,7 @@ def main():
             data[workload][proto] = (median, std)
 
     # Sort protocols by protocols.csv order for consistent legend and captions.
-    legend_order = sort_protocols_for_legend(protocol_order)
+    legend_order = sort_protocols_for_plotting(protocol_order)
     # For plotting, Accord is drawn last so its bars overwrite others visually.
     plot_order = sort_protocols_for_plotting(protocol_order)
 
@@ -135,7 +135,7 @@ def main():
         f.write("    \\begin{axis}[\n")
         f.write("      ybar,\n")
         f.write("      bar width=0.2cm,\n")
-        f.write("      width=11cm, height=6cm,\n")
+        f.write("      width=11cm, height=5cm,\n")
         f.write("      enlarge x limits=0.25,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
@@ -164,7 +164,7 @@ def main():
 
         # Caption: describe the figure without explicit colour swatches
         workloads_str = ", ".join(workloads)
-        f.write(f"  \\caption{{Median operation latency (median across all clients and all executed operations) for YCSB workloads {workloads_str}. Error bars show the standard deviation.}}\n")
+        f.write(f"  \\caption{{Median latency in YCSB (averaged over all sites and operations). Error bars show the standard deviation.}}\n")
         f.write("  \\label{fig:ycsb-latency}\n")
         f.write("\\end{figure}\n")
 

@@ -3,7 +3,7 @@ import math
 import pandas as pd
 
 from emulate_latency import haversine, estimate_latency
-from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_plotting
 
 def compute_optimum_per_replica(latlon, n_nodes):
     """
@@ -262,6 +262,7 @@ def main():
             for proto in dfw['protocol'].unique():
                 if proto not in protocol_order:
                     protocol_order.append(proto)
+    protocol_order = sort_protocols_for_plotting(protocol_order)
 
     min_latency, max_latency = get_global_latency_range(df, workloads, all_ops, num_nodes)
     xpad = 0.05 * (max_latency - min_latency)
