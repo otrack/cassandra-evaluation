@@ -54,7 +54,7 @@ replication_factor=$nodes
 workload_type="site.ycsb.workloads.ConflictWorkload"
 theta=0.0 # no conflict
 workload="a" # does not matter
-records=$(config records)
+records=10000 # at least one item per client thread
 threads=100
 status_interval=1   # YCSB -s reporting interval in seconds
 
@@ -129,6 +129,8 @@ if [ "$dry_run" -eq 0 ]; then
                 -p maxexecutiontime=${duration_s} \
                 -p status.interval=${status_interval} \
 	        -p conflict.theta=${theta} \
+		-p updateproportion=1.0 \
+		-p readproportion=0.0 \
 		-p warmupexecutiontime=10 &
         done
 	
@@ -188,6 +190,8 @@ pdflatex -jobname=fault_tolerance -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\
+ \usepackage{xspace}\
+ \newcommand{\Accord}{\textsc{Entente}\xspace}\
  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
  \usetikzlibrary{shapes,arrows}\
  \usepgflibrary{shapes.symbols}\
