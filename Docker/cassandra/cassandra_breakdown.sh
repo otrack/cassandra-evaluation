@@ -45,32 +45,12 @@ java -jar $JMXTERM_JAR -l $JMX_HOST -i /tmp/jmx_cmds.txt -n
 
        attribute="50thPercentile"
 
-       # fast commit
        FAST_COMMIT=$(jmx_get "org.apache.cassandra.metrics:name=PreAcceptLatency,scope=rw,type=AccordCoordinator" ${attribute})
        echo -n "${FAST_COMMIT// /},"
 
-       # slow commit
-       PREACCEPT_REQ=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_PRE_ACCEPT_REQ-WaitLatency,type=Messaging" ${attribute}) 
-       PREACCEPT_RSP=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_PRE_ACCEPT_RSP-WaitLatency,type=Messaging" ${attribute})
-       PREACCEPT=$(echo ${PREACCEPT_REQ} + ${PREACCEPT_RSP} | bc)
-       ACCEPT_REQ=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_ACCEPT_REQ-WaitLatency,type=Messaging" ${attribute})
-       ACCEPT_RSP=$(jmx_get "org.apache.cassandra.metrics:name=ACCORD_ACCEPT_RSP-WaitLatency,type=Messaging" ${attribute})
-       SLOW_COMMIT=$(echo ${PREACCEPT_REQ} + ${PREACCEPT_RSP} + ${ACCEPT_REQ} + ${ACCEPT_RSP}  | bc)
-       echo -n "${SLOW_COMMIT},"
-
-       # ratios
-       FAST=$(jmx_get "org.apache.cassandra.metrics:name=FastPaths,scope=rw,type=AccordCoordinator" Count)
-       MEDIUM=$(jmx_get "org.apache.cassandra.metrics:name=MediumPaths,scope=rw,type=AccordCoordinator" Count)
-       SLOW=$(jmx_get "org.apache.cassandra.metrics:name=SlowPaths,scope=rw,type=AccordCoordinator" Count)
-       FAST=${FAST:-0}
-       MEDIUM=${MEDIUM:-0}
-       SLOW=${SLOW:-0}
-       TOTAL=$((FAST + MEDIUM + SLOW))
-       FAST_PATH_RATIO=$(awk "BEGIN {printf \"%.4f\", $FAST/$TOTAL}")
-
-       COMMIT=$(echo "${FAST_COMMIT} * ${FAST_PATH_RATIO} + ${SLOW_COMMIT} * (1 - ${FAST_PATH_RATIO})" | bc)
-       echo -n "${COMMIT},"
-
+       COMMIT=$(jmx_get "org.apache.cassandra.metrics:name=CommitLatency,scope=rw,type=AccordCoordinator" ${attribute})
+       echo -n "${COMMIT// /},"
+       
        EXECUTE=$(jmx_get "org.apache.cassandra.metrics:name=ExecuteLatency,scope=rw,type=AccordCoordinator" ${attribute}) # until stable
        echo -n "$(echo "x=${EXECUTE} - ${COMMIT}; if (x <= 0) x=0; x" | bc),"
 
