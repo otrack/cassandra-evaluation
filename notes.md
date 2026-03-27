@@ -665,7 +665,7 @@ Similarly to cockroachdb-opt, filter out this protocol from the protocols variab
 TODO:
 (Fig. 8: add commit latency for Accord)
 Fig. 9: look for hokey limit using 2* then finer-grain search
-Fig. 11: side-by-side breakdown 
+Fig. 11: side-by-side breakdown [DONE]
 add a latency-aware policity in the Java Cassandra driver
 
 # 27.03 - copilot
@@ -686,3 +686,9 @@ For each value of S, a breakdown is presented for the two protocols.
 Below each such group, add a mention of the value of S.
 Additionally add a legend to the x axis that reads "breakdwown".
 
+# 27.03 - copilot
+
+Currently, the swap experiment runs with a single client per site.
+The breakdown is computed only for this case.
+I want that you add another case where we run instead 50 clients per site.
+The result of this experiment should appear as a dashed line on the left-hand plot computed in swap.py.
