@@ -145,11 +145,19 @@ if [ "$dry_run" -eq 0 ]; then
 		-p conflict.shift=$(( (records / node_count) * (i - 1) )) \
 		-p warmupexecutiontime=10 &
         done
-	
+
+	# 2. Fetch the leader in the background (as it can be long...)
+	tmp_file=$(mktemp)
+	{
+	    leader=$(${pref}_get_leaders "${protocol}" | head -n 1)
+	    log "Chosen leader is ${leader}"
+	    echo "$leader" > "$tmp_file"
+	} &
+	leader_pid=$!
+
         # Event 1: at X/4, add 400ms latency to (some) leader outbound traffic
         sleep ${slowdown_s}
-	leader=$(${pref}_get_leaders "${protocol}" | head -n 1)
-	log "Chosen leader is ${leader}"
+	wait $leader_pid; leader=$(cat "$tmp_file"); rm "$tmp_file"
         # Save the leader's current tc policies before injecting the slowdown so
         # they can be restored when the slowdown disappears.
         docker exec "${leader}" bash -c \

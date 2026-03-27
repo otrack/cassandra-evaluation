@@ -664,8 +664,8 @@ Similarly to cockroachdb-opt, filter out this protocol from the protocols variab
 
 TODO:
 (Fig. 8: add commit latency for Accord)
-Fig. 9: look for hokey limit using 2* then finer-grain search
-Fig. 11: side-by-side breakdown 
+Fig. 9: look for hokey limit using 2* then finer-grain search [DONE] 
+Fig. 11: side-by-side breakdown [DONE]
 add a latency-aware policity in the Java Cassandra driver
 
 # 27.03 - copilot
@@ -686,3 +686,21 @@ For each value of S, a breakdown is presented for the two protocols.
 Below each such group, add a mention of the value of S.
 Additionally add a legend to the x axis that reads "breakdwown".
 
+# 27.03 - copilot
+
+Currently, the swap experiment runs with a single client per site.
+The breakdown is computed only for this case.
+I want that you add another case where we run instead 50 clients per site.
+The result of this experiment should appear as a dashed line on the left-hand plot computed in swap.py.
+
+# 27.03 - copilot
+
+In Docker/conflict.sh, only the end-to-end latency of Accord appears.
+The goal of this task is to add an additional line plotting the commit latency.
+For this, follow carefully the following steps:
+- Add a new protocol accord-cmt to protocol.csv.
+This protocol will be used nowhere else than in conflict.sh, so be careful in filtering it out elsewhere in variable protocols.
+- To retrieve the commit time in Accord, use function compute_breakdown() in cassandra/cassandra_breakdown.sh.
+Important: the time reported here is computed over the full life time of the server.
+Thus for each value of theta, the server needs to be restarted and refilled with data.
+As a consequence, the usual loop "for t in ${thetas}" in conflict.sh needs to be adjusted appropriately.

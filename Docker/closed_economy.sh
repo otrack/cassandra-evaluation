@@ -123,12 +123,6 @@ if [ "$dry_run" -eq 0 ]; then
 	            awk -F',' -v n="${nodes}" -v proto="${p}" '{print proto "," n "," $0}' >> ${RESULTSDIR}/closed_economy/breakdown.csv
 	    elif [ "$p" == "accord" ]; then
 	        compute_breakdown ${nodes} accord | \
-	            awk -F',' '{
-	                # Field mapping from cassandra_breakdown.sh output:
-	                # $1=city, $2=fast_commit, $3=slow_commit, $4=commit (weighted avg), $5=execution
-	                # ordering is 0 for accord (commit serves as the ordering phase)
-	                print $1","$2","$3","$4",0,"$5
-	            }' | \
 	            awk -F',' -v n="${nodes}" '{print "accord," n "," $0}' >> ${RESULTSDIR}/closed_economy/breakdown.csv
 	    fi
 
