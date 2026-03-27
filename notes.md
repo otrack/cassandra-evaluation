@@ -664,7 +664,7 @@ Similarly to cockroachdb-opt, filter out this protocol from the protocols variab
 
 TODO:
 (Fig. 8: add commit latency for Accord)
-Fig. 9: look for hokey limit using 2* then finer-grain search
+Fig. 9: look for hokey limit using 2* then finer-grain search [DONE] 
 Fig. 11: side-by-side breakdown [DONE]
 add a latency-aware policity in the Java Cassandra driver
 
