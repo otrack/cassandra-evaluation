@@ -43,7 +43,7 @@ mkdir -p ${RESULTSDIR}/closed_economy
 
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
-protocols="accord cockroachdb cockroachdb-bad cockroachdb-opt"
+protocols="accord cockroachdb-bad cockroachdb-opt"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
