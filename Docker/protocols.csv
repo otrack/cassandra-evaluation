@@ -3,6 +3,7 @@ accord,red,\Accord
 cassandra-paxos,blue,Cassandra
 cockroachdb,green!50!black,CockroachDB
 cockroachdb-opt,teal,CockroachDB+
+cockroachdb-bad,green!30!black,CockroachDB-
 swiftpaxos-paxos,cyan!80!black,Paxos
 swiftpaxos-epaxos,magenta!80!black,EPaxos
 swiftpaxos-curp,orange,CURP
