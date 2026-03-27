@@ -51,7 +51,8 @@ fi
 nodes=7
 replication_factor=3
 records=$(config records)
-threads=1
+single_client_threads=1    # 1 thread/DC for tracing and breakdown collection
+multi_client_threads=50    # 50 threads/DC for throughput comparison (no tracing)
 # ops_per_thread=0 means operationcount=0 (unlimited); run duration is controlled by maxexecutiontime
 ops_per_thread=0
 s_values=$(seq 3 8)
@@ -80,6 +81,7 @@ if [ "$dry_run" -eq 0 ]; then
         cities_list="${cities_list} ${loc}"
     done
 
+    # ---- Phase 1: single-client runs (1 thread/DC) – tracing enabled, breakdown collected ----
     for p in ${protocols}
     do
         # clean prior logs
@@ -98,7 +100,7 @@ if [ "$dry_run" -eq 0 ]; then
             fi
 
             # Run without cleanup; cluster is stopped manually after breakdown
-            run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0 "${tracing_opts[@]}" -p swap.s=${s} -p maxexecutiontime=${maxexecutiontime}
+            run_benchmark ${p} ${single_client_threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((single_client_threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0 "${tracing_opts[@]}" -p swap.s=${s} -p maxexecutiontime=${maxexecutiontime}
 
             # Compute performance breakdown for this S value
             if [[ "$p" == cockroachdb* ]]; then
@@ -131,10 +133,35 @@ if [ "$dry_run" -eq 0 ]; then
         # Clean up cluster after all S values for this protocol
         stop_benchmark ${p} ${nodes}
     done
+
+    # ---- Phase 2: multi-client runs (50 threads/DC) – no tracing, no breakdown ----
+    mkdir -p ${LOGDIR}/swap_multi
+    for p in ${protocols}
+    do
+        # clean prior multi-client logs for this protocol
+        rm -f ${LOGDIR}/swap_multi/*${p}*
+
+        do_create_and_load=1
+        for s in ${s_values}
+        do
+            ts=$(date +%Y%m%d%H%M%S%N)
+            output_file="${LOGDIR}/swap_multi/${p}_${nodes}_${workload}_${ts}.dat"
+
+            run_benchmark ${p} ${multi_client_threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((multi_client_threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0 -p swap.s=${s} -p maxexecutiontime=${maxexecutiontime}
+
+            do_create_and_load=0
+        done
+
+        # Clean up cluster after all S values for this protocol
+        stop_benchmark ${p} ${nodes}
+    done
 fi
 
 debug "Parsing results..."
-${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/swap/* > ${RESULTSDIR}/swap.csv
+${DIR}/parse_ycsb_to_csv.sh \
+    $(ls ${LOGDIR}/swap/*.dat 2>/dev/null) \
+    $(ls ${LOGDIR}/swap_multi/*.dat 2>/dev/null) \
+    > ${RESULTSDIR}/swap.csv
 
 debug "Plotting..."
 python3 ${DIR}/swap.py ${RESULTSDIR}/swap.csv ${RESULTSDIR}/swap/breakdown.csv ${RESULTSDIR}/swap.tex

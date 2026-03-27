@@ -142,18 +142,37 @@ def main():
         print("No valid latency data found in results CSV.")
         sys.exit(1)
 
+    # Parse clients column to split single-client and multi-client runs
+    df['clients_int'] = df['clients'].apply(safe_int)
+
+    # Single-client subset (1 thread/DC)
+    df_single = df[df['clients_int'] == 1].copy()
+    if df_single.empty:
+        # Fallback: treat all data as single-client when no clients=1 rows present
+        df_single = df.copy()
+
+    # Multi-client subset: auto-detect the largest non-1 client count
+    non_one = df[df['clients_int'].notnull() & (df['clients_int'] != 1)]['clients_int']
+    if not non_one.empty:
+        multi_client_threads = int(non_one.max())
+        df_multi = df[df['clients_int'] == multi_client_threads].copy()
+    else:
+        multi_client_threads = None
+        df_multi = pd.DataFrame()
+    has_multi = not df_multi.empty
+
     # Get unique protocols sorted (accord last) for consistent plot draw order.
-    raw_protocols = list(dict.fromkeys(df['protocol'].tolist()))
+    raw_protocols = list(dict.fromkeys(df_single['protocol'].tolist()))
     protocol_order = sort_protocols_for_plotting(raw_protocols)
 
     # S values from 3 to 8
-    s_values = sorted(df['s_val'].unique().tolist())
+    s_values = sorted(df_single['s_val'].unique().tolist())
 
-    # For each protocol, compute median latency per S value
+    # For each protocol, compute median latency per S value for single-client data
     # (mean across all nodes/cities for the same S value)
     data_by_protocol = {}
     for proto in raw_protocols:
-        dfp = df[df['protocol'] == proto]
+        dfp = df_single[df_single['protocol'] == proto]
         latencies = []
         for s in s_values:
             df_s = dfp[dfp['s_val'] == s]
@@ -163,13 +182,32 @@ def main():
                 latencies.append(None)
         data_by_protocol[proto] = latencies
 
+    # For each protocol, compute median latency per S value for multi-client data
+    data_by_protocol_multi = {}
+    if has_multi:
+        multi_protocols = list(dict.fromkeys(df_multi['protocol'].tolist()))
+        for proto in multi_protocols:
+            dfp = df_multi[df_multi['protocol'] == proto]
+            latencies = []
+            for s in s_values:
+                df_s = dfp[dfp['s_val'] == s]
+                if not df_s.empty:
+                    latencies.append(float(df_s['median_latency_ms'].mean()))
+                else:
+                    latencies.append(None)
+            data_by_protocol_multi[proto] = latencies
+
     # Prepare colors (unified protocol color schema)
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
 
-    # Determine y-axis range
+    # Determine y-axis range covering both single- and multi-client data
     all_lats = []
     for proto, vals in data_by_protocol.items():
+        for v in vals:
+            if v is not None:
+                all_lats.append(v)
+    for proto, vals in data_by_protocol_multi.items():
         for v in vals:
             if v is not None:
                 all_lats.append(v)
@@ -231,6 +269,7 @@ def main():
         f.write("      label style={font=\\small},\n")
         f.write("    ]\n\n")
 
+        # Solid lines: single-client (1 thread/DC)
         for idx, proto in enumerate(protocol_order):
             col = get_protocol_color(proto, protocol_colors, idx)
             f.write(f"      \\addplot+[{col}, mark=*, thick] table {{\n")
@@ -239,7 +278,22 @@ def main():
                     f.write(f"        {s} {lat:.2f}\n")
             f.write("      };\n\n")
 
+        # Dashed lines: multi-client (50 threads/DC)
+        if has_multi:
+            for idx, proto in enumerate(protocol_order):
+                if proto not in data_by_protocol_multi:
+                    continue
+                col = get_protocol_color(proto, protocol_colors, idx)
+                f.write(f"      \\addplot+[{col}, mark=*, thick, dashed] table {{\n")
+                for s, lat in zip(s_values, data_by_protocol_multi[proto]):
+                    if lat is not None:
+                        f.write(f"        {s} {lat:.2f}\n")
+                f.write("      };\n\n")
+
         f.write("    \\end{axis}\n")
+        if has_multi:
+            f.write(f"    \\node[font=\\tiny] at (2,-0.5) {{1 client/site (solid)}};\n")
+            f.write(f"    \\node[font=\\tiny] at (5.5,-0.5) {{{multi_client_threads} clients/site (dashed)}};\n")
         f.write("  \\end{tikzpicture}\n")
 
         # ---- Right subplot: stacked bar breakdown ----
@@ -315,6 +369,9 @@ def main():
             f.write("    \\end{axis}\n")
             f.write("  \\end{tikzpicture}\n")
 
+        multi_caption = (
+            f" Solid lines: 1 client/site. Dashed lines: {multi_client_threads} clients/site."
+        ) if has_multi else ""
         breakdown_caption = (
             " Right: Latency breakdown per protocol phase for each value of $S$,"
             " averaged across all data centers."
@@ -322,7 +379,7 @@ def main():
 
         f.write(
             "  \\caption{Left: Swap workload median latency as a function of the number of"
-            " swapped items per transaction ($S$)." + breakdown_caption + "}\n"
+            " swapped items per transaction ($S$)." + multi_caption + breakdown_caption + "}\n"
         )
         f.write("  \\label{fig:swap-latency}\n")
         f.write("\\end{figure}\n")
