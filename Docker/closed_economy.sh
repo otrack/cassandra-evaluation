@@ -181,6 +181,8 @@ pdflatex -jobname=closed_economy -output-directory=${RESULTSDIR} \
  \usepackage{tikz}\
  \usepackage{amssymb}\
  \usepackage{wasysym}\
+ \usepackage{xspace}\
+ \newcommand{\Accord}{\textsc{Entente}\xspace}\
  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
  \usetikzlibrary{shapes,arrows}\
  \usepgflibrary{shapes.symbols}\
