@@ -101,7 +101,7 @@ cockroachdb_get_leaders() {
     local container="$(config "node_name")1"
     local node_ids
     node_ids=$(docker exec "${container}" cockroach sql --insecure --format=csv \
-	-e "SELECT DISTINCT voting_replicas[1] AS lease_holder FROM [SHOW RANGES FROM TABLE usertable];" \
+        -e "SELECT DISTINCT lease_holder FROM [SHOW RANGES FROM TABLE usertable WITH DETAILS];" \
         2>/dev/null | tail -n +2 | sed 's/[[:space:]]//g')
     for node_id in ${node_ids}; do
         echo "$(config "node_name")${node_id}"
