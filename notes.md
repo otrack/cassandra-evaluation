@@ -660,8 +660,29 @@ If this argument is set, then the best lease holder is chosen, and otherwise the
 Similarly to cockroachdb-opt, filter out this protocol from the protocols variable used in the cdf, ycsb, conflict, and latency_throughput.
 - Replace cockroachdb with cockroachdb-bad in closed_economy.sh
 
-# 27.03 - copilot
+# 27.03 -
 
-Fig. 8: add commit latency for Accord
+TODO:
+(Fig. 8: add commit latency for Accord)
 Fig. 9: look for hokey limit using 2* then finer-grain search
 Fig. 11: side-by-side breakdown 
+add a latency-aware policity in the Java Cassandra driver
+
+# 27.03 - copilot
+
+The script Docker/swap.sh executes an experiment during which clients run continuously transactions to swap atomically the content of S records (actually, just the first field of each record).
+The script that plots the results of this experiment is Docker/swap.sh.
+For the moment, this script outputs a single figure.
+The goal of this task is to include a new figure, in which the performance of each database is brokendown.
+This figure is very similar to the right-hand plot created by Docker/closed_economy.py.
+Please follow carrefully the following steps to do this task:
+- Change swap.sh to compute a performance breakdown after each run.
+These results are stored under the directory results/swap/, in a file called breakdown.csv.
+This file is similar to results/swap/breakdown.csv and consists in entries of the following form: 
+protocol,S,city,fast_commit,slow_commit,commit,ordering,execution, where S is the number of items swapped during the run.
+- In Docker/swap.py, add a new figure on the right of the existing one.
+This figure is a bar plot detailing the performacne breakdown of the two protocols compared in swap.sh.
+For each value of S, a breakdown is presented for the two protocols.
+Below each such group, add a mention of the value of S.
+Additionally add a legend to the x axis that reads "breakdwown".
+

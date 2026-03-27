@@ -51,9 +51,10 @@ if [ -n "$protocols_override" ]; then
 fi
 nodes=5
 replication_factor=$nodes
-workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
-workload="ce"
-records=$(config records)
+workload_type="site.ycsb.workloads.ConflictWorkload"
+theta=0 # no conflict
+workload="a" # does not matter
+records=10000 # at least one item per client thread
 threads=100
 status_interval=1   # YCSB -s reporting interval in seconds
 
