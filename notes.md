@@ -660,3 +660,8 @@ If this argument is set, then the best lease holder is chosen, and otherwise the
 Similarly to cockroachdb-opt, filter out this protocol from the protocols variable used in the cdf, ycsb, conflict, and latency_throughput.
 - Replace cockroachdb with cockroachdb-bad in closed_economy.sh
 
+# 27.03 - copilot
+
+Fig. 8: add commit latency for Accord
+Fig. 9: look for hokey limit using 2* then finer-grain search
+Fig. 11: side-by-side breakdown 

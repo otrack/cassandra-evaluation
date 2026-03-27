@@ -306,7 +306,7 @@ def main():
     results_csv = sys.argv[1]
     breakdown_csv = sys.argv[2]
     output_tikz = sys.argv[3]
-    # Optional: thread count used for the multi-client runs (for axis label "client/DC=N")
+    # Optional: thread count used for the multi-client runs (for axis label "client/site=N")
     try:
         multi_client_threads = int(sys.argv[4]) if len(sys.argv) >= 5 else None
     except ValueError:
@@ -341,7 +341,7 @@ def main():
             lambda row, p=percentile: percentile_value(row, p), axis=1
         )
 
-    # Split into single-client (1 thread per DC) and multi-client runs
+    # Split into single-client (1 thread per site) and multi-client runs
     df_single = df_rmw[df_rmw['clients_int'] == 1].copy()
     if df_single.empty:
         # Fallback: treat all data as single-client
@@ -575,8 +575,8 @@ def main():
                         f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
-        f.write(f"    \\node[font=\\tiny] at (1.5,-.5) {{1 client/DC}};\n")
-        f.write(f"    \\node[font=\\tiny] at (5,-.5) {{{multi_client_threads} clients/DC}};\n")
+        f.write(f"    \\node[font=\\tiny] at (1.5,-.5) {{1 client/site}};\n")
+        f.write(f"    \\node[font=\\tiny] at (5,-.5) {{{multi_client_threads} clients/site}};\n")
         
         f.write("  \\end{tikzpicture}\n")
 
@@ -631,12 +631,12 @@ def main():
                     f.write("      };\n\n")
 
             f.write("    \\end{axis}\n")
-            f.write(f"    \\node[font=\\tiny] at (2.5,-.5) {{breakdown (1 client/DC)}};\n")
+            f.write(f"    \\node[font=\\tiny] at (2.25,-.5) {{breakdown (1 client/site)}};\n")
             f.write("  \\end{tikzpicture}\n")
 
         if has_multi:
             left_caption = (
-                f" Left: Closed economy workload latency for one and {multi_client_threads} clients per DC."
+                f" Left: Closed economy workload latency for one and {multi_client_threads} clients per site."
                 " For each protocol, from left to right, 3, 5 and 7 nodes."
                 " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
                 " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
