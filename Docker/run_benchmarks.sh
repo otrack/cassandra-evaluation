@@ -185,8 +185,12 @@ run_ycsb() {
 	# CockroachDB using JDBC (PostgreSQL wire protocol)
 	# Empty password is intentional - CockroachDB runs in insecure mode for testing
 	ycsb_client="jdbc"
-	hosts=$(get_container_ip ${nearby_database})
-	local jdbc_url="jdbc:postgresql://${hosts}:${port}/defaultdb?cockroachdb=true&sslmode=disable"
+	local jdbc_url=""
+	IFS=',' read -ra host_array <<< "$hosts"
+	for h in "${host_array[@]}"; do
+	    [ -n "$jdbc_url" ] && jdbc_url+=","
+	    jdbc_url+="jdbc:postgresql://${h}:${port}/defaultdb?cockroachdb=true&sslmode=disable"
+	done
 	extra_opts_str+=" -p db.driver=org.postgresql.Driver \
 -p db.url=${jdbc_url} \
 -p db.user=root \

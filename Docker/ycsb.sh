@@ -67,6 +67,7 @@ fi
 maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
+    pull_images
     do_clean_up=0
     for p in ${protocols}
     do

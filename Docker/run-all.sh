@@ -36,22 +36,6 @@ for arg in "$@"; do
     esac
 done
 
-if [ "$dry_run" -eq 0 ]; then
-    log "Pulling all Docker images from ${CONFIG_FILE}..."
-    while IFS='=' read -r key value; do
-        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-        [[ "$key" =~ _image$ ]] || continue
-        value=$(echo "$value" | xargs)
-        log "Pulling image: ${value}"
-        docker pull "${value}"
-        if [ $? -ne 0 ]; then
-            log "ERROR: Failed to pull image '${value}'. Aborting."
-            exit 1
-        fi
-    done < "${CONFIG_FILE}"
-    log "All Docker images pulled successfully."
-fi
-
 scripts=(
     "cdf.sh"
     "closed_economy.sh"

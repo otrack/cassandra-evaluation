@@ -311,6 +311,22 @@ compute_test_machine() {
     return 0
 }
 
+pull_images() {
+    log "Pulling all Docker images from ${CONFIG_FILE}..."
+    while IFS='=' read -r key value; do
+        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ "$key" =~ _image$ ]] || continue
+        value=$(echo "$value" | xargs)
+        log "Pulling image: ${value}"
+        docker pull "${value}"
+        if [ $? -ne 0 ]; then
+            log "ERROR: Failed to pull image '${value}'. Aborting."
+            exit 1
+        fi
+    done < "${CONFIG_FILE}"
+    log "All Docker images pulled successfully."
+}
+
 get_location() {
   local k="$1"
   local file="${2:-latencies.csv}"
