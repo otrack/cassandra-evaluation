@@ -51,10 +51,9 @@ if [ -n "$protocols_override" ]; then
 fi
 nodes=5
 replication_factor=$nodes
-workload_type="site.ycsb.workloads.ConflictWorkload"
-theta=0 # no conflict
-workload="a" # does not matter
-records=10000 # at least one item per client thread
+workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
+workload="ce"
+records=$(config records)
 threads=100
 status_interval=1   # YCSB -s reporting interval in seconds
 
@@ -139,10 +138,6 @@ if [ "$dry_run" -eq 0 ]; then
                 "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
                 -p maxexecutiontime=${duration_s} \
                 -p status.interval=${status_interval} \
-	        -p conflict.theta=${theta} \
-		-p updateproportion=1.0 \
-		-p readproportion=0.0 \
-		-p conflict.shift=$(( (records / node_count) * (i - 1) )) \
 		-p warmupexecutiontime=10 &
         done
 
