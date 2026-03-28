@@ -704,3 +704,14 @@ This protocol will be used nowhere else than in conflict.sh, so be careful in fi
 Important: the time reported here is computed over the full life time of the server.
 Thus for each value of theta, the server needs to be restarted and refilled with data.
 As a consequence, the usual loop "for t in ${thetas}" in conflict.sh needs to be adjusted appropriately.
+
+# 28.03 - copilot 
+
+Make the following modifications:
+- Add a back-up host to CockroachDB in run_benchmark.
+A back-up can be found by using variable hosts until line 171 who stores the IP address of all the database containers separated by commas
+(e.g., 172.18.0.2,172.18.0.3,172.18.0.4,172.18.0.5,172.18.0.6).
+A backup can be added by passing an address of the following form:
+jdbc:postgresql://host1:26257/db?cockroachdb=true&sslmode=disable,jdbc:postgresql://host2:26257/db?cockroachdb=true&sslmode=disable
+- For every experiment script in Docker, before starting the experiment ensure that the host holds the latest version of the container images defined in exp.config.
+Also, remove this computation from run-all.sh 
