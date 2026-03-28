@@ -71,6 +71,7 @@ fi
 maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
+    pull_images
     # Write CSV header for breakdown results
     echo "protocol,nodes,city,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/closed_economy/breakdown.csv
 

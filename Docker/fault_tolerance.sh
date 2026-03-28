@@ -87,6 +87,7 @@ log "  Slowdown (+400ms latency on the leader) from ${slowdown_s}s to ${slowdown
 log "  Crash (SIGWAIT the leader) at ${crash_s}s"
 
 if [ "$dry_run" -eq 0 ]; then
+    pull_images
     for protocol in ${protocols}; do
         
         # clean prior logs

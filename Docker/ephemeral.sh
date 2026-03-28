@@ -74,6 +74,7 @@ fi
 maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
+    pull_images
     total=$(echo ${workloads} | wc -w)
 
     # --- Run with ephemeral reads ENABLED ---

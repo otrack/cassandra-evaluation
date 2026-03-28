@@ -71,6 +71,7 @@ maxexecutiontime=$(config maxexecutiontime)
 max_threads=512
 
 if [ "$dry_run" -eq 0 ]; then
+    pull_images
     do_clean_up=0
     for p in ${protocols}
     do
