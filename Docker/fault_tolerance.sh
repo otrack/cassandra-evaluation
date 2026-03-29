@@ -54,7 +54,7 @@ replication_factor=$nodes
 workload_type="site.ycsb.workloads.ConflictWorkload"
 workload="a" # this does not matter
 theta=0.0
-records=$(config records)
+records=10000
 threads=100
 status_interval=1   # YCSB -s reporting interval in seconds
 
