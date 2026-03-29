@@ -147,7 +147,7 @@ if [ "$dry_run" -eq 0 ]; then
                 "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
                 -p maxexecutiontime=${duration_s} \
                 -p status.interval=${status_interval} \
-		-p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0 \
+		-p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0 -p conflict.shift=$(( (records / node_count) * (i - 1) ))\
 		-p warmupexecutiontime=10 &
         done
 
