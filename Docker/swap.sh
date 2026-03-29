@@ -2,7 +2,9 @@
 
 # Swap workload experiment.
 # This workload atomically swaps S items per transaction.
-# The parameter S varies from 3 to 8, and the experiment measures total throughput.
+# The parameter S varies from 1 to 8, and the experiment measures total throughput.
+# Both 1 and 50 clients/site are evaluated; tracing is enabled in all runs so that
+# a per-(clients,S) performance breakdown can always be collected.
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
 
@@ -51,11 +53,10 @@ fi
 nodes=7
 replication_factor=3
 records=$(config records)
-single_client_threads=1    # 1 thread/DC for tracing and breakdown collection
-multi_client_threads=50    # 50 threads/DC for throughput comparison (no tracing)
+client_counts="1 50"       # thread counts per DC to evaluate
 # ops_per_thread=0 means operationcount=0 (unlimited); run duration is controlled by maxexecutiontime
 ops_per_thread=0
-s_values=$(seq 3 8)
+s_values=$(seq 1 8)
 
 if [ "$test_run" -eq 1 ]; then
     original_machine=$(config machine)
@@ -72,8 +73,8 @@ maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
     pull_images
-    # Write CSV header for breakdown results
-    echo "protocol,S,city,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/swap/breakdown.csv
+    # Write CSV header for breakdown results (clients column added after S)
+    echo "protocol,S,clients,city,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/swap/breakdown.csv
 
     # Compute cities list once (nodes is fixed)
     cities_list=""
@@ -82,80 +83,64 @@ if [ "$dry_run" -eq 0 ]; then
         cities_list="${cities_list} ${loc}"
     done
 
-    # ---- Phase 1: single-client runs (1 thread/DC) – tracing enabled, breakdown collected ----
-    for p in ${protocols}
+    # Unified loop over client counts and protocols.
+    # Tracing is enabled in every run so a breakdown can always be collected.
+    # Accord must be stopped between client counts because its internal metrics
+    # are cumulative and are not reset during the lifetime of a server.
+    for clients in ${client_counts}
     do
-        # clean prior logs
-        rm -f ${LOGDIR}/swap/*${p}*
-
-        do_create_and_load=1
-        for s in ${s_values}
+        for p in ${protocols}
         do
-            ts=$(date +%Y%m%d%H%M%S%N)
-            output_file="${LOGDIR}/swap/${p}_${nodes}_${workload}_${ts}.dat"
+            # clean prior logs for this protocol
+            rm -f ${LOGDIR}/swap/*${p}*
 
-            # Enable tracing for CockroachDB so breakdown data can be collected
-            tracing_opts=()
-            if [[ "$p" == cockroachdb* ]]; then
-                tracing_opts=("-p" "db.tracing=true")
-            fi
+            do_create_and_load=1
+            for s in ${s_values}
+            do
+                ts=$(date +%Y%m%d%H%M%S%N)
+                output_file="${LOGDIR}/swap/${p}_${nodes}_${workload}_${ts}.dat"
 
-            # Run without cleanup; cluster is stopped manually after breakdown
-            run_benchmark ${p} ${single_client_threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((single_client_threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0 "${tracing_opts[@]}" -p swap.s=${s} -p maxexecutiontime=${maxexecutiontime}
+                # Always enable tracing so breakdown data can be collected
+                tracing_opts=()
+                if [[ "$p" == cockroachdb* ]]; then
+                    tracing_opts=("-p" "db.tracing=true")
+                fi
 
-            # Compute performance breakdown for this S value
-            if [[ "$p" == cockroachdb* ]]; then
-                tmp_logdir=$(mktemp -d)
-                for i in $(seq 1 ${nodes}); do
-                    loc=$(get_location $i ${DIR}/latencies.csv)
-                    src="${output_file%.dat}_${loc}.dat"
-                    if [ -f "${src}" ]; then
-                        cp "${src}" "${tmp_logdir}/${p}_${nodes}_${workload}_${ts}_${loc}.dat"
-                    fi
-                done
-                python3 ${DIR}/cockroachdb/cockroachdb_breakdown.py \
-                    ${p} ${tmp_logdir} ${workload} ${nodes} ${cities_list} | \
-                    awk -F',' -v s="${s}" -v proto="${p}" '{print proto "," s "," $0}' >> ${RESULTSDIR}/swap/breakdown.csv
-                rm -rf "${tmp_logdir}"
-            elif [ "$p" == "accord" ]; then
-                compute_breakdown ${nodes} accord | \
-                    awk -F',' -v s="${s}" '{print "accord," s "," $0}' >> ${RESULTSDIR}/swap/breakdown.csv
-            fi
+                run_benchmark ${p} ${clients} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((clients * ops_per_thread)) ${output_file} ${do_create_and_load} 0 "${tracing_opts[@]}" -p swap.s=${s} -p maxexecutiontime=${maxexecutiontime}
 
-            do_create_and_load=0
+                # Compute performance breakdown for this (clients, S) value
+                if [[ "$p" == cockroachdb* ]]; then
+                    tmp_logdir=$(mktemp -d)
+                    for i in $(seq 1 ${nodes}); do
+                        loc=$(get_location $i ${DIR}/latencies.csv)
+                        src="${output_file%.dat}_${loc}.dat"
+                        if [ -f "${src}" ]; then
+                            cp "${src}" "${tmp_logdir}/${p}_${nodes}_${workload}_${ts}_${loc}.dat"
+                        fi
+                    done
+                    python3 ${DIR}/cockroachdb/cockroachdb_breakdown.py \
+                        ${p} ${tmp_logdir} ${workload} ${nodes} ${cities_list} | \
+                        awk -F',' -v s="${s}" -v c="${clients}" -v proto="${p}" '{print proto "," s "," c "," $0}' >> ${RESULTSDIR}/swap/breakdown.csv
+                    rm -rf "${tmp_logdir}"
+                elif [ "$p" == "accord" ]; then
+                    compute_breakdown ${nodes} accord | \
+                        awk -F',' -v s="${s}" -v c="${clients}" '{print "accord," s "," c "," $0}' >> ${RESULTSDIR}/swap/breakdown.csv
+                fi
+
+                do_create_and_load=0
+            done
+
+            # Stop the cluster after all S values for this (clients, protocol) combination.
+            # This is required for Accord to reset its internal metrics before the next
+            # client-count iteration; the cluster is restarted via do_create_and_load=1 above.
+            stop_benchmark ${p} ${nodes}
         done
-
-        # Clean up cluster after all S values for this protocol
-        stop_benchmark ${p} ${nodes}
-    done
-
-    # ---- Phase 2: multi-client runs (50 threads/DC) – no tracing, no breakdown ----
-    mkdir -p ${LOGDIR}/swap_multi
-    for p in ${protocols}
-    do
-        # clean prior multi-client logs for this protocol
-        rm -f ${LOGDIR}/swap_multi/*${p}*
-
-        do_create_and_load=1
-        for s in ${s_values}
-        do
-            ts=$(date +%Y%m%d%H%M%S%N)
-            output_file="${LOGDIR}/swap_multi/${p}_${nodes}_${workload}_${ts}.dat"
-
-            run_benchmark ${p} ${multi_client_threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((multi_client_threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0 -p swap.s=${s} -p maxexecutiontime=${maxexecutiontime}
-
-            do_create_and_load=0
-        done
-
-        # Clean up cluster after all S values for this protocol
-        stop_benchmark ${p} ${nodes}
     done
 fi
 
 debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh \
     $(ls ${LOGDIR}/swap/*.dat 2>/dev/null) \
-    $(ls ${LOGDIR}/swap_multi/*.dat 2>/dev/null) \
     > ${RESULTSDIR}/swap.csv
 
 debug "Plotting..."

@@ -4,9 +4,11 @@ Plotting script for the swap workload experiment.
 
 This script generates a two-subplot figure:
 - Left: a line chart showing median latency (ms) vs. number of swapped items (S)
-  with one line per protocol (accord and cockroachdb).
+  with one line per protocol (accord and cockroachdb) for each client count (solid
+  for 1 client/site, dashed for multi-client).
 - Right (optional): a stacked bar breakdown showing the latency breakdown per
-  protocol phase for each value of S.  Requires a breakdown.csv produced by
+  protocol for four groups: (#c=1,S=s_min), (#c=50,S=s_min), (#c=1,S=s_max),
+  (#c=50,S=s_max).  Requires a breakdown.csv with a 'clients' column produced by
   swap.sh.
 """
 
@@ -43,7 +45,7 @@ def row_median_latency(row):
 def load_swap_breakdown(breakdown_csv):
     """Load swap breakdown data from breakdown.csv.
 
-    Returns a dict: {protocol: {S: {city: {fast_commit, slow_commit, commit, ordering, execution}}}}
+    Returns a dict: {protocol: {clients: {S: {city: {fast_commit, slow_commit, commit, ordering, execution}}}}}
     Values are in microseconds.
     """
     result = {}
@@ -52,7 +54,7 @@ def load_swap_breakdown(breakdown_csv):
     except (FileNotFoundError, IOError):
         return result
 
-    required = {'protocol', 'S', 'city', 'fast_commit', 'slow_commit', 'commit', 'ordering', 'execution'}
+    required = {'protocol', 'S', 'clients', 'city', 'fast_commit', 'slow_commit', 'commit', 'ordering', 'execution'}
     if not required.issubset(df.columns):
         return result
 
@@ -60,6 +62,10 @@ def load_swap_breakdown(breakdown_csv):
         proto = str(row['protocol']).strip()
         try:
             s_val = int(row['S'])
+        except (TypeError, ValueError):
+            continue
+        try:
+            clients_val = int(row['clients'])
         except (TypeError, ValueError):
             continue
         city = str(row['city']).strip()
@@ -71,7 +77,7 @@ def load_swap_breakdown(breakdown_csv):
             ex = float(row['execution'])
         except (TypeError, ValueError):
             continue
-        result.setdefault(proto, {}).setdefault(s_val, {})[city] = {
+        result.setdefault(proto, {}).setdefault(clients_val, {}).setdefault(s_val, {})[city] = {
             'fast_commit': fc,
             'slow_commit': sc,
             'commit': cm,
@@ -81,13 +87,13 @@ def load_swap_breakdown(breakdown_csv):
     return result
 
 
-def compute_average_swap_breakdown(breakdown_data, protocol, s_val):
-    """Return the average breakdown across all cities for (protocol, s_val).
+def compute_average_swap_breakdown(breakdown_data, protocol, clients_val, s_val):
+    """Return the average breakdown across all cities for (protocol, clients_val, s_val).
 
     Returns a dict {fast_commit, slow_commit, commit, ordering, execution} in
     microseconds, or None if no data are available.
     """
-    cities_data = breakdown_data.get(protocol, {}).get(s_val, {})
+    cities_data = breakdown_data.get(protocol, {}).get(clients_val, {}).get(s_val, {})
     if not cities_data:
         return None
     components = ['fast_commit', 'slow_commit', 'commit', 'ordering', 'execution']
@@ -225,18 +231,54 @@ def main():
     if breakdown_csv is not None:
         breakdown_data = load_swap_breakdown(breakdown_csv)
 
-    # Build ordered list of (protocol, s) pairs that have breakdown data.
-    # Protocols are sorted in protocols.csv order (accord last).
+    # Determine the available client counts and S values in the breakdown data
     bd_protocols = sort_protocols_for_plotting(list(breakdown_data.keys()))
     bd_proto_idx = {p: idx for idx, p in enumerate(bd_protocols)}
-    breakdown_items = []    # list of (proto, s)
-    breakdown_avgs = {}     # {(proto, s): avg_dict}
-    for s in s_values:
+
+    # Collect all (clients, S) pairs that have at least one protocol with data
+    bd_all_clients = set()
+    bd_all_s = set()
+    for proto in bd_protocols:
+        for c in breakdown_data.get(proto, {}):
+            bd_all_clients.add(c)
+            for s in breakdown_data[proto][c]:
+                bd_all_s.add(s)
+
+    # Select s_min and s_max for the 4-group breakdown plot
+    if bd_all_s:
+        bd_s_min = min(bd_all_s)
+        bd_s_max = max(bd_all_s)
+    else:
+        bd_s_min = None
+        bd_s_max = None
+
+    # Sort client counts; the problem specifies 1 and 50
+    bd_clients_sorted = sorted(bd_all_clients)
+
+    # Build the 4 groups: (clients, S) in the order
+    #   (c_min, s_min), (c_max, s_min), (c_min, s_max), (c_max, s_max)
+    # Each group contains one bar per available protocol.
+    breakdown_groups = []    # list of (clients, s) group keys
+    if bd_s_min is not None and len(bd_clients_sorted) >= 1:
+        for s_sel in ([bd_s_min] if bd_s_min == bd_s_max else [bd_s_min, bd_s_max]):
+            for c in bd_clients_sorted:
+                # Only include group if at least one protocol has data for it
+                has_data = any(
+                    compute_average_swap_breakdown(breakdown_data, proto, c, s_sel) is not None
+                    for proto in bd_protocols
+                )
+                if has_data:
+                    breakdown_groups.append((c, s_sel))
+
+    # Pre-compute breakdown averages for all (proto, clients, s) triples needed
+    breakdown_avgs = {}   # {(proto, clients, s): avg_dict}
+    for c, s in breakdown_groups:
         for proto in bd_protocols:
-            avg = compute_average_swap_breakdown(breakdown_data, proto, s)
+            avg = compute_average_swap_breakdown(breakdown_data, proto, c, s)
             if avg is not None:
-                breakdown_items.append((proto, s))
-                breakdown_avgs[(proto, s)] = avg
+                breakdown_avgs[(proto, c, s)] = avg
+
+    has_breakdown = bool(breakdown_groups) and bool(breakdown_avgs)
 
     # Prepare colors from the unified protocol color schema
     protocol_colors = load_protocol_colors()
@@ -252,7 +294,7 @@ def main():
 
         # Breakdown pattern legend placed before both tikzpictures so they
         # remain on the same line.
-        if breakdown_items:
+        if has_breakdown:
             bd_legend_entries = []
             for label, pattern in zip(BREAKDOWN_LABELS, BREAKDOWN_PATTERNS):
                 swatch = (
@@ -304,46 +346,43 @@ def main():
             f.write(f"    \\node[font=\\tiny] at (5.5,-0.5) {{{multi_client_threads} clients/site (dashed)}};\n")
         f.write("  \\end{tikzpicture}\n")
 
-        # ---- Right subplot: stacked bar breakdown ----
-        if breakdown_items:
-            # Assign sequential x positions grouped by S value (one group per S,
-            # one bar per protocol within each group).
-            s_groups = {}
-            for proto, s in breakdown_items:
-                s_groups.setdefault(s, []).append(proto)
-
-            x_positions = {}
-            pos = 0
+        # ---- Right subplot: stacked bar breakdown (4 groups) ----
+        # Groups: (#c=1,S=s_min), (#c=50,S=s_min), (#c=1,S=s_max), (#c=50,S=s_max)
+        # Within each group, one bar per protocol.
+        if has_breakdown:
+            # Assign sequential bar positions: for each group (c,s), one position
+            # per protocol (in bd_protocols order).
+            x_positions = {}   # {(proto, c, s): int position}
             xtick_pos = []
             xticklabels_list = []
-            for s in s_values:
-                if s not in s_groups:
-                    continue
-                group_protos = s_groups[s]
+            pos = 0
+            for c, s in breakdown_groups:
                 group_start = pos
-                for proto in group_protos:
-                    x_positions[(proto, s)] = pos
-                    pos += 1
+                for proto in bd_protocols:
+                    if (proto, c, s) in breakdown_avgs:
+                        x_positions[(proto, c, s)] = pos
+                        pos += 1
                 group_mid = (group_start + pos - 1) / 2.0
                 xtick_pos.append(group_mid)
-                xticklabels_list.append(str(s))
+                xticklabels_list.append(f"\\#c={c}, $S$={s}")
             n_bars = pos
 
             # Compute ymax from the maximum total bar height across all items
             bd_totals = []
-            for proto, s in breakdown_items:
-                avgs = breakdown_avgs.get((proto, s), {})
-                total = sum(avgs.get(c, 0.0) for c in BREAKDOWN_COMPONENTS) / MICROS_TO_MILLIS
+            for (proto, c, s), avgs in breakdown_avgs.items():
+                total = sum(avgs.get(comp, 0.0) for comp in BREAKDOWN_COMPONENTS) / MICROS_TO_MILLIS
                 bd_totals.append(total)
             breakdown_ymax = max(bd_totals) * 1.2 if bd_totals else 100.0
 
             xtick_str = ",".join(f"{x:.1f}" for x in xtick_pos)
-            xticklabels_str = ",".join(xticklabels_list)
+            # Each label is wrapped in braces so that the commas inside labels are not
+            # treated as list separators by pgfplots.
+            xticklabels_str = ",".join("{" + lbl + "}" for lbl in xticklabels_list)
 
             f.write("  \\begin{tikzpicture}[scale=.6]\n")
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
-            f.write("      width=6cm, height=6cm,\n")
+            f.write("      width=8cm, height=6cm,\n")
             f.write("      enlarge x limits=0.15,\n")
             f.write("      bar width=0.2cm,\n")
             f.write("      ymajorgrids=true,\n")
@@ -351,20 +390,20 @@ def main():
             f.write(f"      ymin=0, ymax={breakdown_ymax:.2f},\n")
             f.write(f"      xtick={{{xtick_str}}},\n")
             f.write(f"      xticklabels={{{xticklabels_str}}},\n")
+            f.write("      x tick label style={font=\\tiny, text width=1.4cm, align=center},\n")
             f.write("      tick label style={font=\\tiny},\n")
             f.write("      xlabel={breakdown},\n")
             f.write("    ]\n\n")
 
-            # Emit one \addplot per (bar position, phase).  Each \addplot lists
-            # ALL bar positions so that pgfplots' per-x-value stack accumulator
-            # is initialised for every position; non-relevant positions receive
-            # height 0.  This guarantees that every bar starts at y=0 regardless
-            # of the order \addplot commands are emitted.
-            for i, (proto, s) in enumerate(breakdown_items):
-                proto_color = get_protocol_color(proto, protocol_colors, bd_proto_idx.get(proto, i))
-                bar_pos = x_positions[(proto, s)]
+            # Emit one \addplot per (bar position, component).  Each \addplot lists
+            # ALL bar positions so that pgfplots' per-x-value stack accumulator is
+            # initialised for every position; non-relevant positions receive height 0.
+            bar_items = sorted(x_positions.keys(), key=lambda t: x_positions[t])
+            for proto, c, s in bar_items:
+                proto_color = get_protocol_color(proto, protocol_colors, bd_proto_idx.get(proto, 0))
+                bar_pos = x_positions[(proto, c, s)]
                 for comp, pattern in zip(BREAKDOWN_COMPONENTS, BREAKDOWN_PATTERNS):
-                    val = breakdown_avgs.get((proto, s), {}).get(comp, 0.0) / MICROS_TO_MILLIS
+                    val = breakdown_avgs.get((proto, c, s), {}).get(comp, 0.0) / MICROS_TO_MILLIS
                     f.write(f"      \\addplot+[ybar, fill={proto_color}, draw=black,"
                             f" pattern={pattern}, pattern color={proto_color}] coordinates {{\n")
                     for j in range(n_bars):
@@ -380,10 +419,18 @@ def main():
         multi_caption = (
             f" Solid lines: 1 client/site. Dashed lines: {multi_client_threads} clients/site."
         ) if has_multi else ""
-        breakdown_caption = (
-            " Right: Latency breakdown per protocol phase for each value of $S$,"
-            " averaged across all data centers."
-        ) if breakdown_items else ""
+        if has_breakdown:
+            if bd_s_min == bd_s_max:
+                s_range_str = f"$S={bd_s_min}$"
+            else:
+                s_range_str = f"$S={bd_s_min}$ and $S={bd_s_max}$"
+            breakdown_caption = (
+                " Right: Latency breakdown per protocol and client count"
+                f" for {s_range_str},"
+                " averaged across all data centers."
+            )
+        else:
+            breakdown_caption = ""
 
         f.write(
             "  \\caption{Left: Swap workload median latency as a function of the number of"
