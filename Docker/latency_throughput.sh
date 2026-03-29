@@ -80,7 +80,7 @@ if [ "$dry_run" -eq 0 ]; then
         rm -f ${LOGDIR}/latency_throughput/*${p}*
 
         do_create_and_load=1
-        threads=1
+        threads=16
 
         while [ ${threads} -le ${max_threads} ]
         do
