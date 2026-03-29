@@ -68,7 +68,7 @@ maxexecutiontime=$(config maxexecutiontime)
 # Start with 1 thread and double until reaching max_threads
 # The resulting graph demonstrates the hockey stick effect
 # Maximum threads to prevent infinite loop
-max_threads=512
+max_threads=2048
 
 if [ "$dry_run" -eq 0 ]; then
     pull_images
