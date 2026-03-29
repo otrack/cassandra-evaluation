@@ -56,7 +56,7 @@ records=$(config records)
 client_counts="1 50"       # thread counts per DC to evaluate
 # ops_per_thread=0 means operationcount=0 (unlimited); run duration is controlled by maxexecutiontime
 ops_per_thread=0
-s_values=$(seq 1 8)
+s_values=$(seq 3 8)
 
 if [ "$test_run" -eq 1 ]; then
     original_machine=$(config machine)
