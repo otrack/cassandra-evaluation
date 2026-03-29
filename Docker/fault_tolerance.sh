@@ -88,8 +88,8 @@ if [ "$dry_run" -eq 0 ]; then
     for protocol in ${protocols}; do
 
 	# if needed set a single lease at the optimal location
-	if [[ "$p" == cockroachdb* ]]; then
-	    if [[ "$p" == cockroachdb-opt ]]; then
+	if [[ "$protocol" == cockroachdb* ]]; then
+	    if [[ "$protocol" == cockroachdb-opt ]]; then
 		log "Cockroachdb-opt detected, will pin lease holder."
 		sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
 	    else
