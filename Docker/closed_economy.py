@@ -306,7 +306,7 @@ def main():
     results_csv = sys.argv[1]
     breakdown_csv = sys.argv[2]
     output_tikz = sys.argv[3]
-    # Optional: thread count used for the multi-client runs (for axis label "client/site=N")
+    # Optional: thread count used for the multi-client runs (for axis label "cl/site=N")
     try:
         multi_client_threads = int(sys.argv[4]) if len(sys.argv) >= 5 else None
     except ValueError:
@@ -452,7 +452,7 @@ def main():
     offset_step = calculate_offset_step(series_count)
 
     with open(output_tikz, 'w') as f:
-        f.write("\\begin{figure}[htbp]\n")
+        f.write("\\begin{figure}[t]\n")
         f.write("  \\centering\n")
         # Protocol legend in protocols.csv order
         f.write(make_protocol_legend(protocols_legend, protocol_colors,
@@ -508,7 +508,7 @@ def main():
 
         f.write("  \\begin{tikzpicture}[scale=.6]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=8cm, height=6cm,\n")
+        f.write("      width=7cm, height=5.5cm,\n")
         f.write("      grid=major,\n")
         f.write("      ymajorgrids=true,\n")
         f.write("      ymode=log,\n")
@@ -575,8 +575,8 @@ def main():
                         f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
-        f.write(f"    \\node[font=\\tiny] at (1.5,-.5) {{1 client/site}};\n")
-        f.write(f"    \\node[font=\\tiny] at (5,-.5) {{{multi_client_threads} clients/site}};\n")
+        f.write(f"    \\node[font=\\tiny] at (1.5,-.5) {{1 cl/site}};\n")
+        f.write(f"    \\node[font=\\tiny] at (5,-.5) {{{multi_client_threads} cl/site}};\n")
         
         f.write("  \\end{tikzpicture}\n")
 
@@ -595,11 +595,11 @@ def main():
                 bd_totals.append(total)
             breakdown_ymax = max(bd_totals) * 1.2 if bd_totals else 100.0
 
-            f.write("  \\begin{tikzpicture}[scale=.6]\n")
+            f.write("  \\quad\\begin{tikzpicture}[scale=.6]\n")
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
-            f.write("      width=6cm, height=6cm,\n")
-            f.write("      enlarge x limits=0.15,\n")
+            f.write("      width=5.25cm, height=5.5cm,\n")
+            f.write("      enlarge x limits=0.1,\n")
             f.write("      bar width=0.2cm,\n")
             f.write("      ymajorgrids=true,\n")
             f.write("      ylabel={Median Latency (ms)},\n")
@@ -631,36 +631,10 @@ def main():
                     f.write("      };\n\n")
 
             f.write("    \\end{axis}\n")
-            f.write(f"    \\node[font=\\tiny] at (2.25,-.5) {{breakdown (1 client/site)}};\n")
+            f.write(f"    \\node[font=\\tiny] at (2.25,-.5) {{breakdown (1 cl/site)}};\n")
             f.write("  \\end{tikzpicture}\n")
 
-        if has_multi:
-            left_caption = (
-                f" Left: Closed economy workload latency for one and {multi_client_threads} clients per site."
-                " For each protocol, from left to right, 3, 5 and 7 nodes."
-                " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
-                " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
-                " CockroachDB+ pins the (unique) lease holder at the geographically optimal location."
-            )
-        else: # FIXME
-            left_caption = (
-                " Left: Closed economy workload latency as a function of the protocol."
-                " For each protocol, from left to right, 3, 5 and 7 nodes."
-                " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
-                " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
-                " CockroachDB* pins the lease holder at the geographically optimal location."
-            )
-
-        if breakdown_items:
-            right_caption = (
-                " Right: Latency breakdown per protocol phase for 3, 5, and 7 nodes,"
-                " averaged across all data centers."
-            )
-        else:
-            right_caption = ""
-
-        f.write("  \\caption{\\label{fig:closed-economy-latency}\n"
-                f"{left_caption}{right_caption}}}\n")
+        f.write("  \\caption{\\label{fig:closed-economy-latency} Closed economy workload}")
         f.write("\\end{figure}\n")
 
     print(f"Generated {output_tikz}")
@@ -668,3 +642,28 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+        # if has_multi:
+        #     left_caption = (
+        #         f" Left: Closed economy workload latency for one and {multi_client_threads} clients per site."
+        #         " For each protocol, from left to right, 3, 5 and 7 nodes."
+        #         " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
+        #         " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
+        #         " CockroachDB+ pins the (unique) lease holder at the geographically optimal location."
+        #     )
+        # else: # FIXME
+        #     left_caption = (
+        #         " Left: Closed economy workload latency as a function of the protocol."
+        #         " For each protocol, from left to right, 3, 5 and 7 nodes."
+        #         " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
+        #         " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles."
+        #         " CockroachDB* pins the lease holder at the geographically optimal location."
+        #     )
+
+        # if breakdown_items:
+        #     right_caption = (
+        #         " Right: Latency breakdown per protocol phase for 3, 5, and 7 nodes,"
+        #         " averaged across all data centers."
+        #     )
+        # else:
+        #     right_caption = ""

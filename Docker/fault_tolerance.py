@@ -90,7 +90,7 @@ def main():
     xmax = duration_s
 
     with open(output_tex, "w") as f:
-        f.write("\\begin{figure}[htbp]\n")
+        f.write("\\begin{figure}[t]\n")
         f.write("  \\centering\n")
         # Protocol legend above the plot (only for protocols that have data),
         # sorted in protocols.csv order for consistent caption ordering.
@@ -105,12 +105,12 @@ def main():
         f.write("      grid=both,\n")
         f.write("      xlabel={Time (seconds)},\n")
         f.write("      ylabel={Throughput (ops/sec)},\n")
-        f.write(f"      xmin=0, xmax={xmax},\n")
+        f.write(f"      xmin=10, xmax={xmax},\n")
         f.write(f"      ymin=0, ymax={ymax:.2f},\n")
         f.write("      legend pos=outer north east,\n")
         f.write("      legend style={font=\\tiny},\n")
-        f.write("      tick label style={font=\\tiny},\n")
-        f.write("      label style={font=\\tiny},\n")
+        f.write("      tick label style={font=\\small},\n")
+        f.write("      label style={font=\\small},\n")
         f.write("    ]\n\n")
 
         # One throughput curve per protocol, Accord drawn last for visual prominence.
@@ -148,12 +148,7 @@ def main():
         caption_protocols = sort_protocols_for_legend(protocols)
         protocols_str = ", ".join(protocol_aliases.get(p, p) for p in caption_protocols)
         f.write(
-            "  \\caption{Aggregated YCSB throughput over time "
-            f"({protocols_str}, {duration_s // 60}\\,min experiment). "
-            f"At $t={slowdown_s}$\\,s a 400\\,ms latency is added to CockroachDB's lease holder "
-            f"(bright orange dashed line); the slowdown is removed at $t={slowdown_end_s}$\\,s "
-            f"(dark orange dashed line). "
-            f"At $t={crash_s}$\\,s the lease holder is killed (black dashed line).}}\n"
+            "  \\caption{{Fault injection: at 3' a site slows down for 90s then later crashes at 9'.}}\n"
         )
         f.write("  \\label{fig:fault-tolerance}\n")
         f.write("\\end{figure}\n")
@@ -163,3 +158,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+        #     f.write(
+        #     "  \\caption{Aggregated YCSB throughput over time "
+        #     f"({protocols_str}, {duration_s // 60}\\,min experiment). "
+        #     f"At $t={slowdown_s}$\\,s a 400\\,ms latency is added to CockroachDB's lease holder "
+        #     f"(bright orange dashed line); the slowdown is removed at $t={slowdown_end_s}$\\,s "
+        #     f"(dark orange dashed line). "
+        #     f"At $t={crash_s}$\\,s the lease holder is killed (black dashed line).}}\n"
+        # )

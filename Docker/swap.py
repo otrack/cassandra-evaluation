@@ -5,7 +5,7 @@ Plotting script for the swap workload experiment.
 This script generates a two-subplot figure:
 - Left: a line chart showing median latency (ms) vs. number of swapped items (S)
   with one line per protocol (accord and cockroachdb) for each client count (solid
-  for 1 client/site, dashed for multi-client).
+  for 1 cl/site, dashed for multi-client).
 - Right (optional): a stacked bar breakdown showing the latency breakdown per
   protocol for four groups: (#c=1,S=s_min), (#c=50,S=s_min), (#c=1,S=s_max),
   (#c=50,S=s_max).  Requires a breakdown.csv with a 'clients' column produced by
@@ -286,7 +286,7 @@ def main():
                 
     # Generate TikZ/pgfplots code
     with open(output_tikz, 'w') as f:
-        f.write("\\begin{figure}[htbp]\n")
+        f.write("\\begin{figure}[t]\n")
         f.write("  \\centering\n")
         # Protocol legend in protocols.csv order
         f.write(make_protocol_legend(protocols_legend, protocol_colors,
@@ -298,16 +298,16 @@ def main():
             bd_legend_entries = []
             for label, pattern in zip(BREAKDOWN_LABELS, BREAKDOWN_PATTERNS):
                 swatch = (
-                    r"\protect\tikz \protect\fill[fill=gray!40, pattern={pattern},"
+                    r"\tiny\protect\tikz \protect\fill[fill=gray!40, pattern={pattern}, "
                     r" pattern color=gray!80] (0,0) rectangle (0.3,0.3);~{label}"
                 ).format(pattern=pattern, label=label)
                 bd_legend_entries.append(swatch)
             f.write("  " + "~".join(bd_legend_entries) + "\n\n")
 
         # ---- Left subplot: median latency line chart ----
-        f.write("  \\begin{tikzpicture}[scale=.7]\n")
+        f.write("  \\vspace{1mm}\\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=8cm, height=4cm,\n")
+        f.write("      width=7cm, height=4cm,\n")
         f.write("      grid=both,\n")
         f.write("      xlabel={Number of swapped items ($S$)},\n")
         f.write("      ylabel={Median latency (ms)},\n")
@@ -342,8 +342,8 @@ def main():
 
         f.write("    \\end{axis}\n")
         if has_multi:
-            f.write(f"    \\node[font=\\tiny] at (2,-0.5) {{1 client/site (solid)}};\n")
-            f.write(f"    \\node[font=\\tiny] at (5.5,-0.5) {{{multi_client_threads} clients/site (dashed)}};\n")
+            f.write(f"    \\node[font=\\tiny] at (2.25,3.2) {{1 cl/site (solid)}};\n")
+            f.write(f"    \\node[font=\\tiny] at (2.5,2.75) {{{multi_client_threads} cl/site (dashed)}};\n")
         f.write("  \\end{tikzpicture}\n")
 
         # ---- Right subplot: stacked bar breakdown (4 groups) ----
@@ -363,8 +363,6 @@ def main():
                         x_positions[(proto, c, s)] = pos
                         pos += 1
                 group_mid = (group_start + pos - 1) / 2.0
-                xtick_pos.append(group_mid)
-                xticklabels_list.append(f"\\#c={c}, $S$={s}")
             n_bars = pos
 
             # Compute ymax from the maximum total bar height across all items
@@ -379,19 +377,20 @@ def main():
             # treated as list separators by pgfplots.
             xticklabels_str = ",".join("{" + lbl + "}" for lbl in xticklabels_list)
 
-            f.write("  \\begin{tikzpicture}[scale=.6]\n")
+            f.write("  \\quad\\begin{tikzpicture}[scale=.6]\n")
             f.write("    \\begin{axis}[\n")
             f.write("      ybar stacked,\n")
-            f.write("      width=8cm, height=6cm,\n")
-            f.write("      enlarge x limits=0.15,\n")
+            f.write("      width=5cm, height=5.5cm,\n")
+            f.write("      enlarge x limits=0.1,\n")
             f.write("      bar width=0.2cm,\n")
             f.write("      ymajorgrids=true,\n")
             f.write("      ylabel={Median Latency (ms)},\n")
+            f.write("      y label style={font=\\small},\n")
             f.write(f"      ymin=0, ymax={breakdown_ymax:.2f},\n")
-            f.write(f"      xtick={{{xtick_str}}},\n")
+            f.write(f"      xtick=\\empty,\n")
             f.write(f"      xticklabels={{{xticklabels_str}}},\n")
-            f.write("      x tick label style={font=\\tiny, text width=1.4cm, align=center},\n")
-            f.write("      tick label style={font=\\tiny},\n")
+            f.write("      x label style={font=\\small, text width=1.4cm, align=center},\n")
+            f.write("      tick label style={font=\\small},\n")
             f.write("      xlabel={breakdown},\n")
             f.write("    ]\n\n")
 
@@ -414,27 +413,14 @@ def main():
                     f.write("      };\n\n")
 
             f.write("    \\end{axis}\n")
+            f.write(f"   \\node[font=\\tiny] at (1,-.25) {{$S$=3}};\n")
+            f.write(f"   \\draw[dashed, line width=0.5pt] (1.7,-.25) -- (1.75,4.25);")            
+            f.write(f"   \\node[font=\\tiny] at (2.5,-.25) {{$S$=8}};\n")
+            f.write(f"   \\node[font=\\tiny] at (.3,2.45) {{1}};\n")
+            f.write(f"   \\node[font=\\tiny] at (1.1,3.1) {{{multi_client_threads}}};\n")
             f.write("  \\end{tikzpicture}\n")
 
-        multi_caption = (
-            f" Solid lines: 1 client/site. Dashed lines: {multi_client_threads} clients/site."
-        ) if has_multi else ""
-        if has_breakdown:
-            if bd_s_min == bd_s_max:
-                s_range_str = f"$S={bd_s_min}$"
-            else:
-                s_range_str = f"$S={bd_s_min}$ and $S={bd_s_max}$"
-            breakdown_caption = (
-                " Right: Latency breakdown per protocol and client count"
-                f" for {s_range_str},"
-                " averaged across all data centers."
-            )
-        else:
-            breakdown_caption = ""
-
-        f.write(
-            "  \\caption{Left: Swap workload median latency as a function of the number of"
-            " swapped items per transaction ($S$)." + multi_caption + breakdown_caption + "}\n"
+        f.write("  \\caption{Swap workload}\n"
         )
         f.write("  \\label{fig:swap-latency}\n")
         f.write("\\end{figure}\n")
@@ -444,3 +430,24 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+        # multi_caption = (
+        #     f" Solid lines: 1 cl/site. Dashed lines: {multi_client_threads} cl/site."
+        # ) if has_multi else ""
+        # if has_breakdown:
+        #     if bd_s_min == bd_s_max:
+        #         s_range_str = f"$S={bd_s_min}$"
+        #     else:
+        #         s_range_str = f"$S={bd_s_min}$ and $S={bd_s_max}$"
+        #         breakdown_caption = (
+        #             " Right: Latency breakdown per protocol and client count"
+        #             f" for {s_range_str},"
+        #             " averaged across all sites."
+        #         )
+        # else:
+        #     breakdown_caption = ""
+
+        # f.write(
+        #     "  \\caption{Left: Swap workload median latency as a function of the number of"
+        #     " swapped items per transaction ($S$)." + multi_caption + breakdown_caption + "}\n"
+        # )
