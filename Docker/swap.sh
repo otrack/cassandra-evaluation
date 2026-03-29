@@ -87,13 +87,14 @@ if [ "$dry_run" -eq 0 ]; then
     # Tracing is enabled in every run so a breakdown can always be collected.
     # Accord must be stopped between client counts because its internal metrics
     # are cumulative and are not reset during the lifetime of a server.
-    for clients in ${client_counts}
+    for p in ${protocols}
     do
-        for p in ${protocols}
-        do
-            # clean prior logs for this protocol
-            rm -f ${LOGDIR}/swap/*${p}*
-
+        # clean prior logs for this protocol
+        rm -f ${LOGDIR}/swap/*${p}*
+	
+	for clients in ${client_counts}
+	do
+	    
             do_create_and_load=1
             for s in ${s_values}
             do
