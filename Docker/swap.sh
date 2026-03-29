@@ -165,6 +165,8 @@ pdflatex -jobname=swap -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\
+ \usepackage{xspace}\
+ \newcommand{\Accord}{\textsc{Entente}\xspace}\
  \usetikzlibrary{decorations.pathreplacing,positioning,automata,calc}\
  \usetikzlibrary{shapes,arrows}\
  \usepgflibrary{shapes.symbols}\

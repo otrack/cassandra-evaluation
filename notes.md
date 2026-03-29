@@ -660,14 +660,6 @@ If this argument is set, then the best lease holder is chosen, and otherwise the
 Similarly to cockroachdb-opt, filter out this protocol from the protocols variable used in the cdf, ycsb, conflict, and latency_throughput.
 - Replace cockroachdb with cockroachdb-bad in closed_economy.sh
 
-# 27.03 -
-
-TODO:
-(Fig. 8: add commit latency for Accord)
-Fig. 9: look for hokey limit using 2* then finer-grain search [DONE] 
-Fig. 11: side-by-side breakdown [DONE]
-add a latency-aware policity in the Java Cassandra driver
-
 # 27.03 - copilot
 
 The script Docker/swap.sh executes an experiment during which clients run continuously transactions to swap atomically the content of S records (actually, just the first field of each record).
@@ -715,3 +707,32 @@ A backup can be added by passing an address of the following form:
 jdbc:postgresql://host1:26257/db?cockroachdb=true&sslmode=disable,jdbc:postgresql://host2:26257/db?cockroachdb=true&sslmode=disable
 - For every experiment script in Docker, before starting the experiment ensure that the host holds the latest version of the container images defined in exp.config.
 Also, remove this computation from run-all.sh 
+
+# 28.03
+
+TODO:
+(Fig. 8: add commit latency for Accord) [IN-PROGRESS]
+Fig. 9: look for hokey limit using 2* then finer-grain search [DONE] 
+Fig. 11: side-by-side breakdown [DONE]
+add a latency-aware policity in the Java Cassandra driver
+Fig. 12: jdbc cannot recover? [DONE]
+Fig 11: single breakdown, the rest are just identical
+
+# 28.03
+
+In YCSB, tracing is now working when there are multiple clients per thread: just a single one is activating traces. The goal of this task is to leverage this feature to enhance the experimental results of Docker/swap.sh.
+To achieve this, please carefully follow the steps below:
+- In swap.sh, merge the logic of the two loops when there is a single client (phase 1) and 50 clients (phase 2).
+- In every run of the benchmark, activate tracing in swap.sh.
+- Compute a performance breakdown as previously at the end of the run.
+Because now there might be a variable number of clients add a column right after S and entitled "clients" in results/swap/breakdown.csv
+In other words, the header should now be: protocol,S,clients,city,fast_commit,slow_commit,commit,ordering,execution.
+Update the computation of the performance breakdown to also mention the number of clients.
+- Be careful that between #clients=1 and #clients=50 Accord needs to be restarted.
+This comes from the fact that the internal metrics are not reset.
+- In the figure created by swap.py, the right-hand site plot should now report four groups of bars:
+1) one for #client=1, S=1 with a performance breakdown of CockroachDB and Accord
+2) one for #client=50, S=1 with a performance breakdown of CockroachDB and Accord
+3) one for #client=1, S=8 with a performance breakdown of CockroachDB and Accord
+4) one for #client=50, S=8 with a performance breakdown of CockroachDB and Accord
+

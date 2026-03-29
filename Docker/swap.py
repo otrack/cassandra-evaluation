@@ -14,7 +14,7 @@ import sys
 import pandas as pd
 import numpy as np
 
-from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, sort_protocols_for_plotting
+from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, sort_protocols_for_plotting, make_protocol_legend
 
 BREAKDOWN_COMPONENTS = ['commit', 'ordering', 'execution']
 BREAKDOWN_LABELS = ['Commit', 'Ordering', 'Execution']
@@ -163,6 +163,7 @@ def main():
 
     # Get unique protocols sorted (accord last) for consistent plot draw order.
     raw_protocols = list(dict.fromkeys(df_single['protocol'].tolist()))
+    protocols_legend = sort_protocols_for_plotting(raw_protocols)
     protocol_order = sort_protocols_for_plotting(raw_protocols)
 
     # S values from 3 to 8
@@ -237,10 +238,17 @@ def main():
                 breakdown_items.append((proto, s))
                 breakdown_avgs[(proto, s)] = avg
 
+    # Prepare colors from the unified protocol color schema
+    protocol_colors = load_protocol_colors()
+    protocol_aliases = load_protocol_aliases()
+                
     # Generate TikZ/pgfplots code
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[htbp]\n")
         f.write("  \\centering\n")
+        # Protocol legend in protocols.csv order
+        f.write(make_protocol_legend(protocols_legend, protocol_colors,
+                                     protocol_aliases=protocol_aliases))
 
         # Breakdown pattern legend placed before both tikzpictures so they
         # remain on the same line.

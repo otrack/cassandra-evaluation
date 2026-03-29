@@ -45,7 +45,7 @@ mkdir -p ${LOGDIR}/fault_tolerance
 
 # Configuration
 duration_minutes=${DURATION_MINUTES:-12}    # X: total duration in minutes (configurable)
-protocols="accord cockroachdb-opt"
+protocols="accord cockroachdb cockroachdb-opt"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
@@ -53,6 +53,11 @@ nodes=5
 replication_factor=$nodes
 workload_type="site.ycsb.workloads.ClosedEconomyWorkload"
 workload="ce"
+# 
+# workload_type="site.ycsb.workloads.ConflictWorkload"
+# theta=0.0
+# workload="a" # this does not matter
+# 
 records=$(config records)
 threads=100
 status_interval=1   # YCSB -s reporting interval in seconds
@@ -73,9 +78,6 @@ if [ "$test_run" -eq 1 ]; then
     compute_test_machine "${nodes}"
 fi
 
-# set a single lease at the optimal location
-sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
-
 duration_s=$((duration_minutes * 60))
 slowdown_s=$((duration_s / 4))
 slowdown_end_s=$((duration_s / 8))
@@ -88,7 +90,16 @@ log "  Crash (SIGWAIT the leader) at ${crash_s}s"
 if [ "$dry_run" -eq 0 ]; then
     pull_images
     for protocol in ${protocols}; do
-        
+
+	# if needed set a single lease at the optimal location
+	if [[ "$p" == cockroachdb* ]]; then
+	    if [[ "$p" == cockroachdb-opt ]]; then
+		sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
+	    else
+		sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=false/" "${CONFIG_FILE}"
+	    fi
+	fi
+
         # clean prior logs
         rm -f ${LOGDIR}/fault_tolerance/*${protocol}*
         
@@ -141,6 +152,7 @@ if [ "$dry_run" -eq 0 ]; then
                 -p status.interval=${status_interval} \
 		-p warmupexecutiontime=10 &
         done
+	# -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0
 
 	# 2. Fetch the leader in the background (as it can be long...)
 	tmp_file=$(mktemp)
