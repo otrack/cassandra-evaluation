@@ -43,7 +43,7 @@ mkdir -p ${LOGDIR}/ycsb
 
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
-protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockroachdb-opt | grep -v cockroachdb-bad | paste -sd' ')
+protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockroachdb-opt | grep -v cockroachdb-bad | grep -v accord-cmt | paste -sd' ')
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
