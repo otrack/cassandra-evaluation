@@ -89,17 +89,20 @@ if [ "$dry_run" -eq 0 ]; then
             ts=$(date +%Y%m%d%H%M%S%N)
             output_file="${LOGDIR}/latency_throughput/${p}_${nodes}_${workload}_${ts}.dat"
             
-            # Clean up after the last iteration of each protocol's thread sequence, or in case the protocol is using Cassandra.
+            # Clean up after the last iteration of each protocol's thread sequence, or in case the protocol uses Cassandra.
             # This ensures we start fresh for the next protocol
             do_clean_up=0
             next_threads=$(( (threads * 3 + 1) / 2 ));
-	    if [ "$next_threads" -gt "$max_threads" ] || [ "$p" = "cassandra*" ] || [ "$p" = "accord" ]; then
-                do_clean_up=1
+	    if [ "$next_threads" -gt "$max_threads" ] || [ "$p" = "cassandra-paxos" ] || [ "$p" = "accord" ]; then
+                do_clean_up=1		
             fi
             
             run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=${maxexecutiontime}
-            do_create_and_load=0
 
+	    if [ "$p" != "cassandra-paxos" ] && [ "$p" != "accord" ]; then
+		do_create_and_load=0
+	    fi
+		
             # Extract global metrics aggregated across all sites:
             # sum throughput and average latency over the first ${nodes} cities
             total_tput=0
