@@ -91,7 +91,7 @@ if [ "$dry_run" -eq 0 ]; then
             # This ensures we start fresh for the next protocol
             do_clean_up=0
             next_threads=$(( (threads * 3 + 1) / 2 ));
-            if [ ${next_threads} -gt ${max_threads} ]; then
+	    if [ "$next_threads" -gt "$max_threads" ] || [ "$p" = "cassandra*" ]; then
                 do_clean_up=1
             fi
             
