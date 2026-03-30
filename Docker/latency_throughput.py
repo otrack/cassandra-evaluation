@@ -106,7 +106,7 @@ def main():
         for clients in client_counts:
             df_clients = dfp[dfp['clients_int'] == clients]
             if not df_clients.empty:
-                total_tput = df_clients['tput_f'].sum()
+                total_tput = df_clients['tput_f'].sum() / 1000
                 avg_lat = df_clients['median_latency_ms'].mean()
                 throughputs.append(total_tput)
                 latencies.append(avg_lat)
@@ -147,21 +147,21 @@ def main():
 
     # Generate TikZ/pgfplots code
     with open(output_tikz, 'w') as f:
-        f.write("\\begin{figure}[htbp]\n")
+        f.write("\\begin{figure}[t]\n")
         f.write("  \\centering\n")
         f.write(make_protocol_legend(protocol_order, protocol_colors,
                                      protocol_aliases=protocol_aliases))
-        f.write("  \\begin{tikzpicture}[scale=.7]\n")
+        f.write("  \\vspace{1mm}\\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
-        f.write("      width=12cm, height=7cm,\n")
+        f.write("      width=12cm, height=6cm,\n")
         f.write("      grid=both,\n")
-        f.write("      xlabel={Throughput (ops/sec)},\n")
+        f.write("      xlabel={Throughput (kops/sec)},\n")
         f.write("      ylabel={Median Latency (ms)},\n")
         f.write(f"      xmin={xmin:.2f}, xmax={xmax:.2f},\n")
         f.write(f"      ymin={ymin:.2f}, ymax={500},\n")
         f.write("      cycle list name=color list,\n")
-        f.write("      tick label style={font=\\tiny},\n")
-        f.write("      label style={font=\\tiny},\n")
+        f.write("      tick label style={font=\\small},\n")
+        f.write("      label style={font=\\small},\n")
         f.write("    ]\n\n")
 
         for idx, proto in enumerate(plot_order):
@@ -176,8 +176,7 @@ def main():
 
         f.write("    \\end{axis}\n")
         f.write("  \\end{tikzpicture}\n")
-        f.write("  \\caption{Latency vs Throughput: Median operation latency as a function of throughput. ")
-        f.write("Each curve represents a protocol; the number of clients increases by a factor of 2 until saturation.}\n")        
+        f.write("  \\caption{Latency vs Throughput.}\n")        
         f.write("  \\label{fig:latency-throughput}\n")
         f.write("\\end{figure}\n")
 
@@ -185,3 +184,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    #    f.write("  \\caption{Latency vs Throughput: Median operation latency as a function of throughput. ")
+
