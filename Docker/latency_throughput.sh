@@ -81,6 +81,8 @@ if [ "$dry_run" -eq 0 ]; then
 
         do_create_and_load=1
         threads=16
+        prev_latency=-1
+        prev_throughput=-1
 
         while [ ${threads} -le ${max_threads} ]
         do
@@ -98,14 +100,21 @@ if [ "$dry_run" -eq 0 ]; then
             run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=${maxexecutiontime}
             do_create_and_load=0
 
-            # Check if average latency exceeded 1s (500 ms); if so, stop increasing threads
-	    city=$(cat latencies.csv | head -n 2 | tail -n 1 | awk -F, '{print $3}')
-            max_avg_latency=$(cat "${output_file%.dat}_${city}.dat" | grep -v CLEANUP | grep -v FAILED | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print int(max/1000)}')
-            if [ "${max_avg_latency}" -gt 500 ]; then
-                log "Average latency ${max_avg_latency}ms exceeds 1s for protocol ${p}, stopping thread increase"
-	        stop_benchmark ${p} ${nodes}
+            # Extract current latency and throughput metrics
+            city=$(cat latencies.csv | head -n 2 | tail -n 1 | awk -F, '{print $3}')
+            current_file="${output_file%.dat}_${city}.dat"
+            max_avg_latency=$(cat "${current_file}" | grep -v CLEANUP | grep -v FAILED | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print int(max/1000)}')
+            tput=$(awk -F',' '/^\[OVERALL\], Throughput\(ops\/sec\),/{t=$3; gsub(/[[:space:]]/,"",t); print int(t+0.5); exit}' "${current_file}")
+            tput=${tput:-0}
+
+            # Stop when both latency and throughput degrade wrt. previous values (Pareto front)
+            if [ "${prev_latency}" -ge 0 ] && [ "${prev_throughput}" -ge 0 ] && [ "${max_avg_latency}" -gt "${prev_latency}" ] && [ "${tput}" -lt "${prev_throughput}" ]; then
+                log "Pareto front reached for ${p}: latency ${max_avg_latency}ms > ${prev_latency}ms and throughput ${tput} < ${prev_throughput} ops/s, stopping thread increase"
+                stop_benchmark ${p} ${nodes}
                 break
             fi
+            prev_latency=${max_avg_latency}
+            prev_throughput=${tput}
 
             # Double the number of threads for next iteration
             threads=${next_threads}
