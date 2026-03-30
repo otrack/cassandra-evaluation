@@ -306,7 +306,7 @@ def main():
         f.write("  \\centering\n")
         f.write(make_protocol_legend(protocol_order, protocol_colors,
                                      protocol_aliases=protocol_aliases))
-        f.write("  \\begin{tikzpicture}[scale=.7]\n")
+        f.write("  \\vspace{1mm}\\begin{tikzpicture}[scale=.7]\n")
         f.write("    \\begin{axis}[\n")
         f.write("      width=12cm, height=6cm,\n")
         f.write("      grid=both,\n")
