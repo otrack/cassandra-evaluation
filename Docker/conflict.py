@@ -353,7 +353,7 @@ def main():
                 if y is None:
                     continue
                 label_fp = fp if (fp is not None) else 0.0
-                if label_fp == 0.0 or label_fp < 1:
+                if label_fp < 1:
                     continue
                 # Choose anchor to avoid clipping at the left (x=0) and right (x=1) axis edges
                 if abs(x) < 1e-9:
