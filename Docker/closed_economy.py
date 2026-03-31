@@ -602,7 +602,7 @@ def main():
             f.write("      enlarge x limits=0.1,\n")
             f.write("      bar width=0.2cm,\n")
             f.write("      ymajorgrids=true,\n")
-            f.write("      ylabel={Median Latency (ms)},\n")
+            f.write("      ylabel={Latency (ms)},\n")
             f.write(f"     ymin=0, ymax={breakdown_ymax:.2f},\n")
             f.write("      xticklabel=\\empty,\n")
             f.write("    ]\n\n")
