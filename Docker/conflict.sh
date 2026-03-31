@@ -74,8 +74,8 @@ if [ "$dry_run" -eq 0 ]; then
         # clean prior logs
         rm -f ${LOGDIR}/conflict/*${p}*
 
-        if [ "$p" == "accord" ]; then
-            # For Accord, restart the server for each theta value so that JMX metrics
+        if [ "$p" == "accord-cmt" ]; then
+            # For Accord (Committed), restart the server for each theta value so that JMX metrics
             # (accumulated over the full server lifetime) reflect only that theta's workload.
             rm -f ${RESULTSDIR}/conflict/accord_cmt_*.txt
 
