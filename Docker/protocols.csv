@@ -7,4 +7,4 @@ cockroachdb-bad,green!30!black,CockroachDB-
 swiftpaxos-paxos,cyan!80!black,Paxos
 swiftpaxos-epaxos,magenta!80!black,EPaxos
 swiftpaxos-curp,orange,CURP
-accord-cmt,red!50!black,\Accord (commit)
+accord-cmt,red!50!white,\Accord (\commitP)

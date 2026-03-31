@@ -378,6 +378,7 @@ def main():
 
         # include data replica location in caption (third entry in latencies.csv if present)
         f.write("    \\end{axis}\n")
+        f.write(f"   \\node[font=\\tiny] at (10.6,0.6) {{\\color{{gray}}{{$Q$}}}};\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Median operation latency across all locations as a function of the conflict parameter ($\\theta$).")
         # f.write(data_cities_caption)

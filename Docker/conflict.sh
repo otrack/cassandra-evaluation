@@ -159,5 +159,6 @@ pdflatex -jobname=conflict -output-directory=${RESULTSDIR} \
  \usetikzlibrary{patterns}\
  \usetikzlibrary{matrix, positioning, pgfplots.groupplots}\
  \begin{document}\
+ \newcommand{\commitP}{{\normalfont\textsc{committed}}}\
  \thispagestyle{empty}\centering\input{conflict.tex}\
  \end{document}" > /dev/null
