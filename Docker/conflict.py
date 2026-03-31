@@ -329,7 +329,7 @@ def main():
             for x, y, fp in zip(x_values, data_by_protocol[proto], failed_vals):
                 if y is None:
                     continue
-                if fp is not None and fp > 1.0:
+                if fp is not None and fp > 0:
                     failed_coords.append((x, y, fp))
 
             # Main plot: line connecting all points with normal circle marks
@@ -353,7 +353,7 @@ def main():
                 if y is None:
                     continue
                 label_fp = fp if (fp is not None) else 0.0
-                if label_fp == 0.0:
+                if label_fp <= 0.01:
                     continue
                 # Choose anchor to avoid clipping at the left (x=0) and right (x=1) axis edges
                 if abs(x) < 1e-9:
