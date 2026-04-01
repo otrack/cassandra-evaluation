@@ -9,8 +9,8 @@ protocol labels:
   - "accord-noephem" : Accord with ephemeral reads DISABLED
 
 Generates a LaTeX table showing, for each YCSB workload A–D:
-  - Average operation latency with ephemeral reads ON (ms)
-  - Average operation latency with ephemeral reads OFF (ms)
+  - Median operation latency with ephemeral reads ON (ms)
+  - Median operation latency with ephemeral reads OFF (ms)
   - Speed-up = latency_off / latency_on
 """
 
@@ -69,18 +69,22 @@ def main():
         except Exception:
             return None
 
-    df['avg_lat_f'] = df['avg_latency_us'].apply(safe_float)
-    df = df[df['avg_lat_f'].notnull()]
+    df['median_lat_f'] = df['p50'].apply(safe_float)
+    df = df[df['median_lat_f'].notnull()]
 
     if df.empty:
         print("No valid data found in results CSV.")
         sys.exit(1)
 
-    # Average latency (ms) per (protocol, workload), averaged over all
-    # operations and all clients.
-    lat_means = (
-        df.groupby(['protocol', 'workload_upper'])['avg_lat_f']
-        .mean() / 1000.0  # convert us -> ms
+    # Median latency (ms) per (protocol, workload), computed as the median of
+    # p50 values across all operations and all clients.
+    # This mirrors the original approach (mean of avg_latency_us) in that it
+    # aggregates per-operation summary statistics; the true overall median is
+    # not directly recoverable from the CSV.
+    # Note: p50 values from parse_ycsb_to_csv.sh are already in milliseconds.
+    lat_medians = (
+        df.groupby(['protocol', 'workload_upper'])['median_lat_f']
+        .median()
     )
 
     lat_on     = {}
@@ -89,11 +93,11 @@ def main():
 
     for workload in workloads:
         try:
-            on_val  = float(lat_means.loc[PROTO_EPHEM_ON,  workload])
+            on_val  = float(lat_medians.loc[PROTO_EPHEM_ON,  workload])
         except KeyError:
             on_val  = None
         try:
-            off_val = float(lat_means.loc[PROTO_EPHEM_OFF, workload])
+            off_val = float(lat_medians.loc[PROTO_EPHEM_OFF, workload])
         except KeyError:
             off_val = None
 
@@ -131,7 +135,7 @@ def main():
         f.write("    \\bottomrule\n")
         f.write("  \\end{tabular}\n")
         f.write(
-            f"  \\caption{{Average operation latency\n"
+            f"  \\caption{{Median operation latency\n"
             f"    and speed-up when ephemeral reads are enabled in \\Accord.}}\n"
              "  \\label{tab:ephemeral}\n"
         )
