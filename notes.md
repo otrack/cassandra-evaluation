@@ -736,3 +736,8 @@ This comes from the fact that the internal metrics are not reset.
 3) one for #client=1, S=8 with a performance breakdown of CockroachDB and Accord
 4) one for #client=50, S=8 with a performance breakdown of CockroachDB and Accord
 
+# 30.03
+
+In /Docker/latency_throughput.sh, the experiment stops when the latency is above 500ms.
+Instead, it should look for the Pareto front and stops when both latency and throughput degrade wrt. the previous increase in the number of clients.
+Implement such a change in the script.
