@@ -42,7 +42,7 @@ done
 mkdir -p ${LOGDIR}/latency_throughput
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
-theta=0.01
+theta=0.001
 workload="a" # does not matter
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockroachdb-opt | grep -v cockroachdb-bad | grep -v accord-cmt | paste -sd' ')
 if [ -n "$protocols_override" ]; then
