@@ -772,3 +772,64 @@ Implement the following things:
 - when launching the demo with demo.sh open the corresponding webpage in the webbrowser
 - add a DEMO.md explaining how to launch the demo 
 - git add all the files which were created for the demo thus far
+
+# Agent
+
+Make the following improvements:
+- Better illustrate transfers. In details, a transfer should be displayed next to the DC which initiates it. More precisely, it is displayed above the dot of the corresponding DC. The font size is slightly bigger than the one of the DC name. Once the transfer is executed, it disappears.
+- Add a simplified mode which is on by default. This mode only present two types of messages fast and slow path. A fast path occurs when the transfer only require pre-accept message to get committed. A slow path happens when accept messages are sent. These two path are in blue and red, respectively. The commit and apply messages removed when the simplified mode is on.
+
+# Agent
+
+Make the following improvements to the visualizer:
+- Make a real "simplified mode" button. The current one is not clickable that switch from one mode to another.
+- Remove the transfer messages at the bottom of the page.
+- Make the response to a message start when the message is received (that is the moving arrow reaches its destination). Currently, it is sent before.
+
+# Agent
+
+Make the following improvements to the visualizer:
+- In the simplified mode, refresh the state of the database after each transfer, not periodically.
+- Keep the transfer message visible until the transaction is executed and the database state updated.
+- Move the simplified button at the bottom left side of the screen.
+
+# Agent
+
+There are several bugs in the visualizer when simplified mode is on:
+- The database state never shows up.
+- The replies to the (fast path) requests are not show.
+
+# Agent
+
+There are still issues with the visualizer:
+- Make sure that each robot is different.
+- Make sure that the state of the database is properly displayed at the start using a SELECT request to Cassandra (the ycsb.usertable table must exist)
+
+# Agent
+
+There are still some serious problems with the visualizer:
+- First, the database state is not visible over the course of the execution. It makes sense because apparently no data is retrived. This is an example of log output by the container:
+
+Slow mode playback starting. Waiting for log files...
+Server listening on *:3000
+Started tailing accord_3_ce_20260422173213822158433_Hanoi.dat
+Log files detected (1). Waiting for DB connection and table...
+Started tailing accord_3_ce_20260422173213822158433_Lyon.dat
+Client connected
+Client connected
+Started tailing accord_3_ce_20260422173213822158433_NewYork.dat
+Attempting to connect to Cassandra at 172.18.0.7 (SaoPaulo)...
+Started tailing accord_3_ce_20260422173213822158433_Rotterdam.dat
+Connected to Cassandra at 172.18.0.7
+Database SELECT successful. Fetched 0 accounts.
+Initial database state loaded. Starting transaction playback...
+Client connected
+Started tailing accord_3_ce_20260422173213822158433_SaoPaulo.dat
+
+Please output in the terminal the CQL query and the results returned by a replica.
+
+- Second, there is still a visual glitch when sending messages. When multiple messages are sent by the DCs, it looks like more a laser game than a message passing system. Please use a possibly simpler approach to represent messages being sent across DCs.
+
+# Agent
+
+There are a visual glitch with messages with the visualizer. It seems that to draw a message from DC1 to DC2, the current approach is using an already existing line. As a result when DC1 send another message to DC3, the same line is again reused and pivoted. This give this strange laser effect. Please correct this.

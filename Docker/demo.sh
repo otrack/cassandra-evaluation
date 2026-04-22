@@ -46,9 +46,9 @@ protocols="accord"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-node_counts=5
-replication_factor=5
-records=3
+node_counts=3
+replication_factor=3
+records=4
 threads=1
 
 original_illustration=$(config "illustration")

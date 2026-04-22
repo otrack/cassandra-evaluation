@@ -77,7 +77,9 @@
 
 <div id="db-state">
   <h3 style="margin-top: 0;">Database State</h3>
-  <div id="accounts-container"></div>
+  <div id="accounts-container">
+    <div style="font-style: italic; color: #888;">Connecting to database...</div>
+  </div>
   <div class="total-row">
     <span>Total:</span>
     <span id="total-balance">0<img src="/robots/diamond.png" class="diamond-icon"></span>
@@ -108,6 +110,7 @@
     let isInterleaved = true;
     let quorumHistory = [];
     let blinkingRobots = new Set();
+    let dbConnected = false;
 
     let knownAccounts = {}; // y_id -> balance
 
@@ -151,6 +154,26 @@
         const btn = document.getElementById('interleaved-toggle-btn');
         btn.innerText = `Interleaved Mode: ${isInterleaved ? 'ON' : 'OFF'}`;
         btn.style.background = isInterleaved ? '#fac858' : '#73c0de';
+    });
+
+    socket.on('datacenter_mapping', (map) => {
+      dcMap = map;
+      if (Object.keys(map).length > 0 && !dbConnected) {
+          dbConnected = true;
+          document.getElementById('accounts-container').innerHTML = '<div style="font-style: italic; color: #888;">Loading users from DB...</div>';
+      }
+      Object.keys(map).forEach(ip => {
+        let existingNode = nodes.find(n => n.id === ip);
+        const dcName = map[ip];
+        if (!existingNode && locations[dcName]) {
+          nodes.push({
+            id: ip,
+            name: dcName,
+            value: locations[dcName]
+          });
+        }
+      });
+      updateChart();
     });
 
     // Load World Map
@@ -266,22 +289,6 @@
       updateChart();
     });
 
-    socket.on('datacenter_mapping', (map) => {
-      dcMap = map;
-      Object.keys(map).forEach(ip => {
-        let existingNode = nodes.find(n => n.id === ip);
-        const dcName = map[ip];
-        if (!existingNode && locations[dcName]) {
-          nodes.push({
-            id: ip,
-            name: dcName,
-            value: locations[dcName]
-          });
-        }
-      });
-      updateChart();
-    });
-
     socket.on('message_flow', (msg) => {
       const color = getMessageColor(msg.type);
       if (!color) return; // Skip "other" messages
@@ -325,10 +332,12 @@
 
     function renderAccounts() {
       const container = document.getElementById('accounts-container');
+      const accounts = Object.keys(knownAccounts).sort((a, b) => a.localeCompare(b));
+      
+      if (accounts.length === 0) return;
+      
       let html = '';
       let total = 0;
-      
-      const accounts = Object.keys(knownAccounts).sort((a, b) => a.localeCompare(b));
       
       accounts.forEach((y_id, i) => {
         let bal = knownAccounts[y_id];
@@ -465,7 +474,6 @@
     }
 
     // Initial render
-    renderAccounts();
     renderQuorumLog();
 
   </script>

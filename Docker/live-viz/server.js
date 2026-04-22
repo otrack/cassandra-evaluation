@@ -64,13 +64,15 @@ let fileStates = {};
 
 async function initDBState() {
   if (!dbClient || !dbConnected || dbInitialized) return false;
+  
   try {
     const query = 'SELECT y_id FROM ycsb.usertable';
-    const rs = await dbClient.execute(query, [], { consistency: cassandra.types.consistencies.one });
+    // Use SERIAL consistency for a strongly consistent/serializable read
+    const rs = await dbClient.execute(query, [], { consistency: cassandra.types.consistencies.serial });
     const users = rs.rows.map(r => r.y_id);
     
     if (users.length > 0) {
-      console.log(`\n[Init] Found ${users.length} users. Initializing each with 100€.`);
+      console.log(`\n[Init] DB Populated. Fetched ${users.length} users with SERIAL consistency.`);
       users.forEach(uid => {
           fakeBalances[uid] = 100;
       });
@@ -80,18 +82,21 @@ async function initDBState() {
     }
   } catch (e) {
     if (!e.message.includes('table') && !e.message.includes('keyspace') && !e.message.includes('unconfigured')) {
-      console.error('\nDB init error:', e.message);
+      console.error('\n[Init] DB Error:', e.message);
     }
   }
   return false;
 }
 
-function broadcastState() {
-    const balances = Object.keys(fakeBalances).map(uid => ({
+function getBalancesArray() {
+    return Object.keys(fakeBalances).map(uid => ({
         y_id: uid,
         field0: fakeBalances[uid]
     }));
-    io.emit('db_state', balances);
+}
+
+function broadcastState() {
+    io.emit('db_state', getBalancesArray());
 }
 
 function updateFakeBalances(tx) {
@@ -116,10 +121,14 @@ if (slowMode) {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    console.log(`Log files detected. Waiting for user list from DB...`);
+    console.log(`Log files detected. Waiting for DB connection and users...`);
     while (!dbInitialized) {
-      await initDBState();
-      if (!dbInitialized) await new Promise(resolve => setTimeout(resolve, 1000));
+      if (dbConnected) {
+          await initDBState();
+      }
+      if (!dbInitialized) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
 
     console.log('Starting transaction playback loop...');
@@ -135,7 +144,6 @@ if (slowMode) {
         } else {
             const startIdx = globalEventQueue.findIndex(e => e.type === 'transfer_start');
             if (startIdx === -1) {
-                // Peek if we are actually done
                 if (finishedFiles.size > 0 && finishedFiles.size === Object.keys(tails).length && globalEventQueue.length === 0) {
                     console.log('All transactions replayed. Exiting.');
                     process.exit(0);
@@ -157,7 +165,6 @@ if (slowMode) {
             }
         }
       } else {
-        // Queue empty, check if we're done
         if (finishedFiles.size > 0 && finishedFiles.size === Object.keys(tails).length && Object.keys(pendingTxs).length === 0) {
             console.log('No more events and all logs finished. Exiting in 5s...');
             await new Promise(resolve => setTimeout(resolve, 5000));
@@ -212,9 +219,7 @@ function isSimplifiedProtocolMsg(type) {
 
 function processLine(line, filePath) {
   if (line.includes('[OVERALL], RunTime(ms)')) {
-    console.log(`Log file finished: ${path.basename(filePath)}`);
     finishedFiles.add(filePath);
-    // Flush any pending transactions for this node
     Object.keys(pendingTxs).forEach(ip => {
         if (filePath.includes(datacenterMap[ip])) {
             pushPendingTx(ip);
@@ -244,7 +249,6 @@ function processLine(line, filePath) {
           dbClient.connect().then(() => {
             console.log('Connected to Cassandra at', ip);
             dbConnected = true; dbClientConnecting = false;
-            initDBState(); 
           }).catch(e => {
             dbClient = null; dbClientConnecting = false;
             setTimeout(connectDB, 5000);
@@ -394,7 +398,9 @@ io.on('connection', (socket) => {
       io.emit('interleaved_mode', isInterleaved);
   });
 
-  if (dbInitialized) broadcastState(); 
+  if (dbInitialized) {
+      socket.emit('db_state', getBalancesArray());
+  }
 });
 
 server.listen(3000, () => {
