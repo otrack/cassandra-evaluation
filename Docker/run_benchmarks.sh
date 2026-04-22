@@ -109,8 +109,8 @@ run_ycsb() {
         extra_opts=("${filtered_opts[@]}")
     fi
 
-    # Ignore db.tracing for non-CockroachDB protocols (only cockroachdb supports it)
-    if ! printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
+    # Ignore db.tracing for non-CockroachDB or Accord protocols
+    if ! printf '%s\n' "$protocol" | grep -wF -q -e "cockroachdb" -e "accord"; then
         local filtered_opts=()
         local i=0
         while [ $i -lt ${#extra_opts[@]} ]; do
@@ -221,7 +221,7 @@ run_ycsb() {
     fi
 
     # adjust debug levels below
-    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=info\n\
+    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=info -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms\n\
 YCSB_COMMAND=${action}\n\
 YCSB_BINDING=${ycsb_client}\n\
 YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\

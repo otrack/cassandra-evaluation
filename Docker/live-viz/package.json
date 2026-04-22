@@ -1,0 +1,16 @@
+{
+  "name": "live-viz",
+  "version": "1.0.0",
+  "description": "Live representation of Accord messages",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cassandra-driver": "^4.7.2",
+    "csv-parse": "^5.5.3",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "tail": "*"
+  }
+}

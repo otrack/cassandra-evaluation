@@ -741,3 +741,34 @@ This comes from the fact that the internal metrics are not reset.
 In /Docker/latency_throughput.sh, the experiment stops when the latency is above 500ms.
 Instead, it should look for the Pareto front and stops when both latency and throughput degrade wrt. the previous increase in the number of clients.
 Implement such a change in the script.
+
+# Agent
+
+The script demo.sh runs the closed economy workload in YCSB using Accord, a new replication for Apache Cassandra. 
+The workload executes in a system of 3 geo-distributed replicas, with one colocated YCSB client per replica.
+YCSB clients use the tracing capability of the Java CQL driver to see how replicas exchange messages.
+Logs present under ./logs/demo/accord*.dat illustrate the output produced by the tracing mechanism.
+
+The goal of this work is to create a live representation of the messages exchanged among replicas by the Accord protocol.
+The representation is displayed as a webpage in a server running in a separate container (as the clients and replica ones).
+It parses the logs of the YCSB clients.
+It is implemented entirely in javascript using Apache ECharts and uses nodejs.
+
+# Agent
+
+Implement the following improvements:
+- Put a world map in the background of the live visualizer.
+- Put the datacenters in their actual locations on the world map. To do this, use latencies.csv which includes the latitude and longitude of each DC.
+- Support any number of datacenters in the visualizer.
+- Distinguish the type of messages sent between replicas using colors and add an appropriate legend at the top left-hand side of the visualizer.
+- On the top right-hand side, add the state of the replicated database. To consult it, you may use statement of the form "SELECT * FROM ycsb.usertable" and either (a) call cqlsh at one of the replica, or (b) execute a CQL query from JS but this might be harder to code. Because this is a closed economy workload, add the currency (€) of each account. Moreover, add also the total sum of the accounts below all accounts. The state of the database is updated continuously every second.
+- When a transaction is executed at a datacenter, illustrate it as a transfer(X, Y) where X and Y are the two accounts being access.
+- Map each account to a robot (see live-viz/robots). When a robot receives some money, it gets happy and its icon slightly blink.
+
+# Agent
+
+Implement the following things:
+- add a slow-motion mode where the transferts are executed slowly one-by-one and their corresponding messages takes more more time tro travel (say a split-second).
+- when launching the demo with demo.sh open the corresponding webpage in the webbrowser
+- add a DEMO.md explaining how to launch the demo 
+- git add all the files which were created for the demo thus far

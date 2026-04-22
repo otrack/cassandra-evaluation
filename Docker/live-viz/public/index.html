@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Accord Message Viz</title>
+  <style>
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: sans-serif; background-color: #1a1a1a; color: white; overflow: hidden; }
+    #main { width: 100%; height: 100%; }
+    #overlay { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
+    
+    #overlay h2 { font-size: 2em; margin-top: 0; }
+    #stats { font-size: 1.5em; font-weight: bold; }
+
+    /* Legend Styles */
+    #legend { margin-top: 20px; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; }
+    #legend h3 { font-size: 1.5em; margin-top: 0; margin-bottom: 10px; }
+    .legend-item { display: flex; align-items: center; margin-bottom: 8px; }
+    .legend-color { width: 20px; height: 20px; border-radius: 50%; margin-right: 12px; }
+    .legend-item span { font-size: 1.3em; }
+    
+    /* Database State Styles */
+    #db-state { position: absolute; top: 10px; right: 10px; width: 320px; background: rgba(0,0,0,0.6); padding: 20px; border-radius: 8px; z-index: 10; }
+    #db-state h3 { font-size: 1.5em; margin-top: 0; margin-bottom: 15px; }
+    .account-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+    .account-info { display: flex; align-items: center; font-size: 1.4em; }
+    .robot-avatar { width: 60px; height: 60px; border-radius: 50%; background: #333; margin-right: 15px; object-fit: cover; transition: transform 0.2s; }
+    .account-balance { font-family: monospace; font-size: 1.5em; font-weight: bold; }
+    .total-row { border-top: 1px solid #555; margin-top: 15px; padding-top: 15px; display: flex; justify-content: space-between; font-weight: bold; font-size: 1.6em; }
+    
+    /* Toast Styles */
+    #toast-container { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20; text-align: center; }
+    .toast { background: rgba(255,215,0,0.8); color: #000; padding: 15px 30px; border-radius: 30px; margin-top: 5px; font-weight: bold; font-size: 1.5em; animation: fadeout 3s forwards; }
+
+    @keyframes fadeout {
+      0% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    
+    @keyframes blinkHappy {
+      0% { transform: scale(1); filter: brightness(1); }
+      50% { transform: scale(1.3); filter: brightness(1.5) drop-shadow(0 0 10px gold); }
+      100% { transform: scale(1); filter: brightness(1); }
+    }
+    .happy { animation: blinkHappy 0.6s ease-in-out; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div id="overlay">
+    <h2>Accord Protocol Live Trace</h2>
+    <div id="stats">Messages: 0</div>
+    
+    <div id="legend">
+      <h3>Message Legend</h3>
+      <div class="legend-item"><div class="legend-color" style="background: #ee6666;"></div><span>REQ</span></div>
+      <div class="legend-item"><div class="legend-color" style="background: #73c0de;"></div><span>RSP</span></div>
+      <div class="legend-item"><div class="legend-color" style="background: #fac858;"></div><span>ACCEPT</span></div>
+      <div class="legend-item"><div class="legend-color" style="background: #91cc75;"></div><span>COMMIT / APPLY</span></div>
+      <div class="legend-item"><div class="legend-color" style="background: #ffffff;"></div><span>OTHER</span></div>
+    </div>
+  </div>
+
+  <div id="db-state">
+    <h3 style="margin-top: 0;">Database State</h3>
+    <div id="accounts-container"></div>
+    <div class="total-row">
+      <span>Total:</span>
+      <span id="total-balance">€0</span>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <div id="main"></div>
+
+  <script>
+    const socket = io();
+    const chart = echarts.init(document.getElementById('main'));
+    
+    let nodes = [];
+    let dcMap = {};
+    let locations = {};
+    let messageCount = 0;
+    let activeLines = [];
+    let robotImages = [];
+    let accountRobots = {}; // y_id -> robot image path
+    let mapLoaded = false;
+    let isSlowMode = false;
+
+    // Load World Map
+    $.get('https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/json/world.json', function (worldJson) {
+      echarts.registerMap('world', worldJson);
+      
+      const option = {
+        backgroundColor: '#1a1a1a',
+        geo: {
+          map: 'world',
+          roam: true,
+          label: { emphasis: { show: false } },
+          itemStyle: {
+            normal: { areaColor: '#323c48', borderColor: '#111' },
+            emphasis: { areaColor: '#2a333d' }
+          }
+        },
+        series: [
+          {
+            type: 'effectScatter',
+            coordinateSystem: 'geo',
+            zlevel: 2,
+            rippleEffect: { brushType: 'stroke' },
+            label: { show: true, position: 'right', formatter: '{b}', color: '#fff', fontSize: 14, fontWeight: 'bold' },
+            symbolSize: 15,
+            itemStyle: { color: '#f4e925' },
+            data: nodes
+          },
+          {
+            type: 'lines',
+            coordinateSystem: 'geo',
+            zlevel: 1,
+            effect: { show: true, period: 1.5, trailLength: 0.7, symbolSize: 4 },
+            lineStyle: { width: 0, curveness: 0.2 },
+            data: []
+          }
+        ]
+      };
+      chart.setOption(option);
+      mapLoaded = true;
+      if (isSlowMode) updateSlowMode(true);
+    });
+
+    function getMessageColor(type) {
+      if (!type) return '#ffffff';
+      const t = type.toUpperCase();
+      if (t.includes('COMMIT') || t.includes('APPLY')) return '#91cc75';
+      if (t.includes('ACCEPT') && !t.includes('PRE')) return '#fac858'; // generic accept
+      if (t.includes('REQ')) return '#ee6666';
+      if (t.includes('RSP')) return '#73c0de';
+      return '#ffffff';
+    }
+
+    function updateChart() {
+      if (!mapLoaded) return;
+      chart.setOption({
+        series: [
+          { data: nodes },
+          { data: activeLines }
+        ]
+      });
+    }
+
+    function updateSlowMode(isSlow) {
+      if (!mapLoaded) return;
+      chart.setOption({
+        series: [
+          {},
+          {
+            type: 'lines',
+            effect: { period: isSlow ? 4 : 1.5 }
+          }
+        ]
+      });
+    }
+
+    socket.on('slow_mode', (isSlow) => {
+      isSlowMode = isSlow;
+      updateSlowMode(isSlow);
+    });
+
+    socket.on('robot_images', (images) => {
+      robotImages = images;
+    });
+
+    socket.on('locations', (locs) => {
+      locations = locs;
+      // Update existing nodes if necessary
+      nodes.forEach(n => {
+        if (locations[n.name]) {
+          n.value = locations[n.name];
+        }
+      });
+      updateChart();
+    });
+
+    socket.on('datacenter_mapping', (map) => {
+      dcMap = map;
+      Object.keys(map).forEach(ip => {
+        let existingNode = nodes.find(n => n.id === ip);
+        const dcName = map[ip];
+        if (!existingNode && locations[dcName]) {
+          nodes.push({
+            id: ip,
+            name: dcName,
+            value: locations[dcName]
+          });
+        }
+      });
+      updateChart();
+    });
+
+    socket.on('message_flow', (msg) => {
+      messageCount++;
+      document.getElementById('stats').innerText = `Messages: ${messageCount}`;
+      
+      const srcNode = nodes.find(n => n.id === msg.source);
+      const targetNode = nodes.find(n => n.id === msg.target);
+      
+      if (srcNode && targetNode) {
+        const newEdge = {
+          coords: [ srcNode.value, targetNode.value ],
+          lineStyle: { color: getMessageColor(msg.type) }
+        };
+        
+        activeLines.push(newEdge);
+        if (activeLines.length > 200) {
+          activeLines.shift();
+        }
+        updateChart();
+      }
+    });
+
+    let knownAccounts = {}; // y_id -> balance
+
+    function renderAccounts() {
+      const container = document.getElementById('accounts-container');
+      let html = '';
+      let total = 0;
+      
+      const accounts = Object.keys(knownAccounts).sort((a, b) => a.localeCompare(b));
+      
+      accounts.forEach((y_id, i) => {
+        let bal = knownAccounts[y_id];
+        if (bal === null || bal === undefined) bal = 0;
+        total += bal;
+        
+        if (!accountRobots[y_id] && robotImages.length > 0) {
+          const imgIndex = (i * 7) % robotImages.length;
+          accountRobots[y_id] = '/robots/' + robotImages[imgIndex];
+        }
+        
+        const avatarSrc = accountRobots[y_id] || '';
+        
+        html += `
+          <div class="account-row" id="acc-${y_id}">
+            <div class="account-info">
+              <img src="${avatarSrc}" class="robot-avatar" id="avatar-${y_id}">
+              <span>${y_id}</span>
+            </div>
+            <span class="account-balance">€${bal}</span>
+          </div>
+        `;
+      });
+      
+      container.innerHTML = html;
+      document.getElementById('total-balance').innerText = `€${total}`;
+    }
+
+    socket.on('db_state', (balances) => {
+      balances.forEach(acc => {
+        knownAccounts[acc.y_id] = acc.field0;
+      });
+      renderAccounts();
+    });
+
+    socket.on('transaction', (tx) => {
+      if (!(tx.from in knownAccounts)) knownAccounts[tx.from] = 0;
+      if (!(tx.to in knownAccounts)) knownAccounts[tx.to] = 0;
+      renderAccounts();
+      // Toast
+      const toastContainer = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.innerText = `transfer(${tx.from}, ${tx.to})`;
+      toastContainer.appendChild(toast);
+      
+      setTimeout(() => toast.remove(), 3000);
+      
+      // Animate robot
+      const avatarTo = document.getElementById(`avatar-${tx.to}`);
+      if (avatarTo) {
+        avatarTo.classList.remove('happy');
+        // trigger reflow
+        void avatarTo.offsetWidth;
+        avatarTo.classList.add('happy');
+      }
+    });
+
+  </script>
+</body>
+</html>
