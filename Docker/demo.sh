@@ -46,9 +46,9 @@ protocols="accord"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-node_counts="5"
-replication_factor=3
-records=${node_counts}
+node_counts=5
+replication_factor=5
+records=3
 threads=1
 
 original_illustration=$(config "illustration")
@@ -78,7 +78,7 @@ do
         slow_env="-e SLOW_MODE=true"
     fi
 
-    docker run -d --name accord-viz -p 3000:3000 $slow_env -v ${DIR}/logs/demo:/app/logs/demo -v ${DIR}/latencies.csv:/app/latencies.csv:ro --network $(config network_name) accord-live-viz
+    docker run --rm -d --name accord-viz -p 3000:3000 $slow_env -v ${DIR}/logs/demo:/app/logs/demo -v ${DIR}/latencies.csv:/app/latencies.csv:ro --network $(config network_name) accord-live-viz
     echo "========================================================"
     echo "Live visualization running at http://localhost:3000"
     echo "========================================================"
@@ -98,4 +98,7 @@ do
 	output_file="${LOGDIR}/demo/${p}_${nodes}_${workload}_${ts}.dat"
 	run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} 0 ${output_file} 1 1 -p maxexecutiontime=${maxexecutiontime} -p target=1 -p db.tracing=true
     done
+
+    echo "Waiting for visualization to finish replaying all transactions..."
+    docker wait accord-viz
 done

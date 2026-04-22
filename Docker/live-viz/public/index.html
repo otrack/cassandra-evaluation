@@ -19,30 +19,38 @@
     .legend-item span { font-size: 1.3em; }
     
     /* Database State Styles */
-    #db-state { position: absolute; top: 10px; right: 10px; width: 320px; background: rgba(0,0,0,0.6); padding: 20px; border-radius: 8px; z-index: 10; }
-    #db-state h3 { font-size: 1.5em; margin-top: 0; margin-bottom: 15px; }
-    .account-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
-    .account-info { display: flex; align-items: center; font-size: 1.4em; }
-    .robot-avatar { width: 60px; height: 60px; border-radius: 50%; background: #333; margin-right: 15px; object-fit: cover; transition: transform 0.2s; }
-    .account-balance { font-family: monospace; font-size: 1.5em; font-weight: bold; }
-    .total-row { border-top: 1px solid #555; margin-top: 15px; padding-top: 15px; display: flex; justify-content: space-between; font-weight: bold; font-size: 1.6em; }
-    
-    /* Toast Styles */
-    #toast-container { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20; text-align: center; }
-    .toast { background: rgba(255,215,0,0.8); color: #000; padding: 15px 30px; border-radius: 30px; margin-top: 5px; font-weight: bold; font-size: 1.5em; animation: fadeout 3s forwards; }
+    #db-state { position: absolute; top: 10px; right: 10px; width: 240px; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; z-index: 10; }
+    #db-state h3 { font-size: 1.3em; margin-top: 0; margin-bottom: 12px; }
+    .account-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .account-info { display: flex; align-items: center; font-size: 1.2em; }
+    .robot-avatar { width: 45px; height: 45px; border-radius: 50%; background: #333; margin-right: 12px; object-fit: cover; transition: transform 0.2s; }
+    .account-balance { font-family: monospace; font-size: 1.3em; font-weight: bold; display: flex; align-items: center; }
+    .total-row { border-top: 1px solid #555; margin-top: 12px; padding-top: 12px; display: flex; justify-content: space-between; font-weight: bold; font-size: 1.4em; align-items: center; }
 
-    @keyframes fadeout {
-      0% { opacity: 1; }
-      80% { opacity: 1; }
-      100% { opacity: 0; }
-    }
+    /* Quorum Log Styles */
+    #quorum-log { position: absolute; bottom: 10px; right: 10px; width: 442px; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; z-index: 10; }
+    #quorum-log h3 { margin-top: 0; font-size: 1.3em; border-bottom: 1px solid #555; padding-bottom: 5px; margin-bottom: 10px; }
+    .quorum-entry { margin-bottom: 8px; font-family: monospace; font-size: 1.1em; line-height: 1.4em; height: 1.4em; }
+    .quorum-id { color: #f4e925; font-weight: bold; margin-right: 5px; }
+    .quorum-dcs { color: #73c0de; }
     
     @keyframes blinkHappy {
       0% { transform: scale(1); filter: brightness(1); }
-      50% { transform: scale(1.3); filter: brightness(1.5) drop-shadow(0 0 10px gold); }
+      50% { transform: scale(1.3); filter: brightness(1.5) drop-shadow(0 0 15px #f4e925); }
       100% { transform: scale(1); filter: brightness(1); }
     }
-    .happy { animation: blinkHappy 0.6s ease-in-out; }
+    .happy { animation: blinkHappy 0.8s ease-in-out; }
+
+    @keyframes blinkLight {
+      0% { opacity: 1; filter: brightness(1); }
+      25% { opacity: 0.4; filter: brightness(2); }
+      50% { opacity: 1; filter: brightness(1); }
+      75% { opacity: 0.4; filter: brightness(2); }
+      100% { opacity: 1; filter: brightness(1); }
+    }
+    .blink { animation: blinkLight 0.8s ease-in-out; }
+
+    .diamond-icon { height: 0.9em; width: auto; vertical-align: middle; margin-left: 4px; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -50,29 +58,36 @@
 </head>
 <body>
   <div id="overlay">
-    <h2>Accord Protocol Live Trace</h2>
-    <div id="stats">Messages: 0</div>
-    
-    <div id="legend">
-      <h3>Message Legend</h3>
-      <div class="legend-item"><div class="legend-color" style="background: #ee6666;"></div><span>REQ</span></div>
-      <div class="legend-item"><div class="legend-color" style="background: #73c0de;"></div><span>RSP</span></div>
-      <div class="legend-item"><div class="legend-color" style="background: #fac858;"></div><span>ACCEPT</span></div>
-      <div class="legend-item"><div class="legend-color" style="background: #91cc75;"></div><span>COMMIT / APPLY</span></div>
-      <div class="legend-item"><div class="legend-color" style="background: #ffffff;"></div><span>OTHER</span></div>
-    </div>
-  </div>
+  <h2>Accord Protocol Demo</h2>
+  <div id="stats">Messages: 0</div>
 
-  <div id="db-state">
-    <h3 style="margin-top: 0;">Database State</h3>
-    <div id="accounts-container"></div>
-    <div class="total-row">
-      <span>Total:</span>
-      <span id="total-balance">€0</span>
-    </div>
+  <div id="legend">
+    <!-- Legend is populated dynamically -->
   </div>
+</div>
 
-  <div id="toast-container"></div>
+<div style="position: absolute; bottom: 20px; left: 20px; z-index: 20; pointer-events: auto; display: flex; flex-direction: column; gap: 10px;">
+  <button id="mode-toggle-btn" style="display: none; background: #73c0de; color: #1a1a1a; border: none; padding: 10px 20px; font-size: 1.2em; font-weight: bold; border-radius: 5px; cursor: pointer; transition: background 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+    Simplified Mode: ON
+  </button>
+  <button id="interleaved-toggle-btn" style="background: #fac858; color: #1a1a1a; border: none; padding: 10px 20px; font-size: 1.2em; font-weight: bold; border-radius: 5px; cursor: pointer; transition: background 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+    Interleaved Mode: ON
+  </button>
+</div>
+
+<div id="db-state">
+  <h3 style="margin-top: 0;">Database State</h3>
+  <div id="accounts-container"></div>
+  <div class="total-row">
+    <span>Total:</span>
+    <span id="total-balance">0<img src="/robots/diamond.png" class="diamond-icon"></span>
+  </div>
+</div>
+
+<div id="quorum-log">
+  <h3>Quorum History</h3>
+  <div id="quorum-container"></div>
+</div>
 
   <div id="main"></div>
 
@@ -89,6 +104,54 @@
     let accountRobots = {}; // y_id -> robot image path
     let mapLoaded = false;
     let isSlowMode = false;
+    let isSimplifiedMode = true;
+    let isInterleaved = true;
+    let quorumHistory = [];
+    let blinkingRobots = new Set();
+
+    let knownAccounts = {}; // y_id -> balance
+
+    const diamondHtml = '<img src="/robots/diamond.png" class="diamond-icon">';
+
+    function updateLegend() {
+      const legend = document.getElementById('legend');
+      if (isSimplifiedMode) {
+        legend.innerHTML = `
+          <h3>Message Legend</h3>
+          <div class="legend-item"><div class="legend-color" style="background: #73c0de;"></div><span>FAST PATH</span></div>
+          <div class="legend-item"><div class="legend-color" style="background: #ee6666;"></div><span>SLOW PATH</span></div>
+        `;
+      } else {
+        legend.innerHTML = `
+          <h3>Message Legend</h3>
+          <div class="legend-item"><div class="legend-color" style="background: #73c0de;"></div><span>PRE-ACCEPT</span></div>
+          <div class="legend-item"><div class="legend-color" style="background: #fac858;"></div><span>ACCEPT</span></div>
+          <div class="legend-item"><div class="legend-color" style="background: #91cc75;"></div><span>COMMIT / APPLY</span></div>
+        `;
+      }
+    }
+
+    // Call once to initialize
+    updateLegend();
+
+    document.getElementById('mode-toggle-btn').addEventListener('click', () => {
+      isSimplifiedMode = !isSimplifiedMode;
+      const btn = document.getElementById('mode-toggle-btn');
+      btn.innerText = `Simplified Mode: ${isSimplifiedMode ? 'ON' : 'OFF'}`;
+      btn.style.background = isSimplifiedMode ? '#73c0de' : '#91cc75';
+      updateLegend();
+    });
+
+    document.getElementById('interleaved-toggle-btn').addEventListener('click', () => {
+      socket.emit('toggle_interleaved');
+    });
+
+    socket.on('interleaved_mode', (val) => {
+        isInterleaved = val;
+        const btn = document.getElementById('interleaved-toggle-btn');
+        btn.innerText = `Interleaved Mode: ${isInterleaved ? 'ON' : 'OFF'}`;
+        btn.style.background = isInterleaved ? '#fac858' : '#73c0de';
+    });
 
     // Load World Map
     $.get('https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/json/world.json', function (worldJson) {
@@ -99,6 +162,9 @@
         geo: {
           map: 'world',
           roam: true,
+          aspectScale: 0.75, // Fixed aspect ratio
+          layoutCenter: ['50%', '50%'],
+          layoutSize: '160%',
           label: { emphasis: { show: false } },
           itemStyle: {
             normal: { areaColor: '#323c48', borderColor: '#111' },
@@ -119,9 +185,16 @@
           {
             type: 'lines',
             coordinateSystem: 'geo',
-            zlevel: 1,
-            effect: { show: true, period: 1.5, trailLength: 0.7, symbolSize: 4 },
-            lineStyle: { width: 0, curveness: 0.2 },
+            zlevel: 3, 
+            animation: false,
+            effect: { show: false },
+            symbol: ['none', 'arrow'],
+            symbolSize: 10,
+            lineStyle: { 
+              width: 3, 
+              curveness: 0.2, 
+              opacity: 0.8 
+            },
             data: []
           }
         ]
@@ -131,19 +204,37 @@
       if (isSlowMode) updateSlowMode(true);
     });
 
+    window.onresize = function() {
+        chart.resize();
+    };
+
     function getMessageColor(type) {
-      if (!type) return '#ffffff';
+      if (!type) return null;
       const t = type.toUpperCase();
-      if (t.includes('COMMIT') || t.includes('APPLY')) return '#91cc75';
-      if (t.includes('ACCEPT') && !t.includes('PRE')) return '#fac858'; // generic accept
-      if (t.includes('REQ')) return '#ee6666';
-      if (t.includes('RSP')) return '#73c0de';
-      return '#ffffff';
+      
+      // Fast Path / Read responses
+      if (t.includes('PREACCEPT') || t.includes('PRE-ACCEPT') || t.includes('PRE_ACCEPT') || 
+          t.includes('SIMPLE_RSP') || t.includes('READ_RSP') || t.includes('GET_DEPS_RSP')) {
+        return '#73c0de'; // Blue for Fast Path / Reads
+      }
+      
+      // Slow Path
+      if (t.includes('ACCEPT')) {
+        return isSimplifiedMode ? '#ee6666' : '#fac858'; // Red in simplified (Slow Path), Yellow in normal
+      }
+      
+      // End of transaction (Commit/Apply)
+      if (t.includes('COMMIT') || t.includes('APPLY')) {
+        return isSimplifiedMode ? null : '#91cc75'; // Hidden in simplified
+      }
+      
+      return null;
     }
 
     function updateChart() {
       if (!mapLoaded) return;
       chart.setOption({
+        animation: false,
         series: [
           { data: nodes },
           { data: activeLines }
@@ -152,25 +243,16 @@
     }
 
     function updateSlowMode(isSlow) {
-      if (!mapLoaded) return;
-      chart.setOption({
-        series: [
-          {},
-          {
-            type: 'lines',
-            effect: { period: isSlow ? 4 : 1.5 }
-          }
-        ]
-      });
+      // No animation changes needed in static mode
     }
 
     socket.on('slow_mode', (isSlow) => {
       isSlowMode = isSlow;
-      updateSlowMode(isSlow);
     });
 
     socket.on('robot_images', (images) => {
       robotImages = images;
+      renderAccounts();
     });
 
     socket.on('locations', (locs) => {
@@ -201,6 +283,9 @@
     });
 
     socket.on('message_flow', (msg) => {
+      const color = getMessageColor(msg.type);
+      if (!color) return; // Skip "other" messages
+
       messageCount++;
       document.getElementById('stats').innerText = `Messages: ${messageCount}`;
       
@@ -208,20 +293,35 @@
       const targetNode = nodes.find(n => n.id === msg.target);
       
       if (srcNode && targetNode) {
+        const srcCoords = srcNode.value;
+        const dstCoords = targetNode.value;
+        
+        // Shorten the line by 8% to make the arrow visible outside the node circle
+        const ratio = 0.08; 
+        const shortDst = [
+            dstCoords[0] + (srcCoords[0] - dstCoords[0]) * ratio,
+            dstCoords[1] + (srcCoords[1] - dstCoords[1]) * ratio
+        ];
+
         const newEdge = {
-          coords: [ srcNode.value, targetNode.value ],
-          lineStyle: { color: getMessageColor(msg.type) }
+          id: 'msg-' + messageCount,
+          coords: [ srcCoords, shortDst ],
+          lineStyle: { color: color }
         };
         
         activeLines.push(newEdge);
-        if (activeLines.length > 200) {
-          activeLines.shift();
-        }
         updateChart();
+
+        // Message remains visible for a fixed duration
+        setTimeout(() => {
+          const index = activeLines.indexOf(newEdge);
+          if (index > -1) {
+            activeLines.splice(index, 1);
+            updateChart();
+          }
+        }, isSlowMode ? 2500 : 1000);
       }
     });
-
-    let knownAccounts = {}; // y_id -> balance
 
     function renderAccounts() {
       const container = document.getElementById('accounts-container');
@@ -236,56 +336,137 @@
         total += bal;
         
         if (!accountRobots[y_id] && robotImages.length > 0) {
-          const imgIndex = (i * 7) % robotImages.length;
+          // Use a hash of the y_id to pick a stable and more unique robot
+          let hash = 0;
+          for (let k = 0; k < y_id.length; k++) {
+            hash = ((hash << 5) - hash) + y_id.charCodeAt(k);
+            hash |= 0; // Convert to 32bit integer
+          }
+          const imgIndex = Math.abs(hash) % robotImages.length;
           accountRobots[y_id] = '/robots/' + robotImages[imgIndex];
         }
         
         const avatarSrc = accountRobots[y_id] || '';
+        const isBlinking = blinkingRobots.has(y_id);
+        const blinkClass = isBlinking ? 'happy blink' : '';
         
         html += `
           <div class="account-row" id="acc-${y_id}">
             <div class="account-info">
-              <img src="${avatarSrc}" class="robot-avatar" id="avatar-${y_id}">
+              <img src="${avatarSrc}" class="robot-avatar ${blinkClass}" id="avatar-${y_id}">
               <span>${y_id}</span>
             </div>
-            <span class="account-balance">€${bal}</span>
+            <span class="account-balance">${bal}${diamondHtml}</span>
           </div>
         `;
       });
       
       container.innerHTML = html;
-      document.getElementById('total-balance').innerText = `€${total}`;
+      document.getElementById('total-balance').innerHTML = `${total}${diamondHtml}`;
     }
 
+    function renderQuorumLog() {
+        const container = document.getElementById('quorum-container');
+        let html = '';
+        
+        // Show exactly 4 entries
+        const recent = quorumHistory.slice(-4).reverse();
+        
+        // Pad with hidden entries if we have fewer than 4 to maintain size
+        for (let i = 0; i < 4; i++) {
+            if (recent[i]) {
+                const tx = recent[i];
+                html += `
+                    <div class="quorum-entry">
+                        <span class="quorum-id">TX #${tx.id}:</span>
+                        <span class="quorum-dcs">{${tx.quorum.join(',')}}</span>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="quorum-entry" style="visibility: hidden;">
+                        <span class="quorum-id">TX #?:</span>
+                        <span class="quorum-dcs">---</span>
+                    </div>
+                `;
+            }
+        }
+        container.innerHTML = html;
+    }
+
+    let latestDbState = null;
+
     socket.on('db_state', (balances) => {
+      if (!balances || !Array.isArray(balances)) return;
+      latestDbState = balances;
+      
+      const newKnownAccounts = {};
       balances.forEach(acc => {
-        knownAccounts[acc.y_id] = acc.field0;
+        newKnownAccounts[acc.y_id] = acc.field0;
       });
+      knownAccounts = newKnownAccounts;
+      
       renderAccounts();
     });
 
-    socket.on('transaction', (tx) => {
-      if (!(tx.from in knownAccounts)) knownAccounts[tx.from] = 0;
-      if (!(tx.to in knownAccounts)) knownAccounts[tx.to] = 0;
-      renderAccounts();
-      // Toast
-      const toastContainer = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      toast.className = 'toast';
-      toast.innerText = `transfer(${tx.from}, ${tx.to})`;
-      toastContainer.appendChild(toast);
-      
-      setTimeout(() => toast.remove(), 3000);
-      
-      // Animate robot
-      const avatarTo = document.getElementById(`avatar-${tx.to}`);
-      if (avatarTo) {
-        avatarTo.classList.remove('happy');
-        // trigger reflow
-        void avatarTo.offsetWidth;
-        avatarTo.classList.add('happy');
+    socket.on('transfer_start', (tx) => {
+      const node = nodes.find(n => n.id === tx.coordinator);
+      if (node) {
+        node.label = {
+          show: true,
+          position: 'top',
+          formatter: `{transfer|${tx.label}}\n{dcName|{b}}`,
+          rich: {
+            transfer: {
+              color: '#f4e925',
+              fontSize: 20,
+              fontWeight: 'bold',
+              lineHeight: 28,
+              textBorderColor: '#000',
+              textBorderWidth: 3
+            },
+            dcName: {
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 'bold'
+            }
+          }
+        };
+        updateChart();
       }
     });
+
+    socket.on('transfer_complete', (tx) => {
+      // Add to quorum log
+      quorumHistory.push(tx);
+      renderQuorumLog();
+
+      // Transaction executed
+      handleTransactionComplete(tx);
+
+      // Hide the transfer message
+      const node = nodes.find(n => n.id === tx.coordinator);
+      if (node) {
+        delete node.label; // Restore default label
+        updateChart();
+      }
+    });
+
+    function handleTransactionComplete(tx) {
+      // Set blinking state for the recipient
+      blinkingRobots.add(tx.to);
+      renderAccounts(); // Re-render immediately to show blink
+      
+      // Remove blink state after animation duration
+      setTimeout(() => {
+          blinkingRobots.delete(tx.to);
+          renderAccounts(); // Re-render to remove class
+      }, 1000);
+    }
+
+    // Initial render
+    renderAccounts();
+    renderQuorumLog();
 
   </script>
 </body>

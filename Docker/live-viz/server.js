@@ -11,8 +11,15 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-const slowMode = process.env.SLOW_MODE === 'true';
-const eventQueue = [];
+const slowMode = process.env.SLOW_MODE !== 'false'; // default true
+let isInterleaved = true;
+let globalEventQueue = [];
+let pendingTxs = {}; // coordinatorIp -> txObject
+let txCounter = 0;
+
+// Fake database state
+let fakeBalances = {}; // y_id -> balance
+let dbInitialized = false;
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/robots', express.static(path.join(__dirname, 'robots')));
@@ -37,98 +44,320 @@ if (fs.existsSync(csvPath)) {
 
 const logsDir = path.join(__dirname, 'logs', 'demo');
 const tails = {};
+const finishedFiles = new Set();
 const datacenterMap = {};
 let dbClient = null;
 let dbClientConnecting = false;
+let dbConnected = false;
 
 // Regex patterns
 const dcRegex = /INFO site\.ycsb\.db\.CassandraCQLClient - Datacenter: (\w+); Host: [^\/]*\/?([\d\.]+):\d+;/;
 const sendRegex = /\[(\d+)\] Sending (\w+) message to [^\/]*\/?([\d\.]+):\d+ message size \d+ bytes @ [^\/]*\/?([\d\.]+)/;
+const recvRegex = /\[(\d+)\] (\w+) message received from [^\/]*\/?([\d\.]+):\d+ @ [^\/]*\/?([\d\.]+)/;
 const transUpdate1Regex = /UPDATE usertable SET field0 -= 1 WHERE y_id = '([^']+)';/;
 const transUpdate2Regex = /UPDATE usertable SET field0 \+= 1 WHERE y_id = '([^']+)';/;
+const prepRegex = /\[(\d+)\] Preparing statement @ [^\/]*\/?([\d\.]+)/;
+const localExecRegex = /\[(\d+)\] Local Execute for (\[\[[^\]]+\]\])/;
+const localReqRegex = /\[(\d+)\] Local (PreAccept|Accept) for/;
 
-let transFrom = null;
+let fileStates = {};
 
-function emitEvent(name, data) {
-  if (slowMode) {
-    eventQueue.push({ name, data });
-  } else {
-    io.emit(name, data);
+async function initDBState() {
+  if (!dbClient || !dbConnected || dbInitialized) return false;
+  try {
+    const query = 'SELECT y_id FROM ycsb.usertable';
+    const rs = await dbClient.execute(query, [], { consistency: cassandra.types.consistencies.one });
+    const users = rs.rows.map(r => r.y_id);
+    
+    if (users.length > 0) {
+      console.log(`\n[Init] Found ${users.length} users. Initializing each with 100€.`);
+      users.forEach(uid => {
+          fakeBalances[uid] = 100;
+      });
+      dbInitialized = true;
+      broadcastState();
+      return true;
+    }
+  } catch (e) {
+    if (!e.message.includes('table') && !e.message.includes('keyspace') && !e.message.includes('unconfigured')) {
+      console.error('\nDB init error:', e.message);
+    }
   }
+  return false;
+}
+
+function broadcastState() {
+    const balances = Object.keys(fakeBalances).map(uid => ({
+        y_id: uid,
+        field0: fakeBalances[uid]
+    }));
+    io.emit('db_state', balances);
+}
+
+function updateFakeBalances(tx) {
+    if (fakeBalances[tx.from] !== undefined) fakeBalances[tx.from] -= 1;
+    if (fakeBalances[tx.to] !== undefined) fakeBalances[tx.to] += 1;
+    broadcastState();
+}
+
+function handlePlaybackEvent(event) {
+    if (event.type === 'transfer_start') io.emit('transfer_start', event.data);
+    if (event.type === 'message_flow') io.emit('message_flow', event.data);
+    if (event.type === 'transfer_complete') {
+        io.emit('transfer_complete', event.data);
+        updateFakeBalances(event.data);
+    }
 }
 
 if (slowMode) {
-  setInterval(() => {
-    if (eventQueue.length > 0) {
-      const { name, data } = eventQueue.shift();
-      io.emit(name, data);
+  (async () => {
+    console.log('Slow mode playback starting. Waiting for log files...');
+    while (Object.keys(tails).length === 0) {
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
-  }, 250); // Emit an event every 250ms in slow mode
+
+    console.log(`Log files detected. Waiting for user list from DB...`);
+    while (!dbInitialized) {
+      await initDBState();
+      if (!dbInitialized) await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    console.log('Starting transaction playback loop...');
+
+    while (true) {
+      if (globalEventQueue.length > 0) {
+        globalEventQueue.sort((a, b) => a.timestamp - b.timestamp);
+
+        if (isInterleaved) {
+            const event = globalEventQueue.shift();
+            handlePlaybackEvent(event);
+            await new Promise(resolve => setTimeout(resolve, 800));
+        } else {
+            const startIdx = globalEventQueue.findIndex(e => e.type === 'transfer_start');
+            if (startIdx === -1) {
+                // Peek if we are actually done
+                if (finishedFiles.size > 0 && finishedFiles.size === Object.keys(tails).length && globalEventQueue.length === 0) {
+                    console.log('All transactions replayed. Exiting.');
+                    process.exit(0);
+                }
+                await new Promise(resolve => setTimeout(resolve, 500));
+                continue;
+            }
+
+            const startEvent = globalEventQueue[startIdx];
+            const txId = startEvent.data.id;
+            const txEvents = globalEventQueue.filter(e => e.data && e.data.id === txId);
+            globalEventQueue = globalEventQueue.filter(e => !e.data || e.data.id !== txId);
+
+            for (const event of txEvents) {
+                handlePlaybackEvent(event);
+                if (event.type === 'transfer_start') await new Promise(resolve => setTimeout(resolve, 1500));
+                else if (event.type === 'message_flow') await new Promise(resolve => setTimeout(resolve, 1000));
+                else if (event.type === 'transfer_complete') await new Promise(resolve => setTimeout(resolve, 2500));
+            }
+        }
+      } else {
+        // Queue empty, check if we're done
+        if (finishedFiles.size > 0 && finishedFiles.size === Object.keys(tails).length && Object.keys(pendingTxs).length === 0) {
+            console.log('No more events and all logs finished. Exiting in 5s...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            process.exit(0);
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  })();
 }
 
-function processLine(line) {
+function pushPendingTx(coordIp) {
+  if (pendingTxs[coordIp]) {
+    const tx = pendingTxs[coordIp];
+    const quorumSet = new Set();
+    if (tx.hasLoopback) {
+        quorumSet.add(datacenterMap[tx.coordinator]);
+    }
+    tx.replies.forEach(r => {
+        if (r.timestamp <= tx.localExecTs) {
+            quorumSet.add(datacenterMap[r.source]);
+        }
+    });
+    tx.quorum = Array.from(quorumSet);
+    
+    const lastMsgTs = tx.messages.length > 0 ? tx.messages[tx.messages.length - 1].timestamp : tx.timestamp;
+    
+    globalEventQueue.push({
+        type: 'transfer_complete',
+        timestamp: lastMsgTs + 1,
+        data: tx
+    });
+    
+    delete pendingTxs[coordIp];
+  }
+}
+
+setInterval(() => {
+    const now = Date.now();
+    Object.keys(pendingTxs).forEach(ip => {
+        if (now - pendingTxs[ip].lastActivityRealTime > 5000) {
+            pushPendingTx(ip);
+        }
+    });
+}, 1000);
+
+function isSimplifiedProtocolMsg(type) {
+    const t = type.toUpperCase();
+    return t.includes('PRE_ACCEPT') || t.includes('PREACCEPT') || t.includes('SIMPLE_RSP') || 
+           (t.includes('ACCEPT') && !t.includes('PRE_ACCEPT') && !t.includes('PREACCEPT'));
+}
+
+function processLine(line, filePath) {
+  if (line.includes('[OVERALL], RunTime(ms)')) {
+    console.log(`Log file finished: ${path.basename(filePath)}`);
+    finishedFiles.add(filePath);
+    // Flush any pending transactions for this node
+    Object.keys(pendingTxs).forEach(ip => {
+        if (filePath.includes(datacenterMap[ip])) {
+            pushPendingTx(ip);
+        }
+    });
+    return;
+  }
+
+  if (!fileStates[filePath]) {
+    fileStates[filePath] = { transFrom: null, transTo: null, lastTimestamp: 0 };
+  }
+  const state = fileStates[filePath];
+
+  let tsMatch = line.match(/\[(\d+)\]/);
+  if (tsMatch) state.lastTimestamp = parseInt(tsMatch[1]);
+
   let dcMatch = line.match(dcRegex);
   if (dcMatch) {
-    const dcName = dcMatch[1];
-    const ip = dcMatch[2];
+    const dcName = dcMatch[1], ip = dcMatch[2];
     if (datacenterMap[ip] !== dcName) {
       datacenterMap[ip] = dcName;
       io.emit('datacenter_mapping', datacenterMap);
-      
-      // connect db
       if (!dbClient && !dbClientConnecting) {
         dbClientConnecting = true;
-        dbClient = new cassandra.Client({
-          contactPoints: [ip],
-          localDataCenter: dcName,
-          keyspace: 'ycsb'
-        });
-        dbClient.connect()
-          .then(() => console.log('Connected to Cassandra at', ip))
-          .catch(e => {
-             console.error('Failed to connect to Cassandra:', e);
-             dbClient = null;
-             dbClientConnecting = false;
+        const connectDB = () => {
+          dbClient = new cassandra.Client({ contactPoints: [ip], localDataCenter: dcName, keyspace: 'ycsb' });
+          dbClient.connect().then(() => {
+            console.log('Connected to Cassandra at', ip);
+            dbConnected = true; dbClientConnecting = false;
+            initDBState(); 
+          }).catch(e => {
+            dbClient = null; dbClientConnecting = false;
+            setTimeout(connectDB, 5000);
           });
+        };
+        connectDB();
       }
     }
     return;
   }
 
+  let u1 = line.match(transUpdate1Regex);
+  if (u1) { state.transFrom = u1[1]; return; }
+  let u2 = line.match(transUpdate2Regex);
+  if (u2) { state.transTo = u2[1]; return; }
+
+  let prepMatch = line.match(prepRegex);
+  if (prepMatch && state.transFrom && state.transTo) {
+    const coordIp = prepMatch[2];
+    pushPendingTx(coordIp);
+    txCounter++;
+
+    const tx = {
+      id: txCounter,
+      label: `TX #${txCounter}: ${state.transFrom} -> ${state.transTo}`,
+      from: state.transFrom,
+      to: state.transTo,
+      coordinator: coordIp,
+      timestamp: parseInt(prepMatch[1]),
+      messages: [],
+      replies: [],
+      localExecTs: Infinity,
+      hasLoopback: false,
+      lastActivityRealTime: Date.now()
+    };
+    
+    pendingTxs[coordIp] = tx;
+    globalEventQueue.push({
+        type: 'transfer_start',
+        timestamp: tx.timestamp,
+        data: tx
+    });
+
+    state.transFrom = null;
+    state.transTo = null;
+    return;
+  }
+
+  let execMatch = line.match(localExecRegex);
+  if (execMatch) {
+    const ts = parseInt(execMatch[1]);
+    Object.keys(pendingTxs).forEach(ip => {
+        if (filePath.includes(datacenterMap[ip])) {
+            pendingTxs[ip].localExecTs = ts;
+            pendingTxs[ip].lastActivityRealTime = Date.now();
+        }
+    });
+  }
+
+  let localReqMatch = line.match(localReqRegex);
+  if (localReqMatch) {
+      Object.keys(pendingTxs).forEach(ip => {
+          if (filePath.includes(datacenterMap[ip])) {
+              pendingTxs[ip].hasLoopback = true;
+              pendingTxs[ip].lastActivityRealTime = Date.now();
+          }
+      });
+  }
+
   let sendMatch = line.match(sendRegex);
   if (sendMatch) {
-    const timestamp = parseInt(sendMatch[1]);
-    const msgType = sendMatch[2];
-    const destIp = sendMatch[3];
-    const srcIp = sendMatch[4];
+    const msgType = sendMatch[2].toUpperCase();
+    if (!isSimplifiedProtocolMsg(msgType)) return;
+    const isRsp = msgType.includes('RSP') || msgType.includes('REPLY') || msgType.includes('SIMPLE') || msgType.includes('OK');
+    if (isRsp) return; 
 
-    emitEvent('message_flow', {
-      timestamp,
-      type: msgType,
-      source: srcIp,
-      target: destIp
-    });
+    const srcIp = sendMatch[4], dstIp = sendMatch[3], ts = parseInt(sendMatch[1]);
+    if (srcIp === dstIp) {
+        if (pendingTxs[srcIp]) pendingTxs[srcIp].hasLoopback = true;
+        return;
+    }
+
+    if (pendingTxs[srcIp]) {
+      const msg = { type: sendMatch[2], source: srcIp, target: dstIp, timestamp: ts, id: pendingTxs[srcIp].id };
+      pendingTxs[srcIp].messages.push(msg);
+      pendingTxs[srcIp].lastActivityRealTime = Date.now();
+      globalEventQueue.push({ type: 'message_flow', timestamp: ts, data: msg });
+    }
     return;
   }
 
-  let u1 = line.match(transUpdate1Regex);
-  if (u1) {
-    transFrom = u1[1];
-    return;
-  }
+  let recvMatch = line.match(recvRegex);
+  if (recvMatch) {
+    const msgType = recvMatch[2].toUpperCase();
+    if (!isSimplifiedProtocolMsg(msgType)) return;
+    const isRsp = msgType.includes('RSP') || msgType.includes('REPLY') || msgType.includes('SIMPLE') || msgType.includes('OK');
+    if (!isRsp) return; 
 
-  let u2 = line.match(transUpdate2Regex);
-  if (u2 && transFrom) {
-    emitEvent('transaction', { from: transFrom, to: u2[1] });
-    transFrom = null;
+    const srcIp = recvMatch[3], dstIp = recvMatch[4], ts = parseInt(recvMatch[1]);
+    if (srcIp === dstIp) return;
+
+    if (pendingTxs[dstIp]) {
+        const msg = { type: recvMatch[2], source: srcIp, target: dstIp, timestamp: ts, id: pendingTxs[dstIp].id };
+        pendingTxs[dstIp].messages.push(msg);
+        pendingTxs[dstIp].replies.push({ source: srcIp, timestamp: ts });
+        pendingTxs[dstIp].lastActivityRealTime = Date.now();
+        globalEventQueue.push({ type: 'message_flow', timestamp: ts, data: msg });
+    }
   }
 }
 
 function watchLogsDir() {
-  if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
-  }
-
+  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
   const checkFiles = () => {
     fs.readdir(logsDir, (err, files) => {
       if (err) return;
@@ -138,47 +367,34 @@ function watchLogsDir() {
           if (!tails[filePath]) {
             try {
               const tail = new Tail(filePath, { fromBeginning: true });
-              tail.on('line', processLine);
-              tail.on('error', (error) => console.error('Tail error:', error));
+              tail.on('line', (line) => processLine(line, filePath));
               tails[filePath] = tail;
               console.log(`Started tailing ${filename}`);
-            } catch (e) {
-              console.error(`Failed to tail ${filename}:`, e);
-            }
+            } catch (e) { console.error(`Failed to tail ${filename}:`, e); }
           }
         }
       });
     });
   };
-
   checkFiles();
-
   fs.watch(logsDir, (eventType, filename) => {
-    if (filename && filename.startsWith('accord') && filename.endsWith('.dat')) {
-      checkFiles();
-    }
+    if (filename && filename.startsWith('accord') && filename.endsWith('.dat')) checkFiles();
   });
 }
 
-// DB Poll interval
-setInterval(async () => {
-  if (dbClient) {
-    try {
-      const rs = await dbClient.execute('SELECT y_id, field0 FROM ycsb.usertable', [], { consistency: cassandra.types.consistencies.one });
-      const balances = rs.rows.map(r => ({ y_id: r.y_id, field0: r.field0 }));
-      io.emit('db_state', balances);
-    } catch (e) {
-      console.error('DB fetch error:', e);
-    }
-  }
-}, 1000);
-
 io.on('connection', (socket) => {
-  console.log('Client connected');
   socket.emit('datacenter_mapping', datacenterMap);
   socket.emit('locations', locations);
   socket.emit('robot_images', robotFiles);
   socket.emit('slow_mode', slowMode);
+  socket.emit('interleaved_mode', isInterleaved);
+  
+  socket.on('toggle_interleaved', () => {
+      isInterleaved = !isInterleaved;
+      io.emit('interleaved_mode', isInterleaved);
+  });
+
+  if (dbInitialized) broadcastState(); 
 });
 
 server.listen(3000, () => {
