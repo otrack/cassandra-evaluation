@@ -282,6 +282,7 @@ function processLine(line, filePath) {
       replies: [],
       localExecTs: Infinity,
       hasLoopback: false,
+      isFastPath: true,
       lastActivityRealTime: Date.now()
     };
     
@@ -313,6 +314,9 @@ function processLine(line, filePath) {
       Object.keys(pendingTxs).forEach(ip => {
           if (filePath.includes(datacenterMap[ip])) {
               pendingTxs[ip].hasLoopback = true;
+              if (localReqMatch[2] === 'Accept') {
+                  pendingTxs[ip].isFastPath = false;
+              }
               pendingTxs[ip].lastActivityRealTime = Date.now();
           }
       });
@@ -327,13 +331,21 @@ function processLine(line, filePath) {
 
     const srcIp = sendMatch[4], dstIp = sendMatch[3], ts = parseInt(sendMatch[1]);
     if (srcIp === dstIp) {
-        if (pendingTxs[srcIp]) pendingTxs[srcIp].hasLoopback = true;
+        if (pendingTxs[srcIp]) {
+            pendingTxs[srcIp].hasLoopback = true;
+            if (msgType.includes('ACCEPT') && !msgType.includes('PRE')) {
+                pendingTxs[srcIp].isFastPath = false;
+            }
+        }
         return;
     }
 
     if (pendingTxs[srcIp]) {
       const msg = { type: sendMatch[2], source: srcIp, target: dstIp, timestamp: ts, id: pendingTxs[srcIp].id };
       pendingTxs[srcIp].messages.push(msg);
+      if (msgType.includes('ACCEPT') && !msgType.includes('PRE')) {
+          pendingTxs[srcIp].isFastPath = false;
+      }
       pendingTxs[srcIp].lastActivityRealTime = Date.now();
       globalEventQueue.push({ type: 'message_flow', timestamp: ts, data: msg });
     }
@@ -353,6 +365,9 @@ function processLine(line, filePath) {
     if (pendingTxs[dstIp]) {
         const msg = { type: recvMatch[2], source: srcIp, target: dstIp, timestamp: ts, id: pendingTxs[dstIp].id };
         pendingTxs[dstIp].messages.push(msg);
+        if (msgType.includes('ACCEPT') && !msgType.includes('PRE')) {
+            pendingTxs[dstIp].isFastPath = false;
+        }
         pendingTxs[dstIp].replies.push({ source: srcIp, timestamp: ts });
         pendingTxs[dstIp].lastActivityRealTime = Date.now();
         globalEventQueue.push({ type: 'message_flow', timestamp: ts, data: msg });

@@ -28,7 +28,7 @@
     .total-row { border-top: 1px solid #555; margin-top: 12px; padding-top: 12px; display: flex; justify-content: space-between; font-weight: bold; font-size: 1.4em; align-items: center; }
 
     /* Quorum Log Styles */
-    #quorum-log { position: absolute; bottom: 10px; right: 10px; width: 442px; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; z-index: 10; }
+    #quorum-log { position: absolute; bottom: 10px; right: 10px; width: 530px; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; z-index: 10; }
     #quorum-log h3 { margin-top: 0; font-size: 1.3em; border-bottom: 1px solid #555; padding-bottom: 5px; margin-bottom: 10px; }
     .quorum-entry { margin-bottom: 8px; font-family: monospace; font-size: 1.1em; line-height: 1.4em; height: 1.4em; }
     .quorum-id { color: #f4e925; font-weight: bold; margin-right: 5px; }
@@ -87,7 +87,10 @@
 </div>
 
 <div id="quorum-log">
-  <h3>Quorum History</h3>
+  <h3 style="display: flex; justify-content: space-between; align-items: center;">
+    Quorum History
+    <span id="fast-path-ratio" style="font-size: 0.8em; color: #73c0de;">Fast Path: 0%</span>
+  </h3>
   <div id="quorum-container"></div>
 </div>
 
@@ -376,7 +379,15 @@
 
     function renderQuorumLog() {
         const container = document.getElementById('quorum-container');
+        const ratioEl = document.getElementById('fast-path-ratio');
         let html = '';
+        
+        if (quorumHistory.length > 0) {
+            const fastCount = quorumHistory.filter(tx => tx.isFastPath).length;
+            const ratio = Math.round((fastCount / quorumHistory.length) * 100);
+            ratioEl.innerText = `Fast Path: ${ratio}%`;
+            ratioEl.style.color = ratio >= 50 ? '#73c0de' : '#ee6666';
+        }
         
         // Show exactly 4 entries
         const recent = quorumHistory.slice(-4).reverse();
@@ -385,10 +396,11 @@
         for (let i = 0; i < 4; i++) {
             if (recent[i]) {
                 const tx = recent[i];
+                const color = tx.isFastPath ? '#73c0de' : '#ee6666';
                 html += `
                     <div class="quorum-entry">
-                        <span class="quorum-id">TX #${tx.id}:</span>
-                        <span class="quorum-dcs">{${tx.quorum.join(',')}}</span>
+                        <span class="quorum-id" style="color: ${color}">TX #${tx.id}:</span>
+                        <span class="quorum-dcs" style="color: ${color}">{${tx.quorum.join(',')}}</span>
                     </div>
                 `;
             } else {

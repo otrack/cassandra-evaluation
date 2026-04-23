@@ -6,14 +6,16 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--test] [--fast] [--protocols=LIST]"
+    echo "Usage: $0 [--test] [--fast] [--protocols=LIST] [--ycsb-run-only]"
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --fast           Disable slow-motion mode (enabled by default)."
     echo "  --protocols=LIST Override the list of protocols to run (space-separated)."
+    echo "  --ycsb-run-only  Only run YCSB clients, skip DB setup, load and cleanup."
 }
 
 test_run=0
 slow_motion=1
+ycsb_run_only=0
 protocols_override=""
 for arg in "$@"; do
     case "$arg" in
@@ -25,6 +27,9 @@ for arg in "$@"; do
             ;;
         --fast)
             slow_motion=0
+            ;;
+        --ycsb-run-only)
+            ycsb_run_only=1
             ;;
         --protocols=*)
             protocols_override="${arg#*=}"
@@ -46,7 +51,7 @@ protocols="accord"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-node_counts=3
+node_counts=5
 replication_factor=3
 records=4
 threads=1
@@ -69,16 +74,14 @@ do
     rm -f ${LOGDIR}/demo/*${p}*
 
     echo "Building and starting live visualization container..."
-    docker build -t accord-live-viz ${DIR}/live-viz
-    docker stop accord-viz >/dev/null 2>&1 || true
-    docker rm accord-viz >/dev/null 2>&1 || true
+    docker build -t accord-live-viz ${DIR}/live-viz > /dev/null 2>&1
     
     slow_env=""
     if [ "$slow_motion" -eq 1 ]; then
         slow_env="-e SLOW_MODE=true"
     fi
 
-    docker run --rm -d --name accord-viz -p 3000:3000 $slow_env -v ${DIR}/logs/demo:/app/logs/demo -v ${DIR}/latencies.csv:/app/latencies.csv:ro --network $(config network_name) accord-live-viz
+    docker run --rm -d --name accord-viz -p 3000:3000 $slow_env -v ${DIR}/logs/demo:/app/logs/demo -v ${DIR}/latencies.csv:/app/latencies.csv:ro --network $(config network_name) accord-live-viz > /dev/null 2>&1
     echo "========================================================"
     echo "Live visualization running at http://localhost:3000"
     echo "========================================================"
@@ -96,7 +99,13 @@ do
 	fi
 	ts=$(date +%Y%m%d%H%M%S%N)
 	output_file="${LOGDIR}/demo/${p}_${nodes}_${workload}_${ts}.dat"
-	run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} 0 ${output_file} 1 1 -p maxexecutiontime=${maxexecutiontime} -p target=1 -p db.tracing=true
+	
+	boot_and_load=1
+	if [ "$ycsb_run_only" -eq 1 ]; then
+	    boot_and_load=0
+	fi
+
+	run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} 0 ${output_file} ${boot_and_load} ${boot_and_load} -p maxexecutiontime=${maxexecutiontime} -p target=1 -p db.tracing=true
     done
 
     echo "Waiting for visualization to finish replaying all transactions..."
