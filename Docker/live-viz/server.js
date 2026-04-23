@@ -13,12 +13,14 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 const slowMode = process.env.SLOW_MODE !== 'false'; // default true
 let isInterleaved = true;
+let isPaused = false;
 let globalEventQueue = [];
 let pendingTxs = {}; // coordinatorIp -> txObject
 let txCounter = 0;
 
 // Fake database state
 let fakeBalances = {}; // y_id -> balance
+let dcStates = {}; // dcName -> [{y_id, field0}]
 let dbInitialized = false;
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -57,6 +59,7 @@ const recvRegex = /\[(\d+)\] (\w+) message received from [^\/]*\/?([\d\.]+):\d+ 
 const transUpdate1Regex = /UPDATE usertable SET field0 -= 1 WHERE y_id = '([^']+)';/;
 const transUpdate2Regex = /UPDATE usertable SET field0 \+= 1 WHERE y_id = '([^']+)';/;
 const prepRegex = /\[(\d+)\] Preparing statement @ [^\/]*\/?([\d\.]+)/;
+const traceRegex = /Trace ID: [^,]+, type: [^,]+, duration: (\d+)us/;
 const localExecRegex = /\[(\d+)\] Local Execute for (\[\[[^\]]+\]\])/;
 const localReqRegex = /\[(\d+)\] Local (PreAccept|Accept) for/;
 
@@ -78,6 +81,29 @@ async function initDBState() {
       });
       dbInitialized = true;
       broadcastState();
+
+      // Fetch weakly consistent state per DC
+      const dcs = [...new Set(Object.values(datacenterMap))];
+      for (const dc of dcs) {
+          const ip = Object.keys(datacenterMap).find(key => datacenterMap[key] === dc);
+          console.log(`[Init] Fetching weakly consistent state for DC ${dc} via ${ip}`);
+          const tempClient = new cassandra.Client({ 
+              contactPoints: [ip], 
+              localDataCenter: dc, 
+              keyspace: 'ycsb' 
+          });
+          try {
+              await tempClient.connect();
+              const rsOne = await tempClient.execute('SELECT y_id FROM usertable', [], { consistency: cassandra.types.consistencies.one });
+              dcStates[dc] = [...new Set(rsOne.rows.map(r => r.y_id))];
+              console.log(`[Init] DC ${dc} keys:`, dcStates[dc]);
+              await tempClient.shutdown();
+          } catch (e) {
+              console.error(`[Init] Error fetching state for DC ${dc}:`, e.message);
+          }
+      }
+      io.emit('dc_states', dcStates);
+
       return true;
     }
   } catch (e) {
@@ -134,6 +160,10 @@ if (slowMode) {
     console.log('Starting transaction playback loop...');
 
     while (true) {
+      if (isPaused) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        continue;
+      }
       if (globalEventQueue.length > 0) {
         globalEventQueue.sort((a, b) => a.timestamp - b.timestamp);
 
@@ -180,14 +210,17 @@ function pushPendingTx(coordIp) {
   if (pendingTxs[coordIp]) {
     const tx = pendingTxs[coordIp];
     const quorumSet = new Set();
-    if (tx.hasLoopback) {
-        quorumSet.add(datacenterMap[tx.coordinator]);
-    }
+    
+    // Always include coordinator DC
+    const coordDC = tx.coordinatorDC || datacenterMap[tx.coordinator];
+    if (coordDC) quorumSet.add(coordDC);
+
+    // Consider all responses as part of the quorum
     tx.replies.forEach(r => {
-        if (r.timestamp <= tx.localExecTs) {
-            quorumSet.add(datacenterMap[r.source]);
-        }
+        const dc = datacenterMap[r.source];
+        if (dc) quorumSet.add(dc);
     });
+
     tx.quorum = Array.from(quorumSet);
     
     const lastMsgTs = tx.messages.length > 0 ? tx.messages[tx.messages.length - 1].timestamp : tx.timestamp;
@@ -229,7 +262,7 @@ function processLine(line, filePath) {
   }
 
   if (!fileStates[filePath]) {
-    fileStates[filePath] = { transFrom: null, transTo: null, lastTimestamp: 0 };
+    fileStates[filePath] = { transFrom: null, transTo: null, lastTimestamp: 0, pendingDuration: null };
   }
   const state = fileStates[filePath];
 
@@ -265,6 +298,13 @@ function processLine(line, filePath) {
   let u2 = line.match(transUpdate2Regex);
   if (u2) { state.transTo = u2[1]; return; }
 
+  let traceMatch = line.match(traceRegex);
+  if (traceMatch) {
+    const durationUs = parseInt(traceMatch[1]);
+    state.pendingDuration = (durationUs / 1000.0).toFixed(2);
+    return;
+  }
+
   let prepMatch = line.match(prepRegex);
   if (prepMatch && state.transFrom && state.transTo) {
     const coordIp = prepMatch[2];
@@ -277,7 +317,9 @@ function processLine(line, filePath) {
       from: state.transFrom,
       to: state.transTo,
       coordinator: coordIp,
+      coordinatorDC: datacenterMap[coordIp],
       timestamp: parseInt(prepMatch[1]),
+      duration: state.pendingDuration,
       messages: [],
       replies: [],
       localExecTs: Infinity,
@@ -286,6 +328,7 @@ function processLine(line, filePath) {
       lastActivityRealTime: Date.now()
     };
     
+    state.pendingDuration = null;
     pendingTxs[coordIp] = tx;
     globalEventQueue.push({
         type: 'transfer_start',
@@ -407,10 +450,17 @@ io.on('connection', (socket) => {
   socket.emit('robot_images', robotFiles);
   socket.emit('slow_mode', slowMode);
   socket.emit('interleaved_mode', isInterleaved);
+  socket.emit('paused_mode', isPaused);
+  socket.emit('dc_states', dcStates);
   
   socket.on('toggle_interleaved', () => {
       isInterleaved = !isInterleaved;
       io.emit('interleaved_mode', isInterleaved);
+  });
+
+  socket.on('toggle_pause', () => {
+      isPaused = !isPaused;
+      io.emit('paused_mode', isPaused);
   });
 
   if (dbInitialized) {

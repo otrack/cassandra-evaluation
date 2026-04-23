@@ -70,9 +70,14 @@
   <button id="mode-toggle-btn" style="display: none; background: #73c0de; color: #1a1a1a; border: none; padding: 10px 20px; font-size: 1.2em; font-weight: bold; border-radius: 5px; cursor: pointer; transition: background 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
     Simplified Mode: ON
   </button>
-  <button id="interleaved-toggle-btn" style="background: #fac858; color: #1a1a1a; border: none; padding: 10px 20px; font-size: 1.2em; font-weight: bold; border-radius: 5px; cursor: pointer; transition: background 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-    Interleaved Mode: ON
-  </button>
+  <div style="display: flex; gap: 10px;">
+    <button id="interleaved-toggle-btn" style="background: #fac858; color: #1a1a1a; border: none; padding: 10px 20px; font-size: 1.2em; font-weight: bold; border-radius: 5px; cursor: pointer; transition: background 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+      Interleaved Mode: ON
+    </button>
+    <button id="pause-toggle-btn" style="background: #ffffff; color: #1a1a1a; border: none; padding: 10px 20px; font-size: 1.5em; font-weight: bold; border-radius: 5px; cursor: pointer; transition: background 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); min-width: 60px;">
+      ||
+    </button>
+  </div>
 </div>
 
 <div id="db-state">
@@ -88,7 +93,7 @@
 
 <div id="quorum-log">
   <h3 style="display: flex; justify-content: space-between; align-items: center;">
-    Quorum History
+    History
     <span id="fast-path-ratio" style="font-size: 0.8em; color: #73c0de;">Fast Path: 0%</span>
   </h3>
   <div id="quorum-container"></div>
@@ -111,13 +116,36 @@
     let isSlowMode = false;
     let isSimplifiedMode = true;
     let isInterleaved = true;
+    let isPaused = false;
     let quorumHistory = [];
     let blinkingRobots = new Set();
     let dbConnected = false;
+    let dcStates = {};
 
     let knownAccounts = {}; // y_id -> balance
 
     const diamondHtml = '<img src="/robots/diamond.png" class="diamond-icon">';
+
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Earth radius in km
+      const dlat = (lat2 - lat1) * Math.PI / 180;
+      const dlon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dlat / 2) ** 2 +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dlon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function estimateLatency(distanceKm) {
+      const speedOfLightKmPerMs = 204; // km/ms
+      return Math.floor(distanceKm / speedOfLightKmPerMs);
+    }
+
+    function getPingLatency(node1, node2) {
+      const dist = haversine(node1.value[1], node1.value[0], node2.value[1], node2.value[0]);
+      return estimateLatency(dist) * 2; // RTT (Ping)
+    }
 
     function updateLegend() {
       const legend = document.getElementById('legend');
@@ -152,11 +180,26 @@
       socket.emit('toggle_interleaved');
     });
 
+    document.getElementById('pause-toggle-btn').addEventListener('click', () => {
+      socket.emit('toggle_pause');
+    });
+
     socket.on('interleaved_mode', (val) => {
         isInterleaved = val;
         const btn = document.getElementById('interleaved-toggle-btn');
         btn.innerText = `Interleaved Mode: ${isInterleaved ? 'ON' : 'OFF'}`;
         btn.style.background = isInterleaved ? '#fac858' : '#73c0de';
+    });
+
+    socket.on('paused_mode', (val) => {
+        isPaused = val;
+        const btn = document.getElementById('pause-toggle-btn');
+        btn.innerHTML = isPaused ? '&#9654;' : '||';
+        btn.style.background = '#ffffff';
+    });
+
+    socket.on('dc_states', (states) => {
+        dcStates = states;
     });
 
     socket.on('datacenter_mapping', (map) => {
@@ -185,6 +228,24 @@
       
       const option = {
         backgroundColor: '#1a1a1a',
+        tooltip: {
+          show: true,
+          trigger: 'item',
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          borderColor: '#555',
+          textStyle: { color: '#fff' },
+          formatter: function (params) {
+            if (params.seriesType === 'effectScatter') {
+              const dcName = params.name;
+              if (dcStates[dcName]) {
+                const userList = dcStates[dcName].join(', ');
+                return `<div style="padding: 5px;"><b>DC: ${dcName}</b><br/>${userList}</div>`;
+              }
+              return dcName;
+            }
+            return null;
+          }
+        },
         geo: {
           map: 'world',
           roam: true,
@@ -222,10 +283,59 @@
               opacity: 0.8 
             },
             data: []
+          },
+          {
+            type: 'lines',
+            coordinateSystem: 'geo',
+            zlevel: 1, 
+            animation: false,
+            effect: { show: false },
+            lineStyle: { 
+              width: 1, 
+              type: 'dashed',
+              curveness: 0.1, 
+              opacity: 0.4,
+              color: '#fff'
+            },
+            label: {
+              show: true,
+              position: 'middle',
+              formatter: '{c} ms',
+              color: '#fff',
+              fontSize: 12
+            },
+            data: []
           }
         ]
       };
       chart.setOption(option);
+
+      chart.on('mouseover', { seriesType: 'effectScatter' }, function (params) {
+        const hoveredNode = nodes.find(n => n.name === params.name);
+        if (!hoveredNode) return;
+        
+        const pingLines = [];
+        nodes.forEach(n => {
+          if (n.name !== hoveredNode.name) {
+            const latency = getPingLatency(hoveredNode, n);
+            pingLines.push({
+              coords: [hoveredNode.value, n.value],
+              value: latency
+            });
+          }
+        });
+        
+        chart.setOption({
+          series: [{}, {}, { data: pingLines }]
+        });
+      });
+
+      chart.on('mouseout', { seriesType: 'effectScatter' }, function (params) {
+        chart.setOption({
+          series: [{}, {}, { data: [] }]
+        });
+      });
+
       mapLoaded = true;
       if (isSlowMode) updateSlowMode(true);
     });
@@ -397,10 +507,13 @@
             if (recent[i]) {
                 const tx = recent[i];
                 const color = tx.isFastPath ? '#73c0de' : '#ee6666';
+                const quorumDcs = tx.quorum.map(dc => dc === tx.coordinatorDC ? `${dc}*` : dc);
+                const durationHtml = tx.duration ? `<span style="float: right; color: white;">${tx.duration}ms</span>` : '';
                 html += `
                     <div class="quorum-entry">
                         <span class="quorum-id" style="color: ${color}">TX #${tx.id}:</span>
-                        <span class="quorum-dcs" style="color: ${color}">{${tx.quorum.join(',')}}</span>
+                        <span class="quorum-dcs" style="color: ${color}">{${quorumDcs.join(',')}}</span>
+                        ${durationHtml}
                     </div>
                 `;
             } else {

@@ -833,3 +833,27 @@ Please output in the terminal the CQL query and the results returned by a replic
 # Agent
 
 There are a visual glitch with messages with the visualizer. It seems that to draw a message from DC1 to DC2, the current approach is using an already existing line. As a result when DC1 send another message to DC3, the same line is again reused and pivoted. This give this strange laser effect. Please correct this.
+
+# Agent
+
+Add the following two features to the visualizer
+- A pause button next to the intervealev mode one which puts on holds the execution of transactions.
+- During the database loading phase, after having successfuly retrieved white serializable read the content of the database, retrieve which a weakly consistent read the content at each DC. This means that one executes again a "select * from ycsb.usertable" but this time using consistency set to ONE. This information regarding what is locally stored at a DC is displayed when one moves the mouse over a DC.
+
+# Agent
+
+Implement the following changes to the quorum history box in th visualizer:
+- Modify the name "Quorum History" into "History".
+- Indicate the latency of the transaction after its quorum.
+This information is known from  the log of the corresponding  DC (open one file in logs/demo/*.dat to see an example).
+It is available in the "Trace ID" line of the transaction as "duration: XXXXus".
+The time should be displayed in millisecond, in white and flushed on the right of the line.
+
+# Agent
+
+In the visualizer, when the user moves her mouse over a DC, add the ping latency to the other DCs.
+This information is displayed in the following manner:
+for every other DC', draw a light dashed line from DC to DC' with the ping latency from DC to DC' displayed atop it (in the middle of the line).
+The ping latency is in milliseconds (ms).
+It is computable using the haverstine function and the distance between the two DCs since we know their geographical coordinates.
+Such a code is done in Python for the sake of running the experiment in Docker/emulate_latency.py.
