@@ -1,6 +1,7 @@
 #!/bin/bash
 
 
+
 usage(){
 	echo "Usage: $0 [-h|--help] [-d|--demo] [-c|--clean] [-l|--launch] [-n <nb_nodes>|--nb-nodes <nb_nodes>] [-p|--podman]"
 	echo "           -h|--help                              show this message"
@@ -11,7 +12,11 @@ usage(){
 	echo "           -w|--workload <A|B|C|D>                change the workload, default C"
 	echo "           -p|--podman                            uses the podman engine instead of docker"
 }
+
 source "utils.sh"
+
+#set default values
+
 nb_nodes=3
 port_speak=26256
 port_listen=8079
@@ -23,6 +28,7 @@ demo=false
 POSITIONAL_ARGS=()
 workload=C
 
+#parsing of the arguments
 parse(){
 	while [[ $# -gt 0 ]]; do
 		case $1 in
@@ -75,7 +81,8 @@ parse(){
 	done
 }
 
-
+#use the demo tool  
+#NB: no latencies added
 launch_demo(){
 	# Create the network
 	${engine} network create -d bridge roachnet
@@ -89,6 +96,7 @@ launch_demo(){
 		-v "roach_demo:/cockroach/cockroach-data" 0track/cockroachdb:latest \
 		demo ycsb --workload="$workload" --duration=1m --global --nodes="$nb_nodes" --insecure
 }
+
 
 launch(){
 	# Create Network
@@ -130,6 +138,7 @@ init(){
 
 
 	python3 ./emulate_latency.py $nb_nodes
+	# Commands to make it not move the load
 	#split_command="Set CLUSTER setting kv.range_split.by_load_enabled = false;"
 
 	#${engine} exec "roach1" cockroach sql --url "postgresql://root@roach1" --insecure -e "${split_command}"
@@ -165,6 +174,7 @@ run(){
 	done
 }
 
+# Close and delete everything nicely
 clean(){
 	local list_of_nodes=""
 	for i in $(seq 1 $nb_nodes)
