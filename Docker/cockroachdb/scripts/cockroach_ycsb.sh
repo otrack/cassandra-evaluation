@@ -134,7 +134,8 @@ launch(){
 init(){
 	# Initialize the cluster
 	echo "init"
-	${engine} exec -it roach1 ./cockroach init --host="roach1:$((port_speak+1))"  --insecure
+	${engine} exec -it roach1 ./cockroach init --host="roach1:$((port_speak+101))"  --insecure
+
 
 
 	python3 ./emulate_latency.py $nb_nodes
