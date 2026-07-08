@@ -135,9 +135,31 @@ Under the updated images, we re-ran YCSB and obtained clean, crash-free results:
 | **Workload C** | 100% Read | **75.5%** | 24.5% |
 | **Workload D** | 95% Read /  5% Insert | **84.9%** | 15.1% |
 
-### Analysis of the Ratios
-*   **Contention Impact**: Under Workload A, higher update conflicts trigger some ordering discrepancies on replicas, causing the fast path ratio to drop to 60.1% as more transactions fallback to the slow path.
-*   **Network Transit Delay (Slow Quorum Commits)**: In Workloads B, C, and D, where conflicts are minimal or non-existent, the slow path ratio remains around 15–25%. This is because if the 3rd replica's reply is delayed due to WAN network jitter, the coordinator receives a slow quorum of 2 replies first and immediately commits the transaction on the slow path to avoid waiting for the 3rd reply.
+### Analysis of the Ratios and Performance Correlation
+
+The measured ratios directly explain the YCSB throughput, average latency, and tail latency profiles:
+
+1.  **Flat Median (p50) Latency**:
+    *   Across all workloads, the median (p50) read latency for New York remains locked at **70–75 ms** (typically **74 ms**).
+    *   This matches the fast quorum deadline bound (`max_OWD + delta = 64ms + 10ms = 74ms`) in a 3-node system.
+    *   Because the fast-path commit ratio is $> 50\%$ in all workloads ($60.1\% \rightarrow 74.1\% \rightarrow 75.5\% \rightarrow 84.9\%$), the 50th percentile transaction always commits via the fast path, keeping the median latency flat.
+
+2.  **Average and Tail (p90, p99) Latency Inflation**:
+    *   While the median is flat, the average and tail latencies are highly sensitive to the slow-path fallback ratio.
+    *   A slow-path fallback requires 1.5–2 WRTTs ($150\text{ ms} - 225\text{ ms}$) and polling overhead, and holding locks longer increases queueing delays.
+    *   As the slow path ratio drops from **39.9% (Workload A)** to **24.5% (Workload C)**, the average read latency drops sharply from **548.4 ms** to **126.5 ms**, and the tail (p99) latency shrinks from **893 ms** to **141 ms**.
+
+3.  **Throughput Sensitivity**:
+    *   Because YCSB threads run in a closed loop (a thread blocks until the previous transaction commits), throughput is throttled by average latency.
+    *   Throughput increases as the slow path ratio (and thus average latency) drops:
+        *   **Workload A** (39.9% slow / 548 ms Avg Latency) $\rightarrow$ **16.49 txns/sec**
+        *   **Workload B** (25.9% slow / 306 ms Avg Latency) $\rightarrow$ **23.52 txns/sec**
+        *   **Workload C** (24.5% slow / 126 ms Avg Latency) $\rightarrow$ **73.70 txns/sec**
+
+4.  **Why Slow Commits Happen in Read-Only/Low-Write Workloads**:
+    *   Under Workloads B, C, and D, where conflicts are minimal or non-existent, the slow path ratio still ranges from 15% to 25%.
+    *   In a 3-node system, the fast path requires replies from all 3 nodes. If the 3rd replica's reply is delayed due to transient WAN network jitter, the coordinator receives a slow quorum of 2 replies first and immediately commits the transaction on the slow path. This represents a trade-off where the coordinator accepts a slow path classification to commit the transaction early and avoid blocking on a lagging node.
+
 
 
 
