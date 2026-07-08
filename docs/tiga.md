@@ -66,3 +66,27 @@ Although Tiga's pseudo-code permits fast-path commits for single-shard transacti
     This lag causes the follower's reply hash to mismatch the leader's hash. The coordinator fails the fast-path check (`validFastReplies >= 3`) and falls back to the slow-path check, which forces the client to wait for background log replication and active polling.
 
 *Note: If there are no conflicting operations (e.g. executing on disjoint keys or with low request rates), the sync boundary is stable, hashes match, and the fast path succeeds.*
+
+---
+
+## 6. Detailed Analysis of the Hash Mismatch
+
+The hash mismatch described in Section 5 arises from two primary implementation factors under concurrent workloads:
+
+1. **Divergent Execution Orders (Arrival Order vs. Rank Order)**:
+   * **At the Leader**: Transactions are placed in the `holdBuffer_` and reordered so they are executed in strict **deadline rank order** (`localDdlRank_`).
+   * **At the Followers**: Because single-shard transactions bypass the agreement phase, the follower replica bypasses the hold buffer and enqueues transactions directly to the execution queue `toExecQuF_` ([TigaReplica.cc:1234](file:///home/otrack/Implementation/Tiga/TigaService/TigaReplica.cc#L1234)). 
+   * **The Divergence**: The follower execution thread `FollowerExecTd` dequeues and processes them in **FIFO arrival order** (the order in which the coordinator's `LaunchRequest` packets arrive at the follower). Under concurrency and network jitter, this arrival order frequently differs from the leader's rank order, causing the accumulative hash chains to diverge.
+
+2. **Lagging Sync Boundaries (Stale Checkpoint XORing)**:
+   Even if the execution orders happen to align, the follower uses its local synced boundary (`boundarySyncedHashMarks_`) to align its hash with the leader's synced state.
+   * This boundary is updated asynchronously when the follower receives the leader's background `InterReplicaSync` messages.
+   * Under concurrent updates, these sync messages are almost always in transit. Consequently, the follower calculates its reply hash by XORing a **stale boundary checkpoint**. This mismatch in the checkpoint base guarantees that the final hashes will differ.
+
+### Why Sequential Coordination Bypasses This Mismatch
+If all conflicting transactions in the entire system were serialized through a single coordinator thread:
+* Transaction 1 would be forced to fully commit and sync to the followers before Transaction 2 starts.
+* The followers' synced boundaries (`boundarySyncedHashMarks_`) would always be up to date when processing Transaction 2, allowing the hashes to match.
+* However, in our YCSB binding, **each YCSB client thread runs on its own independent coordinator** (instantiated once per thread in [tiga_ycsb.cc](file:///home/otrack/Implementation/Tiga/ycsb_jni/tiga_ycsb.cc)). This concurrent execution model naturally creates conflicting request interleavings that trigger the mismatches.
+* Sharing a single coordinator across all threads is not a viable alternative, as the coordinator's recursive mutex (`mtx_`) and single-transaction design (`reqInProcess_`) would serialize all threads, leading to an unbearable queueing effect (reducing concurrency to 1).
+
