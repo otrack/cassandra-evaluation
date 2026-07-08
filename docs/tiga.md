@@ -111,4 +111,33 @@ We then re-ran the YCSB performance benchmark. The results show a massive perfor
 
 *Note: The server logs still report `Fast ratio: 0.0000` in this mode. This is an implementation artifact: under preventive mode, replicas skip speculative execution (`EXEC_SPEC`) entirely and run directly under `EXEC_DIRECT`. While the replicas count this as a direct (slow) path, the client coordinator achieves 1-WRTT fast commits.*
 
+---
+
+## 8. Accurate Fast Path Probes and Ratios
+
+### Probe Corrections
+We identified two major issues with the original fast path probes:
+1.  **Replica-Side Blind Spot**: The replica-side counters (`nFastCommits_`, `nSlowCommits_`) only count execution types. In preventive mode, replicas execute all transactions directly (`EXEC_DIRECT`), marking them as "slow" commits even though the client commits them in 1-WRTT.
+2.  **Coordinator-Side Overcounting**: In `GlobalInfo::isTxnCommitted`, the fast/slow counters were incremented *inside* the check function on every periodic check loop before the transaction actually committed, inflating the statistics.
+
+We corrected this by:
+*   Refactoring `GlobalInfo::isTxnCommitted` to be read-only and return a status code (`1` for fast path commit, `2` for slow path commit).
+*   Updating `CheckQuorum` to increment the metrics exactly once when a transaction commits.
+*   Updating `tiga_fast_path.sh` to extract ratios from the YCSB client logs.
+
+### Measured Fast Path Ratios (New York Client `ycsb-3`)
+Under the updated images, we re-ran YCSB and obtained clean, crash-free results:
+
+| Workload | Read/Write | Fast Path Ratio | Slow Path Ratio |
+| :--- | :--- | :--- | :--- |
+| **Workload A** | 50% Read / 50% Update | **60.1%** | 39.9% |
+| **Workload B** | 95% Read /  5% Update | **74.1%** | 25.9% |
+| **Workload C** | 100% Read | **75.5%** | 24.5% |
+| **Workload D** | 95% Read /  5% Insert | **84.9%** | 15.1% |
+
+### Analysis of the Ratios
+*   **Contention Impact**: Under Workload A, higher update conflicts trigger some ordering discrepancies on replicas, causing the fast path ratio to drop to 60.1% as more transactions fallback to the slow path.
+*   **Network Transit Delay (Slow Quorum Commits)**: In Workloads B, C, and D, where conflicts are minimal or non-existent, the slow path ratio remains around 15–25%. This is because if the 3rd replica's reply is delayed due to WAN network jitter, the coordinator receives a slow quorum of 2 replies first and immediately commits the transaction on the slow path to avoid waiting for the 3rd reply.
+
+
 
