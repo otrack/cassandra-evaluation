@@ -1,0 +1,87 @@
+bench:
+  coefficient: 0.9
+  dist: zipf
+  population:
+    usertable: 2000005
+  scale: 1
+  weight:
+    read: 0.5
+    write: 0.5
+  workload: ycsb
+client:
+  forwarding: false
+  rate: 500
+  type: open
+clockOffset:
+  mean: 0
+  std: 0
+designate_replica_id:
+- 0
+- 1
+- 2
+host:
+  janus-lan-proxy-0000: localhost
+  janus-lan-server-0000: database-node1
+  janus-lan-server-0100: database-node2
+  janus-lan-server-0200: database-node3
+mode:
+  ab: brq
+  batch: false
+  cc: brq
+  ongoing: 1
+  retry: 20
+n_concurrent: 1
+nezha-recorder: 127.0.0.1:41237
+owdDeltaUs: 10000
+owd_delta_us: 10000
+owd_estimate_percentile: 50
+preventive: true
+process:
+  janus-lan-proxy-0000: janus-lan-proxy-0000
+  janus-lan-server-0000: janus-lan-server-0000
+  janus-lan-server-0100: janus-lan-server-0100
+  janus-lan-server-0200: janus-lan-server-0200
+schema:
+- column:
+  - name: key
+    primary: true
+    type: string
+  - name: field0
+    type: string
+  - name: field1
+    type: string
+  - name: field2
+    type: string
+  - name: field3
+    type: string
+  - name: field4
+    type: string
+  - name: field5
+    type: string
+  - name: field6
+    type: string
+  - name: field7
+    type: string
+  - name: field8
+    type: string
+  - name: field9
+    type: string
+  name: usertable
+server_bound_cap:
+- 400000
+- 400000
+- 400000
+server_initial_bound:
+- 100
+- 100
+- 100
+sharding:
+  usertable: MOD
+site:
+  client:
+  - - janus-lan-proxy-0000
+  server:
+  - - janus-lan-server-0000:10000
+    - janus-lan-server-0100:20000
+    - janus-lan-server-0200:30000
+spec_exec: false
