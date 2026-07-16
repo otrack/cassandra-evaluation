@@ -45,6 +45,9 @@ if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
 nodes=5
+if [ "$test_run" -eq 1 ]; then
+    nodes=3
+fi
 replication_factor=${nodes}
 cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""
 plot_average=true

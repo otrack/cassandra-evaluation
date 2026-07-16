@@ -8,6 +8,7 @@ source ${DIR}/cassandra/ycsb.sh
 source ${DIR}/swiftpaxos/cluster.sh
 source ${DIR}/cockroachdb/cluster.sh
 source ${DIR}/cockroachdb/ycsb.sh
+source ${DIR}/tiga/cluster.sh
 
 start_network() {
     local network_name=$(config network_name)
@@ -84,6 +85,11 @@ run_ycsb() {
     local nearby_database=${13}
     local ycsb_threads=${threads}
 
+    local norm_protocol="$protocol"
+    if [[ "$norm_protocol" == tiga-* ]]; then
+        norm_protocol="${norm_protocol#tiga-}"
+    fi
+
     if [ "$action" == "load" ]; then
         ycsb_threads=10 # FIXME needed w. CRDB (constraint violation), yet we want a load parallel phase.
     fi
@@ -134,10 +140,13 @@ run_ycsb() {
     log ${extra_opts_str[@]}
 
     local docker_args="--rm -d --security-opt apparmor=unconfined --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
+    if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+        docker_args+=" -v /tmp/config-ycsb.yml:/ycsb/config-ycsb.yml"
+    fi
     
     if [ "$action" == "load" ];
     then
-	if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
+	if printf '%s\n' "$norm_protocol" | grep -wF -q -e "swiftpaxos" -e "tiga" -e "calvin" -e "detock";
 	then
 	    # nothing to do
 	    true
@@ -199,6 +208,9 @@ run_ycsb() {
 -p db.url=${jdbc_url} \
 -p db.user=root \
 -p db.passwd="
+    elif printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+	ycsb_client="tiga"
+	extra_opts_str+=" -p tiga.config=/ycsb/config-ycsb.yml -p tiga.mode=${norm_protocol}"
     else
 	# cassandra
 	ycsb_client="cassandra-cql"
@@ -221,7 +233,12 @@ run_ycsb() {
     fi
 
     # adjust debug levels below
-    echo -e "JAVA_OPTS=-Dorg.slf4j.simpleLogger.defaultLogLevel=info -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms\n\
+    local java_opts="-Dorg.slf4j.simpleLogger.defaultLogLevel=info"
+    if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+        java_opts+=" -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms"
+    fi
+
+    echo -e "JAVA_OPTS=${java_opts}\n\
 YCSB_COMMAND=${action}\n\
 YCSB_BINDING=${ycsb_client}\n\
 YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
@@ -275,6 +292,8 @@ run_benchmark() {
 	pref=swiftpaxos
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
 	pref=cockroachdb
+    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+	pref=tiga
     fi   
 
     log "Running ${workload_type} ${workload^^} for ${node_count} node(s)..."
@@ -400,6 +419,8 @@ stop_benchmark() {
 	pref=swiftpaxos
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
 	pref=cockroachdb
+    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+	pref=tiga
     fi
     
     ${pref}_cleanup_cluster ${node_count}
