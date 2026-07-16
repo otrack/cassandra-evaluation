@@ -317,10 +317,6 @@ pull_images() {
         [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
         [[ "$key" =~ _image$ ]] || continue
         value=$(echo "$value" | xargs)
-        if [[ "$value" == 0track/tiga-suite* || "$value" == 0track/ycsb* ]]; then
-            log "Skipping pull for local image: ${value}"
-            continue
-        fi
         log "Pulling image: ${value}"
         docker pull "${value}"
         if [ $? -ne 0 ]; then
