@@ -23,7 +23,7 @@ import sys, yaml
 node_count = int(sys.argv[1])
 node_name_prefix = sys.argv[2]
 tiga_service_dir = sys.argv[3]
-with open('/home/otrack/Implementation/Tiga/config-ycsb.yml', 'r') as f:
+with open(f'{tiga_service_dir}/config-ycsb.yml', 'r') as f:
     config = yaml.safe_load(f)
 servers = []
 host_map = {}

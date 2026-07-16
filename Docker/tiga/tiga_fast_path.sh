@@ -20,7 +20,8 @@ case "$INDEX" in
 esac
 
 # Find the most recent YCSB log file for this location in logs/ycsb/
-LAST_LOG=$(ls -t /home/otrack/Implementation/cassandra-evaluation/Docker/logs/ycsb/*_${LOCATION}.dat 2>/dev/null | head -n 1)
+DIR=$(dirname "${BASH_SOURCE[0]}")
+LAST_LOG=$(ls -t "${DIR}/../logs/ycsb"/*_${LOCATION}.dat 2>/dev/null | head -n 1)
 
 LAST_LINE=""
 if [ -n "$LAST_LOG" ] && [ -f "$LAST_LOG" ]; then

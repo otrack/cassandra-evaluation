@@ -141,7 +141,7 @@ run_ycsb() {
 
     local docker_args="--rm -d --security-opt apparmor=unconfined --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
     if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
-        docker_args+=" -v /tmp/config-ycsb.yml:/ycsb/config-ycsb.yml"
+        docker_args+=" -v ${DIR}/tiga/config-ycsb.yml:/ycsb/config-ycsb.yml"
     fi
     
     if [ "$action" == "load" ];
