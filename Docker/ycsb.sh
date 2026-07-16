@@ -78,7 +78,7 @@ if [ "$test_run" -eq 1 ]; then
     compute_test_machine "${nodes}"
     sed -i "s/^maxexecutiontime=.*/maxexecutiontime=10/" "${CONFIG_FILE}"
     sed -i "s/^records=.*/records=1000/" "${CONFIG_FILE}"
-    sed -i "s/^threads=.*/threads=10/" "${CONFIG_FILE}"
+    sed -i "s/^threads=.*/threads=1/" "${CONFIG_FILE}"
 fi
 maxexecutiontime=$(config maxexecutiontime)
 records=$(config records)
@@ -122,7 +122,7 @@ ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/ycsb/* > ${RESULTSDIR}/ycsb.csv
 debug "Plotting..."
 python3 ${DIR}/ycsb.py ${RESULTSDIR}/ycsb.csv ${workloads} ${nodes} ${RESULTSDIR}/ycsb.tex
 
-pdflatex -jobname=ycsb -output-directory=${RESULTSDIR} \
+pdflatex -interaction nonstopmode -jobname=ycsb -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{xspace}\

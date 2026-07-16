@@ -147,7 +147,7 @@ ${DIR}/parse_ycsb_to_csv.sh \
 debug "Plotting..."
 python3 ${DIR}/swap.py ${RESULTSDIR}/swap.csv ${RESULTSDIR}/swap/breakdown.csv ${RESULTSDIR}/swap.tex
 
-pdflatex -jobname=swap -output-directory=${RESULTSDIR} \
+pdflatex -interaction nonstopmode -jobname=swap -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\

@@ -148,7 +148,7 @@ ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/latency_throughput/* > ${RESULTSDIR}/laten
 debug "Plotting..."
 python3 ${DIR}/latency_throughput.py ${RESULTSDIR}/latency_throughput.csv ${RESULTSDIR}/latency_throughput.tex
 
-pdflatex -jobname=latency_throughput -output-directory=${RESULTSDIR} \
+pdflatex -interaction nonstopmode -jobname=latency_throughput -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\

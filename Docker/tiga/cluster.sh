@@ -49,6 +49,7 @@ config['process'] = process_map
 config['server_initial_bound'] = initial_bounds
 config['server_bound_cap'] = bound_caps
 config['designate_replica_id'] = designate_replica
+config['preventive'] = True
 with open('/tmp/config-ycsb.yml', 'w') as f:
     yaml.dump(config, f, default_flow_style=False)
 " "$node_count" "$(config "node_name")"

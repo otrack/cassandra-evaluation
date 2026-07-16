@@ -109,7 +109,7 @@ else
     python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${cities} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
 fi
 
-pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
+pdflatex -interaction nonstopmode -jobname=cdf -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\
@@ -126,5 +126,3 @@ pdflatex -jobname=cdf -output-directory=${RESULTSDIR} \
  \begin{document}\
  \thispagestyle{empty}\centering\input{cdf.tex}\
  \end{document}"  > /dev/null
-
-

@@ -170,7 +170,7 @@ ${DIR}/parse_ycsb_to_csv.sh \
 debug "Plotting..."
 python3 ${DIR}/closed_economy.py ${RESULTSDIR}/closed_economy.csv ${RESULTSDIR}/closed_economy/breakdown.csv ${RESULTSDIR}/closed_economy.tex ${threads}
 
-pdflatex -jobname=closed_economy -output-directory=${RESULTSDIR} \
+pdflatex -interaction nonstopmode -jobname=closed_economy -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\

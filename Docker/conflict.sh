@@ -146,7 +146,7 @@ done
 debug "Plotting..."
 python3 ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv ${workload} ${nodes} ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
 
-pdflatex -jobname=conflict -output-directory=${RESULTSDIR} \
+pdflatex -interaction nonstopmode -jobname=conflict -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\

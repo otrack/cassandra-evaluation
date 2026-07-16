@@ -122,7 +122,7 @@ ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/ephemeral/*.dat > ${RESULTSDIR}/ephemeral.
 debug "Generating table..."
 python3 ${DIR}/ephemeral.py ${RESULTSDIR}/ephemeral.csv ${workloads} ${nodes} ${RESULTSDIR}/ephemeral.tex
 
-pdflatex -jobname=ephemeral -output-directory=${RESULTSDIR} \
+pdflatex -interaction nonstopmode -jobname=ephemeral -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{booktabs}\
  \usepackage{xspace}\

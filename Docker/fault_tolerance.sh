@@ -212,7 +212,7 @@ python3 ${DIR}/fault_tolerance.py \
     "$((slowdown_s + slowdown_end_s + crash_s - 10))" \
     "${RESULTSDIR}/fault_tolerance.tex"
 
-pdflatex -jobname=fault_tolerance -output-directory=${RESULTSDIR} \
+pdflatex -interaction nonstopmode -jobname=fault_tolerance -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
  \usepackage{pgfplots}\
  \usepackage{tikz}\
