@@ -101,14 +101,8 @@ if [ "$dry_run" -eq 0 ]; then
 	    do
 		do_clean_up=$(( count == total-1 ? 1 : 0 ))
 		ts=$(date +%Y%m%d%H%M%S%N)
-		run_nodes=${nodes}
-		run_rf=${replication_factor}
-		if printf '%s\n' "${p}" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
-		    run_nodes=3
-		    run_rf=3
-		fi
-		output_file="${LOGDIR}/ycsb/${p}_${run_nodes}_${w}_${ts}.dat"
-		run_benchmark ${p} ${c} ${run_nodes} ${run_rf} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p maxexecutiontime=${maxexecutiontime}
+		output_file="${LOGDIR}/ycsb/${p}_${nodes}_${w}_${ts}.dat"
+		run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p maxexecutiontime=${maxexecutiontime}
 		do_create_and_load=0
 		count=$((count+1))
 	    done
