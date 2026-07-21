@@ -56,8 +56,6 @@ with open(f'{tiga_service_dir}/config-ycsb.yml', 'w') as f:
     yaml.dump(config, f, default_flow_style=False)
 " "$node_count" "$(config "node_name")" "${TIGA_SERVICE_DIR}"
 
-    cp "${TIGA_SERVICE_DIR}/config-ycsb.yml" /tmp/config-ycsb.yml
-
     log "Generated dynamic config file in ${TIGA_SERVICE_DIR}/config-ycsb.yml"
 
     # 2. Start replica containers
@@ -67,7 +65,7 @@ with open(f'{tiga_service_dir}/config-ycsb.yml', 'w') as f:
 
         start_container ${image} ${container_name} "started on" ${LOGDIR}/${protocol}_node${i}.log \
             --rm -d --network $(config "network_name") ${resource_limits} \
-            -v /tmp/config-ycsb.yml:/app/config/config-ycsb.yml \
+            -v ${TIGA_SERVICE_DIR}/config-ycsb.yml:/app/config/config-ycsb.yml \
             -e PROTOCOL=${protocol} \
             -e SERVER_NAME=${server_name} \
             -e CONFIG_PATH=/app/config/config-ycsb.yml || {
