@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TIGA_SERVICE_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+TIGA_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
 
 tiga_start_cluster() {
     if [ $# -ne 2 ]; then
@@ -22,8 +22,10 @@ tiga_start_cluster() {
 import sys, yaml, os
 node_count = int(sys.argv[1])
 node_name_prefix = sys.argv[2]
-tiga_service_dir = sys.argv[3]
-base_config_path = os.path.abspath(os.path.join(tiga_service_dir, '../../../Tiga/config-ycsb.yml'))
+tiga_dir = sys.argv[3]
+base_config_path = os.path.join(tiga_dir, 'config-ycsb.yml')
+if not os.path.exists(base_config_path):
+    base_config_path = os.path.abspath(os.path.join(tiga_dir, '../../../Tiga/config-ycsb.yml'))
 with open(base_config_path, 'r') as f:
     config = yaml.safe_load(f)
 servers = []
@@ -52,11 +54,11 @@ config['server_initial_bound'] = initial_bounds
 config['server_bound_cap'] = bound_caps
 config['designate_replica_id'] = designate_replica
 config['preventive'] = True
-with open(f'{tiga_service_dir}/config-ycsb.yml', 'w') as f:
+with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
     yaml.dump(config, f, default_flow_style=False)
-" "$node_count" "$(config "node_name")" "${TIGA_SERVICE_DIR}"
+" "$node_count" "$(config "node_name")" "${TIGA_DIR}"
 
-    log "Generated dynamic config file in ${TIGA_SERVICE_DIR}/config-ycsb.yml"
+    log "Generated dynamic config file in ${TIGA_DIR}/config-ycsb.yml"
 
     # 2. Start replica containers
     for i in $(seq 1 $node_count); do
@@ -65,7 +67,7 @@ with open(f'{tiga_service_dir}/config-ycsb.yml', 'w') as f:
 
         start_container ${image} ${container_name} "started on" ${LOGDIR}/${protocol}_node${i}.log \
             --rm -d --network $(config "network_name") ${resource_limits} \
-            -v ${TIGA_SERVICE_DIR}/config-ycsb.yml:/app/config/config-ycsb.yml \
+            -v ${TIGA_DIR}/config-ycsb.yml:/app/config/config-ycsb.yml \
             -e PROTOCOL=${protocol} \
             -e SERVER_NAME=${server_name} \
             -e CONFIG_PATH=/app/config/config-ycsb.yml || {
