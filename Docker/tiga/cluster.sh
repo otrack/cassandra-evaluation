@@ -19,11 +19,12 @@ tiga_start_cluster() {
 
     # 1. Generate config-ycsb.yml dynamically using python
     python3 -c "
-import sys, yaml
+import sys, yaml, os
 node_count = int(sys.argv[1])
 node_name_prefix = sys.argv[2]
 tiga_service_dir = sys.argv[3]
-with open(f'{tiga_service_dir}/config-ycsb.yml', 'r') as f:
+base_config_path = os.path.abspath(os.path.join(tiga_service_dir, '../../../Tiga/config-ycsb.yml'))
+with open(base_config_path, 'r') as f:
     config = yaml.safe_load(f)
 servers = []
 host_map = {}
@@ -55,6 +56,8 @@ with open(f'{tiga_service_dir}/config-ycsb.yml', 'w') as f:
     yaml.dump(config, f, default_flow_style=False)
 " "$node_count" "$(config "node_name")" "${TIGA_SERVICE_DIR}"
 
+    cp "${TIGA_SERVICE_DIR}/config-ycsb.yml" /tmp/config-ycsb.yml
+
     log "Generated dynamic config file in ${TIGA_SERVICE_DIR}/config-ycsb.yml"
 
     # 2. Start replica containers
@@ -64,11 +67,11 @@ with open(f'{tiga_service_dir}/config-ycsb.yml', 'w') as f:
 
         start_container ${image} ${container_name} "started on" ${LOGDIR}/${protocol}_node${i}.log \
             --rm -d --network $(config "network_name") ${resource_limits} \
-            -v ${TIGA_SERVICE_DIR}/config-ycsb.yml:/app/config/config-ycsb.yml \
+            -v /tmp/config-ycsb.yml:/app/config/config-ycsb.yml \
             -e PROTOCOL=${protocol} \
             -e SERVER_NAME=${server_name} \
             -e CONFIG_PATH=/app/config/config-ycsb.yml || {
-            error "Failed to start tiga/calvin/detock server $i"
+            error "Failed to start tiga/calvin/detock/janus server $i"
             return 2
         }
     done

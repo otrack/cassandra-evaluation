@@ -140,13 +140,13 @@ run_ycsb() {
     log ${extra_opts_str[@]}
 
     local docker_args="--rm -d --security-opt apparmor=unconfined --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
-    if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+    if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
         docker_args+=" -v ${DIR}/tiga/config-ycsb.yml:/ycsb/config-ycsb.yml"
     fi
     
     if [ "$action" == "load" ];
     then
-	if printf '%s\n' "$norm_protocol" | grep -wF -q -e "swiftpaxos" -e "tiga" -e "calvin" -e "detock";
+	if printf '%s\n' "$norm_protocol" | grep -wF -q -e "swiftpaxos" -e "tiga" -e "calvin" -e "detock" -e "janus";
 	then
 	    # nothing to do
 	    true
@@ -208,7 +208,7 @@ run_ycsb() {
 -p db.url=${jdbc_url} \
 -p db.user=root \
 -p db.passwd="
-    elif printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+    elif printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
 	ycsb_client="tiga"
 	extra_opts_str+=" -p tiga.config=/ycsb/config-ycsb.yml -p tiga.mode=${norm_protocol}"
     else
@@ -234,7 +234,7 @@ run_ycsb() {
 
     # adjust debug levels below
     local java_opts="-Dorg.slf4j.simpleLogger.defaultLogLevel=info"
-    if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+    if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
         java_opts+=" -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms"
     fi
 
@@ -292,7 +292,7 @@ run_benchmark() {
 	pref=swiftpaxos
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
 	pref=cockroachdb
-    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
 	pref=tiga
     fi   
 
@@ -419,7 +419,7 @@ stop_benchmark() {
 	pref=swiftpaxos
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
 	pref=cockroachdb
-    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
+    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
 	pref=tiga
     fi
     
