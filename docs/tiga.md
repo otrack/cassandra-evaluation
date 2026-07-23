@@ -152,8 +152,16 @@ The measured ratios directly explain the YCSB throughput, average latency, and t
 
 4.  **Why Slow Commits Happen in Read-Only/Low-Write Workloads**:
     *   In a 3-node system, the fast path requires replies from all 3 nodes. If the 3rd replica's reply is delayed due to transient WAN network jitter, the coordinator receives a slow quorum of 2 replies first and immediately commits the transaction on the slow path. This represents a trade-off where the coordinator accepts a slow path classification to commit the transaction early and avoid blocking on a lagging node.
+---
 
+## 9. Docker Latency Emulation & Scale-out Constraints
 
+During experiments with larger topologies (e.g., 5-node clusters), two critical environment bugs were identified and resolved to allow the evaluation to proceed correctly:
 
+1. **Docker Latency Emulation Failure (Silent `tc` Bypass)**:
+   * **Issue**: In [Docker/tiga/cluster.sh](file:///home/otrack/Implementation/cassandra-evaluation/Docker/tiga/cluster.sh), Tiga/Calvin/Detock server containers were launched without `NET_ADMIN` and `NET_RAW` capabilities. When [Docker/emulate_latency.py](file:///home/otrack/Implementation/cassandra-evaluation/Docker/emulate_latency.py) ran traffic control (`tc`) commands inside these containers to emulate WAN delays, the commands failed silently with `Operation not permitted`. As a result, actual network latency between replicas remained `0 ms`, leading to incorrect uniform latency measurements of `~70 ms` across all locations.
+   * **Fix**: Added `--cap-add=NET_ADMIN --cap-add=NET_RAW` to the Tiga server containers inside [Docker/tiga/cluster.sh](file:///home/otrack/Implementation/cassandra-evaluation/Docker/tiga/cluster.sh), and modified [Docker/emulate_latency.py](file:///home/otrack/Implementation/cassandra-evaluation/Docker/emulate_latency.py) to validate `tc` command exit codes and raise an exception on failure.
 
-
+2. **Replication Group Boundary Overflow**:
+   * **Issue**: When running with 5 nodes, Tiga servers crashed with `*** buffer overflow detected ***: terminated`. This was traced back to `#define MAX_REPLICA_NUM (3)` defined statically in `Tiga/Common.h`. Indexing connection and tracking structures using replica IDs `3` and `4` caused out-of-bounds writes on array structures.
+   * **Fix**: Increased `MAX_REPLICA_NUM` to `16` in `Tiga/Common.h` and rebuilt the corresponding Docker images (`0track/tiga-suite` and `0track/ycsb`).
