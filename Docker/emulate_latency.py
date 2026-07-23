@@ -28,6 +28,14 @@ def estimate_latency(distance_km):
     latency_ms = distance_km / speed_of_light_km_per_ms
     return math.floor(latency_ms)
         
+def run_tc(container, cmd):
+    res = container.exec_run(cmd)
+    if res.exit_code != 0:
+        # 'qdisc del' can fail if there is no rule to delete, which is fine to ignore
+        if "qdisc del" in cmd:
+            return
+        raise Exception(f"tc command failed (exit {res.exit_code}): {cmd}\nOutput: {res.output.decode('utf-8')}")
+
 def emulate_latency(num_nodes, node_locations):
     if not config["latency_simulation"]:
         return
@@ -45,14 +53,10 @@ def emulate_latency(num_nodes, node_locations):
             src = f'{config["node_name"]}{i + 1}'
             src_container = client.containers.get(src)
             exec_command = f"tc -help"
-            if (a:=src_container.exec_run(exec_command).exit_code) != 0:
-                raise Exception("tc is missnig! "+str(a))
-            exec_command = f"tc qdisc del dev eth0 root"
-            debug(f"{src} {exec_command}")
-            src_container.exec_run(exec_command)
-            exec_command = f"tc qdisc add dev eth0 root handle 1: prio bands {num_nodes + 1} priomap {priomap}"
-            debug(f"{src} {exec_command}")
-            src_container.exec_run(exec_command)
+            if src_container.exec_run(exec_command).exit_code != 0:
+                raise Exception("tc is missing!")
+            run_tc(src_container, "tc qdisc del dev eth0 root")
+            run_tc(src_container, f"tc qdisc add dev eth0 root handle 1: prio bands {num_nodes + 1} priomap {priomap}")
             
         # Add specific latencies based on geographical distances
         for i in range(num_nodes):
@@ -74,20 +78,12 @@ def emulate_latency(num_nodes, node_locations):
                 src_band = i + 2
 
                 # Add latency from src to dst
-                exec_command = f"tc qdisc add dev eth0 parent 1:{dst_band} handle {dst_band}0: netem delay {latency}ms"
-                debug(f"{src} {exec_command}")
-                src_container.exec_run(exec_command)
-                exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{dst_band}"
-                debug(f"{src} {exec_command}")
-                src_container.exec_run(exec_command)
+                run_tc(src_container, f"tc qdisc add dev eth0 parent 1:{dst_band} handle {dst_band}0: netem delay {latency}ms")
+                run_tc(src_container, f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{dst_band}")
                 
                 # Add latency from dst to src
-                exec_command = f"tc qdisc add dev eth0 parent 1:{src_band} handle {src_band}0: netem delay {latency}ms"
-                debug(f"{dst} {exec_command}")
-                dst_container.exec_run(exec_command)
-                exec_command = f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{src_band}"
-                debug(f"{dst} {exec_command}")
-                dst_container.exec_run(exec_command)
+                run_tc(dst_container, f"tc qdisc add dev eth0 parent 1:{src_band} handle {src_band}0: netem delay {latency}ms")
+                run_tc(dst_container, f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{src_band}")
 
                 latency = 2 * latency
                 debug(f"Added {latency:.2f}ms ping latency between '{src}' and '{dst}' (distance: {distance:.2f} km).")

@@ -66,7 +66,7 @@ with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
         local container_name=$(config "node_name")$i
 
         start_container ${image} ${container_name} "started on" ${LOGDIR}/${protocol}_node${i}.log \
-            --rm -d --network $(config "network_name") ${resource_limits} \
+            --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
             -v ${TIGA_DIR}/config-ycsb.yml:/app/config/config-ycsb.yml \
             -e PROTOCOL=${protocol} \
             -e SERVER_NAME=${server_name} \
