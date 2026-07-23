@@ -147,7 +147,8 @@ run_ycsb() {
 	    if [ "$protocol" == "accord" ]; then 
 		transaction_mode="full"
 	    fi
-	    cassandra_create_keyspace 3600 "${node_count:-3}" "$replication_factor"
+	    local nodes_per_dc=$(config nodesperdc)
+	    cassandra_create_keyspace 3600 "${node_count:-3}" "$replication_factor" "${nodes_per_dc}"
 	    cassandra_create_usertable 3600 "$transaction_mode" "${node_count:-3}" "$workload_type"
 	fi
     fi
@@ -214,7 +215,9 @@ run_ycsb() {
     fi
 
     local java_opts="-Dorg.slf4j.simpleLogger.defaultLogLevel=info"
-    if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
+    if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
+        java_opts+=" -XX:+UnlockDiagnosticVMOptions -XX:CompileCommand=exclude,site/ycsb/db/TigaClient*.*"
+    else
         java_opts+=" -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms"
     fi
 

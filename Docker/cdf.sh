@@ -11,7 +11,7 @@ usage() {
     echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST]"
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
-    echo "  --protocols=LIST Override the list of protocols to run (space-separated)."
+    echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
 }
 
 dry_run=0
@@ -26,7 +26,7 @@ for arg in "$@"; do
             test_run=1
             ;;
         --protocols=*)
-            protocols_override="${arg#*=}"
+            protocols_override=$(echo "${arg#*=}" | tr ',' ' ')
             ;;
         *)
             echo "Unknown parameter: $arg"

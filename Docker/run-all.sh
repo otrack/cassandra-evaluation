@@ -11,7 +11,7 @@ usage() {
     echo "Usage: $0 [--dry-run] [--no-test] [--protocols=LIST]"
     echo "  --dry-run        Skip the experiments; only draw plots using existing data."
     echo "  --no-test        Disable the --test flag (run full experiments)."
-    echo "  --protocols=LIST Override the list of protocols to run (space-separated)."
+    echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
 }
 
 dry_run=0

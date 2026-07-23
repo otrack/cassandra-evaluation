@@ -9,7 +9,7 @@ usage() {
     echo "Usage: $0 [--test] [--fast] [--protocols=LIST] [--ycsb-run-only]"
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --fast           Disable slow-motion mode (enabled by default)."
-    echo "  --protocols=LIST Override the list of protocols to run (space-separated)."
+    echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
     echo "  --ycsb-run-only  Only run YCSB clients, skip DB setup, load and cleanup."
 }
 
@@ -32,7 +32,7 @@ for arg in "$@"; do
             ycsb_run_only=1
             ;;
         --protocols=*)
-            protocols_override="${arg#*=}"
+            protocols_override=$(echo "${arg#*=}" | tr ',' ' ')
             ;;
         *)
             echo "Unknown parameter: $arg"

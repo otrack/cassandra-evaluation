@@ -26,6 +26,22 @@ def wait_for_log(container, log_pattern, timeout=300):
             return False
     return False
 
+def wait_for_nodetool_status(first_container, expected_count, timeout=120):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            res = first_container.exec_run("nodetool status")
+            output = res.output.decode('utf-8')
+            un_count = sum(1 for line in output.splitlines() if line.strip().startswith("UN "))
+            if un_count >= expected_count:
+                debug(f"All {expected_count} Cassandra nodes are UN (Up Normal) in nodetool status.")
+                return True
+        except Exception:
+            pass
+        time.sleep(2)
+    debug(f"Timeout waiting for all {expected_count} nodes to become UN.")
+    return False
+
 def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     client = docker.from_env()
     network_name = config["network_name"]
@@ -44,14 +60,21 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                         nano_cpus = int(float(gcp_row['vcpus']) * 1e9)
                         memory_gb = float(gcp_row['memory'])
                         mem_limit = int(memory_gb * 1024 * 1024 * 1024 * 4/5)
-                        cassandra_xmx = f"{math.floor(memory_gb)}g"
+                        xmx_gb = max(1, math.floor(memory_gb))
+                        xms_gb = min(2, xmx_gb)
+                        cassandra_xms = f"{xms_gb}g"
+                        cassandra_xmx = f"{xmx_gb}g"
                         break
         except FileNotFoundError:
             debug(f"gcp.csv not found, no resource limits applied for machine '{machine}'")
+
+    if 'cassandra_xms' not in locals():
+        cassandra_xms = "2g"
+        cassandra_xmx = "4g"
     
     containers = []
     log_pattern = r"Startup complete"
-    seed_container = f"{locations[0][2]}1"
+    seeds_str = ",".join([f"{locations[idx][2]}1" for idx in range(num_dcs)])
 
     port_offset = 0
     for i in range(1, num_dcs + 1):
@@ -80,9 +103,9 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                     tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
                     ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                     environment={
-                        "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else ""),
+                        "JVM_OPTS" : " -Xms"+cassandra_xms+" -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else ""),
                         "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
-                        "CASSANDRA_SEEDS": "" if is_first_node else seed_container,
+                        "CASSANDRA_SEEDS": "" if is_first_node else seeds_str,
                         "CASSANDRA_CLUSTER_NAME": "TestCluster",
                         "CASSANDRA_DC": dc_name,
                         "CASSANDRA_RACK": f"RAC{k}",
@@ -105,6 +128,9 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                 debug(f"Error starting container '{container_name}': {e}")
 
     debug(f"Started {len(containers)} Cassandra nodes across {num_dcs} DCs ({nodes_per_dc} nodes/DC).")
+    if containers:
+        debug("Waiting for all nodes to be UN in nodetool status...")
+        wait_for_nodetool_status(containers[0], len(containers))
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
