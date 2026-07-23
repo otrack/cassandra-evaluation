@@ -215,9 +215,7 @@ run_ycsb() {
     fi
 
     local java_opts="-Dorg.slf4j.simpleLogger.defaultLogLevel=info"
-    if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
-        java_opts+=" -XX:+UnlockDiagnosticVMOptions -XX:CompileCommand=exclude,site/ycsb/db/TigaClient*.*"
-    else
+    if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
         java_opts+=" -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms"
     fi
 
