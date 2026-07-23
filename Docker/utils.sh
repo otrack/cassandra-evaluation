@@ -11,7 +11,12 @@ config() {
         exit -1
     fi
     local key=$1
-    cat ${CONFIG_FILE} | grep -E "^${key}=" | cut -d= -f2
+    local val
+    val=$(cat ${CONFIG_FILE} | grep -E "^${key}=" | cut -d= -f2)
+    if [ -z "$val" ] && [ "$key" == "nodesperdc" ]; then
+        val=1
+    fi
+    echo "$val"
 }
 
 debug() {
@@ -265,11 +270,16 @@ get_resource_limits() {
 }
 
 compute_test_machine() {
-    local node_count=$1
-    if [ -z "$node_count" ] || ! [[ "$node_count" =~ ^[0-9]+$ ]] || [ "$node_count" -le 0 ]; then
-        error "compute_test_machine: node_count must be a positive integer"
+    local num_dcs=$1
+    local nodes_per_dc=${2:-$(config nodesperdc)}
+    if [ -z "$num_dcs" ] || ! [[ "$num_dcs" =~ ^[0-9]+$ ]] || [ "$num_dcs" -le 0 ]; then
+        error "compute_test_machine: num_dcs must be a positive integer"
         return 1
     fi
+    if [ -z "$nodes_per_dc" ] || ! [[ "$nodes_per_dc" =~ ^[0-9]+$ ]] || [ "$nodes_per_dc" -le 0 ]; then
+        nodes_per_dc=1
+    fi
+    local total_nodes=$((num_dcs * nodes_per_dc))
 
     # Get actual machine CPUs
     local actual_cpus
@@ -287,10 +297,10 @@ compute_test_machine() {
         return 1
     fi
 
-    # Find the best spec s where actual_mem_gb <= s.g * node_count
+    # Find the best spec s where actual_mem_gb <= s.g * total_nodes
     # gcp.csv columns: $1=name, $2=vcpus, $3=memory(GB)
     local machine
-    machine=$(awk -F',' -v c="$actual_cpus" -v g="$actual_mem_gb" -v k="$node_count" '
+    machine=$(awk -F',' -v c="$actual_cpus" -v g="$actual_mem_gb" -v k="$total_nodes" '
         NR>1 && ($3+0)*k <= g+0 {
             if (best == "" || $2+0 >= best_c+0) {
                 best = $1
@@ -302,11 +312,11 @@ compute_test_machine() {
     ' "$gcp_csv")
 
     if [ -z "$machine" ]; then
-        error "No suitable machine spec found in gcp.csv for ${actual_cpus} CPUs and ${actual_mem_gb}GB memory with ${node_count} nodes"
+        error "No suitable machine spec found in gcp.csv for ${actual_cpus} CPUs and ${actual_mem_gb}GB memory with ${total_nodes} nodes (${num_dcs} DCs x ${nodes_per_dc} nodes/DC)"
         return 1
     fi
 
-    log "Test mode: machine spec '${machine}' for ${actual_cpus} CPUs, ${actual_mem_gb}GB memory, ${node_count} nodes"
+    log "Test mode: machine spec '${machine}' for ${actual_cpus} CPUs, ${actual_mem_gb}GB memory, ${total_nodes} total nodes (${num_dcs} DCs x ${nodes_per_dc} nodes/DC)"
     sed -i "s/^machine=.*/machine=${machine}/" "${CONFIG_FILE}"
     return 0
 }

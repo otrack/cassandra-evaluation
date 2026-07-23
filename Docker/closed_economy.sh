@@ -10,15 +10,17 @@ source ${DIR}/run_benchmarks.sh
 source ${DIR}/cassandra/cassandra_breakdown.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST]"
+    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST] [--nodesperdc=N]"
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --protocols=LIST Override the list of protocols to run (space-separated)."
+    echo "  --nodesperdc=N   Override number of nodes per DC (default from exp.config)."
 }
 
 dry_run=0
 test_run=0
 protocols_override=""
+nodesperdc_override=""
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
@@ -29,6 +31,12 @@ for arg in "$@"; do
             ;;
         --protocols=*)
             protocols_override="${arg#*=}"
+            ;;
+        --nodesperdc=*)
+            nodesperdc_override="${arg#*=}"
+            ;;
+        --nodes-per-dc=*)
+            nodesperdc_override="${arg#*=}"
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -51,18 +59,25 @@ node_counts="3 5 7"
 replication_factor=3
 records=$(config records)
 threads=50
-single_client_threads=1  # 1 thread/DC for tracing+breakdown; second set uses threads from config
+single_client_threads=1
 ops_per_thread=0
 
 original_machine=$(config machine)
 original_maxexecutiontime=$(config maxexecutiontime)
 original_fix_lh=$(config "cockroachdb.fix_lease_holder")
+original_nodesperdc=$(config "nodesperdc")
+
 restore_settings() {
     sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"
     sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
     sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=${original_fix_lh}/" "${CONFIG_FILE}"
+    sed -i "s/^nodesperdc=.*/nodesperdc=${original_nodesperdc}/" "${CONFIG_FILE}"
 }
 trap restore_settings EXIT
+
+if [ -n "$nodesperdc_override" ]; then
+    sed -i "s/^nodesperdc=.*/nodesperdc=${nodesperdc_override}/" "${CONFIG_FILE}"
+fi
 
 if [ "$test_run" -eq 1 ]; then
     sed -i "s/^maxexecutiontime=.*/maxexecutiontime=60/" "${CONFIG_FILE}"
@@ -72,16 +87,10 @@ maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
     pull_images
-    # Write CSV header for breakdown results
     echo "protocol,nodes,city,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/closed_economy/breakdown.csv
 
-    # ---- Phase 1: single-client runs (1 thread/DC) – tracing enabled, breakdown collected ----
     for p in ${protocols}
     do
-        # Set fix_lease_holder based on CockroachDB flavor:
-        #   cockroachdb-opt → lease holder pinned at geographically best location
-        #   cockroachdb-bad → lease holder pinned at geographically worst location
-        #   all others (accord) → default settings
         if [[ "$p" == "cockroachdb-opt" ]]; then
             sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
         elif [[ "$p" == "cockroachdb-bad" ]]; then
@@ -90,7 +99,6 @@ if [ "$dry_run" -eq 0 ]; then
             sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=false/" "${CONFIG_FILE}"
         fi
 
-        # clean prior logs
         rm -f ${LOGDIR}/closed_economy/*${p}*
         
         for nodes in ${node_counts}
@@ -101,23 +109,19 @@ if [ "$dry_run" -eq 0 ]; then
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/closed_economy/${p}_${nodes}_${workload}_${ts}.dat"
 
-	    # Enable tracing for CockroachDB (both flavors) so breakdown data can be collected
 	    tracing_opts=()
 	    if [[ "$p" == cockroachdb* ]]; then
 	        tracing_opts=("-p" "db.tracing=true")
 	    fi
 
-	    # Run benchmark without cluster cleanup so breakdown scripts can query the cluster
 	    run_benchmark ${p} ${single_client_threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((single_client_threads * ops_per_thread)) ${output_file} 1 0 "${tracing_opts[@]}" -p maxexecutiontime=${maxexecutiontime}
 
-	    # Collect city names for this node count
 	    cities_list=""
 	    for i in $(seq 1 ${nodes}); do
 	        loc=$(get_location $i ${DIR}/latencies.csv)
 	        cities_list="${cities_list} ${loc}"
 	    done
 
-	    # Compute performance breakdown and append to CSV
 	    if [[ "$p" == cockroachdb* ]]; then
 	        python3 ${DIR}/cockroachdb/cockroachdb_breakdown.py \
 	            ${p} ${LOGDIR}/closed_economy ${workload} ${nodes} ${cities_list} | \
@@ -127,12 +131,10 @@ if [ "$dry_run" -eq 0 ]; then
 	            awk -F',' -v n="${nodes}" '{print "accord," n "," $0}' >> ${RESULTSDIR}/closed_economy/breakdown.csv
 	    fi
 
-	    # Clean up cluster after breakdown is computed
 	    stop_benchmark ${p} ${nodes}
         done
     done
 
-    # ---- Phase 2: multi-client runs (default threads from exp.config) – no tracing, no breakdown ----
     mkdir -p ${LOGDIR}/closed_economy_multi
     for p in ${protocols}
     do
@@ -144,7 +146,6 @@ if [ "$dry_run" -eq 0 ]; then
             sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=false/" "${CONFIG_FILE}"
         fi
 
-        # clean prior multi-client logs for this protocol
         rm -f ${LOGDIR}/closed_economy_multi/*${p}*
 
         for nodes in ${node_counts}
@@ -155,7 +156,6 @@ if [ "$dry_run" -eq 0 ]; then
 	    ts=$(date +%Y%m%d%H%M%S%N)
 	    output_file="${LOGDIR}/closed_economy_multi/${p}_${nodes}_${workload}_${ts}.dat"
 
-	    # No tracing; run with default thread count and clean up automatically
 	    run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} 1 1 -p maxexecutiontime=${maxexecutiontime}
         done
     done

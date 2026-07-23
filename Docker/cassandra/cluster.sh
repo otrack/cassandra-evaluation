@@ -3,25 +3,30 @@
 CASSANDRA_DIR=$(dirname "${BASH_SOURCE[0]}")
 
 cassandra_start_cluster() {
-    local node_count=$1
+    local num_dcs=$1
     local protocol=$2
-    if printf '%s\n' "$protocol" | grep -wF -q -- "cassandra";
-    then
-	protocol=$(echo "${protocol}" | awk -F- '{print $2}')
+    local nodes_per_dc=${3:-$(config nodesperdc)}
+    if printf '%s\n' "$protocol" | grep -wF -q -- "cassandra"; then
+        protocol=$(echo "${protocol}" | awk -F- '{print $2}')
     fi
-    python3 ${CASSANDRA_DIR}/start_cassandra_data_centers.py "$node_count" "$protocol"
+    cassandra_cleanup_cluster >/dev/null 2>&1 || true
+    python3 ${CASSANDRA_DIR}/start_cassandra_data_centers.py "$num_dcs" "$protocol" "$nodes_per_dc"
     if [ $? -ne 0 ]; then
-        error "Failed to start Cassandra cluster with $node_count node(s)."
+        error "Failed to start Cassandra cluster with $num_dcs DC(s)."
         exit 1
     fi
 
-    for i in $(seq 1 $node_count); do
-	container_name=$(config "node_name")$i
-	log_file=${LOGDIR}/${protocol}_node${i}.log	
-	docker logs -f $container_name > ${log_file} 2>&1 &
+    local global_node_id=1
+    for i in $(seq 1 $num_dcs); do
+        local city=$(get_location $i ${DIR}/latencies.csv)
+        for k in $(seq 1 $nodes_per_dc); do
+            local container_name="${city}${k}"
+            local log_file=${LOGDIR}/${protocol}_node${global_node_id}.log
+            docker logs -f $container_name > ${log_file} 2>&1 &
+            global_node_id=$((global_node_id + 1))
+        done
     done
 }
-
 
 cassandra_add_node() {
     local mode=$1
@@ -42,31 +47,34 @@ cassandra_cleanup_cluster() {
 }
 
 cassandra_get_hosts() {
-    node_count=$1
-    ips=""
-    for i in $(seq 1 $node_count); do
-        container_name=$(config "node_name")${i}
-        ip=$(get_container_ip "$container_name")
-        if [ -n "$ip" ]; then
-            ips="$ips,$ip"
-        fi
+    local num_dcs=$1
+    local nodes_per_dc=${2:-$(config nodesperdc)}
+    local ips=""
+    for i in $(seq 1 $num_dcs); do
+        local city=$(get_location $i ${DIR}/latencies.csv)
+        for k in $(seq 1 $nodes_per_dc); do
+            local container_name="${city}${k}"
+            local ip=$(get_container_ip "$container_name")
+            if [ -n "$ip" ]; then
+                ips="$ips,$ip"
+            fi
+        done
     done
-    # Remove leading comma
     ips=${ips#,}
     echo "$ips"
 }
 
 cassandra_get_node_count() {
-    i=1
-    while true; do
-	container_name=$(config "node_name")${i}
-	ip=$(get_container_ip "$container_name")
-        if [ -z "$ip" ]; then
-            break # FIXME
+    local num_dcs=0
+    for i in $(seq 1 15); do
+        local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
+        [ -z "$city" ] && continue
+        local ip=$(get_container_ip "${city}1")
+        if [ -n "$ip" ]; then
+            num_dcs=$((num_dcs + 1))
         fi
-        i=$((i + 1))
     done
-    echo $((i - 1))
+    echo $num_dcs
 }
 
 cassandra_get_port() {
@@ -81,6 +89,6 @@ cassandra_get_dc() {
 }
 
 cassandra_get_leaders() {
-    # Cassandra has no single designated leader; use database-node3 by convention.
-    echo "$(config "node_name")3"
+    local first_city=$(get_location 1 ${DIR}/latencies.csv)
+    echo "${first_city}1"
 }

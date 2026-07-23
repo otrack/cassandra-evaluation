@@ -47,6 +47,7 @@ fi
 nodes=5
 if [ "$test_run" -eq 1 ]; then
     nodes=3
+    records=1000
 fi
 replication_factor=${nodes}
 cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""
@@ -56,6 +57,7 @@ threads=$(config threads)
 ops_per_thread=0
 
 if [ "$test_run" -eq 1 ]; then
+    records=1000
     original_machine=$(config machine)
     original_maxexecutiontime=$(config maxexecutiontime)
     restore_test_settings() {

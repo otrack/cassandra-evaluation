@@ -1,52 +1,47 @@
 #!/usr/bin/env bash
 
+# Helper scripts
 DIR=$(dirname "${BASH_SOURCE[0]}")
 
 source ${DIR}/utils.sh
+source ${DIR}/swiftpaxos/cluster.sh
 source ${DIR}/cassandra/cluster.sh
 source ${DIR}/cassandra/ycsb.sh
-source ${DIR}/swiftpaxos/cluster.sh
 source ${DIR}/cockroachdb/cluster.sh
 source ${DIR}/cockroachdb/ycsb.sh
 source ${DIR}/tiga/cluster.sh
 
 start_network() {
-    local network_name=$(config network_name)
-
-    if [ -z "$network_name" ]; then
-        error "network_name not set in config"
-        return 1
-    fi
-
-    if docker network inspect "$network_name" >/dev/null 2>&1; then
-        debug "Network '${network_name}' already exists."
+    local network_name=$(config "network_name")
+    
+    # Check if network already exists
+    if docker network inspect "${network_name}" >/dev/null 2>&1; then
+        log "Docker network '${network_name}' already exists."
         return 0
     fi
 
-    if docker network create --driver bridge "$network_name" >/dev/null 2>&1; then
-        debug "Created network '${network_name}'."
+    log "Creating Docker network '${network_name}'..."
+    if docker network create --driver bridge "${network_name}"; then
+        log "Docker network '${network_name}' created successfully."
         return 0
     else
-        error "Failed to create network '${network_name}'."
-        return 2
+        error "Failed to create Docker network '${network_name}'."
+        return 1
     fi
 }
 
 stop_network() {
-    local network_name=$(config network_name)
+    local network_name=$(config "network_name")
 
-    if [ -z "$network_name" ]; then
-        error "network_name not set in config"
-        return 1
-    fi
-
-    if ! docker network inspect "$network_name" >/dev/null 2>&1; then
-        debug "Network ${network_name} not found."
+    # Check if network exists
+    if ! docker network inspect "${network_name}" >/dev/null 2>&1; then
+        log "Docker network '${network_name}' does not exist, nothing to stop."
         return 0
     fi
 
-    if docker network rm "$network_name" >/dev/null 2>&1; then
-        debug "Removed network: ${network_name}"
+    log "Removing Docker network '${network_name}'..."
+    if docker network rm "${network_name}"; then
+        log "Docker network '${network_name}' removed successfully."
         return 0
     else
         error "Failed to remove network: ${network_name}"
@@ -55,8 +50,9 @@ stop_network() {
 }
 
 emulate_latency() {
-    local node_count=$1
-    python3 emulate_latency.py "$node_count"
+    local num_dcs=$1
+    local nodes_per_dc=${2:-$(config nodesperdc)}
+    python3 emulate_latency.py "$num_dcs" "$nodes_per_dc"
     if [ $? -ne 0 ]; then
         error "Failed to add latency emulation."
         exit 1
@@ -66,7 +62,6 @@ emulate_latency() {
 run_ycsb() {
     if [ $# -lt 13 ]; then
 	echo "Usage: $0 <action> <workload_type> <workload> <hosts> <port> <recordcount> <operation_count> <protocol> <replication_factor> <output_file> <threads> <container_name> <network_adapter> [extra_ycsb_options]"
-	echo "Example: $0 load site.ycsb.CoreWorkload a 127.0.0.1,127.0.0.2 8080 1 1 swiftpaxos-paxos 3 results.txt 100 ycsb database-node1"
 	exit 1
     fi
 
@@ -91,15 +86,12 @@ run_ycsb() {
     fi
 
     if [ "$action" == "load" ]; then
-        ycsb_threads=10 # FIXME needed w. CRDB (constraint violation), yet we want a load parallel phase.
+        ycsb_threads=10
     fi
     
-    # capture any extra arguments (13th onward) and prepare a safely quoted string
     shift 13
     local extra_opts=( "$@" )
 
-    # When loading, ignore maxexecutiontime and db.tracing so the load phase can always finish
-    # (tracing is too slow during loading and not needed)
     if [ "$action" == "load" ]; then
         local filtered_opts=()
         local i=0
@@ -115,7 +107,6 @@ run_ycsb() {
         extra_opts=("${filtered_opts[@]}")
     fi
 
-    # Ignore db.tracing for non-CockroachDB or Accord protocols
     if ! printf '%s\n' "$protocol" | grep -wF -q -e "cockroachdb" -e "accord"; then
         local filtered_opts=()
         local i=0
@@ -133,7 +124,6 @@ run_ycsb() {
     local extra_opts_str=""
     if [ ${#extra_opts[@]} -gt 0 ]; then
       for o in "${extra_opts[@]}"; do
-        # printf %q produces a shell-escaped representation; safe to append to the command string
         extra_opts_str+=" $(printf '%q' "$o")"
       done
     fi
@@ -148,29 +138,23 @@ run_ycsb() {
     then
 	if printf '%s\n' "$norm_protocol" | grep -wF -q -e "swiftpaxos" -e "tiga" -e "calvin" -e "detock" -e "janus";
 	then
-	    # nothing to do
 	    true
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
 	then
-	    cockroachdb_create_usertable 10 "$replication_factor" "$node_count" "$workload_type"
+	    cockroachdb_create_usertable 10 "$replication_factor" "${node_count:-3}" "$workload_type"
 	else
-	    # Determine transaction mode
 	    local transaction_mode="bruh"
 	    if [ "$protocol" == "accord" ]; then 
 		transaction_mode="full"
 	    fi
-
-	    # Create the keyspace if it doesn't exist
-	    cassandra_create_keyspace 3600 "$node_count" "$replication_factor"
-
-	    # Create the usertable if it doesn't exist
-	    cassandra_create_usertable 3600 "$transaction_mode" "$node_count" "$workload_type"
+	    cassandra_create_keyspace 3600 "${node_count:-3}" "$replication_factor"
+	    cassandra_create_usertable 3600 "$transaction_mode" "${node_count:-3}" "$workload_type"
 	fi
     fi
 
     local ycsb_image=$(config ycsb_image)
-    
     local ycsb_client="swiftpaxos"
+
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos";
     then       
 	local leaderless="false"
@@ -191,8 +175,6 @@ run_ycsb() {
 -p fast=${fast}"
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
     then
-	# CockroachDB using JDBC (PostgreSQL wire protocol)
-	# Empty password is intentional - CockroachDB runs in insecure mode for testing
 	ycsb_client="jdbc"
 	local primary_host
 	primary_host=$(get_container_ip ${nearby_database})
@@ -212,7 +194,6 @@ run_ycsb() {
 	ycsb_client="tiga"
 	extra_opts_str+=" -p tiga.config=/ycsb/config-ycsb.yml -p tiga.mode=${norm_protocol}"
     else
-	# cassandra
 	ycsb_client="cassandra-cql"
 	local consistency_level="ONE"
 	if printf '%s\n' "$protocol" | grep -wF -q -- "cassandra";
@@ -232,7 +213,6 @@ run_ycsb() {
 -p cassandra.readconsistencylevel=$consistency_level"
     fi
 
-    # adjust debug levels below
     local java_opts="-Dorg.slf4j.simpleLogger.defaultLogLevel=info"
     if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
         java_opts+=" -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms"
@@ -259,13 +239,11 @@ YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldl
 
 run_benchmark() {    
     if [ $# -lt 11 ]; then
-	echo "Usage: $0 <protocol> <number_of_threads> <node_count> <replication_factor> <workload_type> <workload> <record_count> <operation_count> <output_file> <do_create_and_load> <do_clean_up>"
-	echo "Example: $0 ONE 10 3 site.ycsb.workloads.CoreWorkload a 1 1 1 1"
+	echo "Usage: $0 <protocol> <number_of_threads> <node_count> <replication_factor> <workload_type> <workload> <record_count> <operation_count> <output_file> <do_create_and_load> <do_clean_up> [EXTRA_YCSB_OPTS...]"
 	exit 1
     fi
 
     init_logdir
-
     log "run_benchmark using args: $@"
     
     protocol=$1
@@ -279,10 +257,10 @@ run_benchmark() {
     output_file=$9
     do_create_and_load=${10}
     do_clean_up=${11}
+    nodes_per_dc=$(config nodesperdc)
 
     if [ $# -gt 11 ]; then
 	EXTRA_YCSB_OPTS=( "${@:12}" )
-	echo "EXTRA_YCSB_OPTS: "${EXTRA_YCSB_OPTS[@]}
     else
 	EXTRA_YCSB_OPTS=()
     fi
@@ -296,68 +274,62 @@ run_benchmark() {
 	pref=tiga
     fi   
 
-    log "Running ${workload_type} ${workload^^} for ${node_count} node(s)..."
+    log "Running ${workload_type} ${workload^^} for ${node_count} DC(s) with ${nodes_per_dc} node(s)/DC..."
 
-    # Create cluster and load YCSB (if needed)    
     if [ $do_create_and_load == "1" ];
     then	
-	log "Starting ${protocol} deployment with ${node_count} node(s)..."
+	log "Starting ${protocol} deployment with ${node_count} DC(s)..."
 	start_network
-	${pref}_start_cluster "${node_count}" "$protocol"
+	${pref}_start_cluster "${node_count}" "$protocol" "${nodes_per_dc}"
 
-	node_count=$(${pref}_get_node_count)
-	hosts=$(${pref}_get_hosts "${node_count}")
+	num_dcs=$(${pref}_get_node_count)
+	hosts=$(${pref}_get_hosts "${num_dcs}" "${nodes_per_dc}")
 	port=$(${pref}_get_port)
 
-	debug "node_count:${node_count}"
-	debug "hosts:${hosts}"
-	debug "port:${port}"
-
 	if [ -z "$hosts" ]; then
-		echo "Failed to retrieve the IP addresses."
+		echo "Failed to retrieve IP addresses."
 		exit 1
 	fi
 
-	nearby_database=$(config "node_name")1
+	first_city=$(get_location 1 ${DIR}/latencies.csv)
+	nearby_database="${first_city}1"
 	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}.load" "$nthreads" "ycsb" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
 	wait_container "ycsb"
 
-	log "Emulating latency for ${node_count} node(s)..."
-	emulate_latency "${node_count}"    
+	log "Emulating latency for ${num_dcs} DC(s) with ${nodes_per_dc} node(s)/DC..."
+	emulate_latency "${num_dcs}" "${nodes_per_dc}"
     fi
 
-    node_count=$(${pref}_get_node_count)
-    hosts=$(${pref}_get_hosts "${node_count}")
+    num_dcs=$(${pref}_get_node_count)
+    hosts=$(${pref}_get_hosts "${num_dcs}" "${nodes_per_dc}")
     port=$(${pref}_get_port)
 
     if [ -z "$hosts" ]; then
-        echo "Failed to retrieve the IP addresses."
+        echo "Failed to retrieve IP addresses."
         exit 1
     fi
 
-    for i in $(seq 1 1 ${node_count});
+    for i in $(seq 1 1 ${num_dcs});
     do
-	nearby_database=$(config "node_name")$i
-	location=$(get_location $i ${DIR}/latencies.csv)
-	log ${location}
+        location=$(get_location $i ${DIR}/latencies.csv)
+        nearby_database="${location}1"
+        log ${location}
 
-	# FIXME move this elsewhere
-	EXTRA_YCSB_OPTS2=("${EXTRA_YCSB_OPTS[@]}")
-	if [ "${workload_type}" == "site.ycsb.workloads.ConflictWorkload" ]; 
-	then
-	    EXTRA_YCSB_OPTS2+=("-p")
-	    EXTRA_YCSB_OPTS2+=("conflict.shift=$(( (record_count / node_count) * (i - 1) ))")
-	fi
+        EXTRA_YCSB_OPTS2=("${EXTRA_YCSB_OPTS[@]}")
+        if [ "${workload_type}" == "site.ycsb.workloads.ConflictWorkload" ]; 
+        then
+            EXTRA_YCSB_OPTS2+=("-p")
+            EXTRA_YCSB_OPTS2+=("conflict.shift=$(( (record_count / num_dcs) * (i - 1) ))")
+        fi
 
-	run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}"
+        run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}"
     done
     
-    for i in $(seq 1 1 ${node_count});
+    for i in $(seq 1 1 ${num_dcs});
     do
-	wait_container "ycsb-${i}"
+        wait_container "ycsb-${i}"
     done
 
-    # Compute special execution path ratios
     local fast_path_script="${DIR}/${pref}/${pref}_fast_path.sh"
 
     local fast_ratio_sum=0
@@ -366,48 +338,47 @@ run_benchmark() {
     local ephemeral_ratio_sum=0
     local ratio_count=0
 
-    for i in $(seq 1 1 ${node_count}); do
-	container_name=$(config "node_name")$i
-	fp_output=$("${fast_path_script}" "${container_name}" 2>/dev/null) || true
+    for i in $(seq 1 1 ${num_dcs}); do
+        location=$(get_location $i ${DIR}/latencies.csv)
+        container_name="${location}1"
+        fp_output=$("${fast_path_script}" "${container_name}" 2>/dev/null) || true
 
-	fp_fast=$(echo "$fp_output" | grep "^Fast ratio:" | awk '{print $3}')
-	fp_medium=$(echo "$fp_output" | grep "^Medium ratio:" | awk '{print $3}')
-	fp_slow=$(echo "$fp_output" | grep "^Slow ratio:" | awk '{print $3}')
-	fp_ephemeral=$(echo "$fp_output" | grep "^Ephemeral ratio:" | awk '{print $3}')
+        fp_fast=$(echo "$fp_output" | grep "^Fast ratio:" | awk '{print $3}')
+        fp_medium=$(echo "$fp_output" | grep "^Medium ratio:" | awk '{print $3}')
+        fp_slow=$(echo "$fp_output" | grep "^Slow ratio:" | awk '{print $3}')
+        fp_ephemeral=$(echo "$fp_output" | grep "^Ephemeral ratio:" | awk '{print $3}')
 
-	fp_fast=${fp_fast:-0}
-	fp_medium=${fp_medium:-0}
-	fp_slow=${fp_slow:-0}
-	fp_ephemeral=${fp_ephemeral:-0}
+        fp_fast=${fp_fast:-0}
+        fp_medium=${fp_medium:-0}
+        fp_slow=${fp_slow:-0}
+        fp_ephemeral=${fp_ephemeral:-0}
 
-	fast_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${fast_ratio_sum} + ${fp_fast}}")
-	medium_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${medium_ratio_sum} + ${fp_medium}}")
-	slow_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${slow_ratio_sum} + ${fp_slow}}")
-	ephemeral_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${ephemeral_ratio_sum} + ${fp_ephemeral}}")
-	ratio_count=$((ratio_count + 1))
+        fast_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${fast_ratio_sum} + ${fp_fast}}")
+        medium_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${medium_ratio_sum} + ${fp_medium}}")
+        slow_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${slow_ratio_sum} + ${fp_slow}}")
+        ephemeral_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${ephemeral_ratio_sum} + ${fp_ephemeral}}")
+        ratio_count=$((ratio_count + 1))
     done
 
     if [ $ratio_count -gt 0 ]; then
-	{
-	    echo "Fast ratio: $(awk "BEGIN {printf \"%.4f\", ${fast_ratio_sum} / ${ratio_count}}")"
-	    echo "Medium ratio: $(awk "BEGIN {printf \"%.4f\", ${medium_ratio_sum} / ${ratio_count}}")"
-	    echo "Slow ratio: $(awk "BEGIN {printf \"%.4f\", ${slow_ratio_sum} / ${ratio_count}}")"
-	    echo "Ephemeral ratio: $(awk "BEGIN {printf \"%.4f\", ${ephemeral_ratio_sum} / ${ratio_count}}")"
-	} > "${output_file%.dat}_fast_path_ratio.dat"
+        {
+            echo "Fast ratio: $(awk "BEGIN {printf \"%.4f\", ${fast_ratio_sum} / ${ratio_count}}")"
+            echo "Medium ratio: $(awk "BEGIN {printf \"%.4f\", ${medium_ratio_sum} / ${ratio_count}}")"
+            echo "Slow ratio: $(awk "BEGIN {printf \"%.4f\", ${slow_ratio_sum} / ${ratio_count}}")"
+            echo "Ephemeral ratio: $(awk "BEGIN {printf \"%.4f\", ${ephemeral_ratio_sum} / ${ratio_count}}")"
+        } > "${output_file%.dat}_fast_path_ratio.dat"
     fi
 
     if [ $do_clean_up == "1" ];
     then
-        ${pref}_cleanup_cluster ${node_count}
-	stop_network
+        ${pref}_cleanup_cluster ${num_dcs}
+        stop_network
     fi
 }
 
 stop_benchmark() {
-
     if [ $# -lt 2 ]; then
 	echo "Usage: $0 <protocol> <node_count>"
-	echo "Example: $0 swiftpaxos-paxos 3"
 	exit 1
     fi
 
@@ -425,5 +396,4 @@ stop_benchmark() {
     
     ${pref}_cleanup_cluster ${node_count}
     stop_network
-    
 }

@@ -2,45 +2,36 @@
 
 COCKROACHDB_YCSB_DIR=$(dirname "${BASH_SOURCE[0]}")
 
-# Function to create the usertable in CockroachDB
-# Usage: cockroachdb_create_usertable <num_fields> <replication_factor>
 cockroachdb_create_usertable() {
     local num_fields="$1"
     local replication_factor="$2"
-    local node_count="$3"
+    local num_dcs="$3"
     local workload="$4"
 
-    if [[ -z "$num_fields" || -z "$replication_factor" ]]; then
-        error "Usage: cockroachdb_create_usertable <num_fields> <replication_factor>"
-        exit 1
-    fi
-    if ! [[ "$num_fields" =~ ^[0-9]+$ ]] || (( num_fields < 0 )); then
-        error "num_fields must be a non-negative integer (got: $num_fields)"
-        exit 1
-    fi
-    if ! [[ "$replication_factor" =~ ^[0-9]+$ ]] || (( replication_factor < 1 )); then
-        error "replication_factor must be a positive integer (got: $replication_factor)"
+    if [[ -z "$num_fields" ]]; then
+        error "Usage: cockroachdb_create_usertable <num_fields> <replication_factor> <num_dcs> <workload>"
         exit 1
     fi
 
-    local container
-    container="$(config "node_name")1"
+    local first_city=$(get_location 1 ${DIR}/latencies.csv)
+    local container="${first_city}1"
+
+    # Set replication factor to num_dcs so each DC gets 1 replica
+    local target_replicas=${num_dcs:-3}
 
     local create_table_command=""
-    local zonecfg_command="ALTER TABLE usertable CONFIGURE ZONE USING num_replicas = ${replication_factor};"
+    local zonecfg_command="ALTER TABLE usertable CONFIGURE ZONE USING num_replicas = ${target_replicas};"
     if [ "$workload" == "site.ycsb.workloads.ClosedEconomyWorkload" ]; then
-	create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY, FIELD0 INT);"	
+        create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY, FIELD0 INT);"	
     else 	
-	# Build the FIELD0..FIELD{N-1} column list dynamically.
-	local fields_sql=""
-	local i
-	for (( i=0; i<num_fields; i++ )); do
+        local fields_sql=""
+        local i
+        for (( i=0; i<num_fields; i++ )); do
             fields_sql+=", FIELD${i} TEXT"
-	done
-	create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY${fields_sql});"
+        done
+        create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY${fields_sql});"
     fi
 
-    # Create table, then set per-table replication factor via zone config.
     docker exec "${container}" cockroach sql --insecure -e "${create_table_command}"
     if [ $? -ne 0 ]; then
         error "Error creating table."
@@ -49,26 +40,23 @@ cockroachdb_create_usertable() {
 
     docker exec "${container}" cockroach sql --insecure -e "${zonecfg_command}"
     if [ $? -eq 0 ]; then
-        debug "Table 'usertable' created or already exists; zone config set (num_replicas=${replication_factor})."
+        debug "Table 'usertable' created or already exists; zone config set (num_replicas=${target_replicas})."
     else
-        error "Error setting zone config (num_replicas=${replication_factor})."
+        error "Error setting zone config (num_replicas=${target_replicas})."
         exit 1
     fi
 
-    # Optionally pin the lease holder to the geographically best (true) or
-    # worst (bad) location.  It is in charge of _all_ the ranges.
     local fix_lh
     fix_lh=$(config "cockroachdb.fix_lease_holder")
     if [ "${fix_lh}" = "true" ]; then
-        cockroachdb_fix_lease_holder "${node_count}" true
+        cockroachdb_fix_lease_holder "${num_dcs}" true
     elif [ "${fix_lh}" = "bad" ]; then
-        cockroachdb_fix_lease_holder "${node_count}" false
+        cockroachdb_fix_lease_holder "${num_dcs}" false
     fi
 
-    # change range size if not the default one
     local range_max_bytes=$(config "cockroachdb.range_max_bytes")
     if [ ${range_max_bytes} -ne 536870912 ]; then
-	local shard_command="ALTER TABLE usertable CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = ${range_max_bytes};"
-	docker exec "${container}" cockroach sql --insecure -e "${shard_command}"
+        local shard_command="ALTER TABLE usertable CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = ${range_max_bytes};"
+        docker exec "${container}" cockroach sql --insecure -e "${shard_command}"
     fi
 }

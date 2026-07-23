@@ -3,12 +3,13 @@
 TIGA_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
 
 tiga_start_cluster() {
-    if [ $# -ne 2 ]; then
-        echo "usage: node_count protocol"
+    if [ $# -lt 2 ]; then
+        echo "usage: node_count protocol [nodes_per_dc]"
         exit -1
     fi
-    local node_count=$1
+    local num_dcs=$1
     local protocol=$2
+    local nodes_per_dc=${3:-$(config nodesperdc)}
 
     if [[ "$protocol" == tiga-* ]]; then
         protocol="${protocol#tiga-}"
@@ -16,96 +17,135 @@ tiga_start_cluster() {
 
     local image=$(config tiga_image)
     local resource_limits=$(get_resource_limits)
+    tiga_cleanup_cluster >/dev/null 2>&1 || true
 
     # 1. Generate config-ycsb.yml dynamically using python
     python3 -c "
-import sys, yaml, os
-node_count = int(sys.argv[1])
-node_name_prefix = sys.argv[2]
+import sys, yaml, os, csv
+num_dcs = int(sys.argv[1])
+nodes_per_dc = int(sys.argv[2])
 tiga_dir = sys.argv[3]
+latencies_csv = sys.argv[4]
+
+locations = []
+with open(latencies_csv, newline='') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        locations.append(row['loc'].strip().strip('\"'))
+        if len(locations) >= num_dcs:
+            break
+
 base_config_path = os.path.join(tiga_dir, 'config-ycsb.yml')
 if not os.path.exists(base_config_path):
     base_config_path = os.path.abspath(os.path.join(tiga_dir, '../../../Tiga/config-ycsb.yml'))
 with open(base_config_path, 'r') as f:
     config = yaml.safe_load(f)
-servers = []
+
+shards = []
 host_map = {}
 process_map = {}
 initial_bounds = []
 bound_caps = []
-designate_replica = []
-for i in range(1, node_count + 1):
-    server_name = f'janus-lan-server-{(i-1)*100:04d}'
-    port = i * 10000
-    servers.append(f'{server_name}:{port}')
-    container_name = f'{node_name_prefix}{i}'
-    host_map[server_name] = container_name
-    process_map[server_name] = server_name
-    initial_bounds.append(100)
-    bound_caps.append(400000)
-    designate_replica.append(i - 1)
+
+for j in range(nodes_per_dc):
+    shard_servers = []
+    for i in range(num_dcs):
+        server_name = f'janus-lan-server-{i*100 + j:04d}'
+        port = 10000 + j
+        shard_servers.append(f'{server_name}:{port}')
+        city = locations[i]
+        container_name = f'{city}{j+1}'
+        host_map[server_name] = container_name
+        process_map[server_name] = server_name
+        initial_bounds.append(100)
+        bound_caps.append(400000)
+    shards.append(shard_servers)
+
+designate_replica = list(range(num_dcs))
+
 proxy_name = 'janus-lan-proxy-0000'
 host_map[proxy_name] = 'localhost'
 process_map[proxy_name] = proxy_name
-config['site']['server'] = [servers]
+
+config['site']['server'] = shards
 config['host'] = host_map
 config['process'] = process_map
 config['server_initial_bound'] = initial_bounds
 config['server_bound_cap'] = bound_caps
 config['designate_replica_id'] = designate_replica
 config['preventive'] = True
+
 with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
     yaml.dump(config, f, default_flow_style=False)
-" "$node_count" "$(config "node_name")" "${TIGA_DIR}"
+" "$num_dcs" "$nodes_per_dc" "${TIGA_DIR}" "${DIR}/latencies.csv"
 
-    log "Generated dynamic config file in ${TIGA_DIR}/config-ycsb.yml"
+    log "Generated dynamic config file in ${TIGA_DIR}/config-ycsb.yml for ${num_dcs} DCs x ${nodes_per_dc} nodes/DC"
 
     # 2. Start replica containers
-    for i in $(seq 1 $node_count); do
-        local server_name=$(printf "janus-lan-server-%04d" $(( (i-1) * 100 )))
-        local container_name=$(config "node_name")$i
+    local global_node_id=1
+    for i in $(seq 1 $num_dcs); do
+        local city=$(get_location $i ${DIR}/latencies.csv)
+        for k in $(seq 1 $nodes_per_dc); do
+            local server_name=$(printf "janus-lan-server-%04d" $(( (i-1) * 100 + (k-1) )))
+            local container_name="${city}${k}"
 
-        start_container ${image} ${container_name} "started on" ${LOGDIR}/${protocol}_node${i}.log \
-            --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
-            -v ${TIGA_DIR}/config-ycsb.yml:/app/config/config-ycsb.yml \
-            -e PROTOCOL=${protocol} \
-            -e SERVER_NAME=${server_name} \
-            -e CONFIG_PATH=/app/config/config-ycsb.yml || {
-            error "Failed to start tiga/calvin/detock/janus server $i"
-            return 2
-        }
+            start_container ${image} ${container_name} "started on" ${LOGDIR}/${protocol}_node${global_node_id}.log \
+                --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
+                -v ${TIGA_DIR}/config-ycsb.yml:/app/config/config-ycsb.yml \
+                -e PROTOCOL=${protocol} \
+                -e SERVER_NAME=${server_name} \
+                -e CONFIG_PATH=/app/config/config-ycsb.yml || {
+                error "Failed to start tiga/calvin/detock/janus server ${container_name}"
+                return 2
+            }
+            global_node_id=$((global_node_id + 1))
+        done
     done
 }
 
 tiga_cleanup_cluster() {
     log "Cleaning up Tiga cluster..."
-    local node_count=$(tiga_get_node_count)
-    for i in $(seq 1 $node_count); do
-        local container_name=$(config "node_name")$i
-        stop_container ${container_name} || {
-            error "Failed to stop server $i"
-            return 2
-        }
+    local num_dcs=$(config node_count 2>/dev/null || echo 5)
+    local nodes_per_dc=$(config nodesperdc)
+    for i in $(seq 1 15); do
+        local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
+        [ -z "$city" ] && continue
+        for k in $(seq 1 8); do
+            local container_name="${city}${k}"
+            docker stop ${container_name} >/dev/null 2>&1 || true
+        done
     done
 }
 
 tiga_get_hosts() {
-    local node_count=$1
-    container_name="$(config "node_name")1"
-    echo $(get_container_ip "$container_name")
+    local num_dcs=$1
+    local nodes_per_dc=${2:-$(config nodesperdc)}
+    local ips=""
+    for i in $(seq 1 $num_dcs); do
+        local city=$(get_location $i ${DIR}/latencies.csv)
+        for k in $(seq 1 $nodes_per_dc); do
+            local container_name="${city}${k}"
+            local ip=$(get_container_ip "$container_name")
+            if [ -n "$ip" ]; then
+                ips="$ips,$ip"
+            fi
+        done
+    done
+    ips=${ips#,}
+    echo "$ips"
 }
 
 tiga_get_node_count() {
-    i=1
-    while true; do
-        container_name=$(config "node_name")$i
-        ip=$(get_container_ip "$container_name")
-        if [ -z "$ip" ]; then
-            break
+    local num_dcs=0
+    for i in $(seq 1 15); do
+        local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
+        [ -z "$city" ] && continue
+        local ip=$(get_container_ip "${city}1")
+        if [ -n "$ip" ]; then
+            num_dcs=$((num_dcs + 1))
         fi
-        i=$((i + 1))
     done
-    echo $((i - 1))
+    echo $num_dcs
 }
 
 tiga_get_port() {

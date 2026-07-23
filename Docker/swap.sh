@@ -13,15 +13,17 @@ source ${DIR}/run_benchmarks.sh
 source ${DIR}/cassandra/cassandra_breakdown.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST]"
+    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST] [--nodesperdc=N]"
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --protocols=LIST Override the list of protocols to run (space-separated)."
+    echo "  --nodesperdc=N   Override number of nodes per DC (default from exp.config)."
 }
 
 dry_run=0
 test_run=0
 protocols_override=""
+nodesperdc_override=""
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
@@ -32,6 +34,12 @@ for arg in "$@"; do
             ;;
         --protocols=*)
             protocols_override="${arg#*=}"
+            ;;
+        --nodesperdc=*)
+            nodesperdc_override="${arg#*=}"
+            ;;
+        --nodes-per-dc=*)
+            nodesperdc_override="${arg#*=}"
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -45,27 +53,34 @@ mkdir -p ${LOGDIR}/swap
 mkdir -p ${RESULTSDIR}/swap
 
 workload_type="site.ycsb.workloads.SwapWorkload"
-workload="sw" # workloads/workloadsw
-protocols="accord cockroachdb" # only backends that support transactions
+workload="sw"
+protocols="accord cockroachdb"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
 nodes=7
 replication_factor=3
 records=$(config records)
-client_counts="1 50"       # thread counts per DC to evaluate
-# ops_per_thread=0 means operationcount=0 (unlimited); run duration is controlled by maxexecutiontime
+client_counts="1 50"
 ops_per_thread=0
 s_values=$(seq 3 8)
 
+original_machine=$(config machine)
+original_maxexecutiontime=$(config maxexecutiontime)
+original_nodesperdc=$(config "nodesperdc")
+
+restore_test_settings() {
+    sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"
+    sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
+    sed -i "s/^nodesperdc=.*/nodesperdc=${original_nodesperdc}/" "${CONFIG_FILE}"
+}
+trap restore_test_settings EXIT
+
+if [ -n "$nodesperdc_override" ]; then
+    sed -i "s/^nodesperdc=.*/nodesperdc=${nodesperdc_override}/" "${CONFIG_FILE}"
+fi
+
 if [ "$test_run" -eq 1 ]; then
-    original_machine=$(config machine)
-    original_maxexecutiontime=$(config maxexecutiontime)
-    restore_test_settings() {
-        sed -i "s/^machine=.*/machine=${original_machine}/" "${CONFIG_FILE}"
-        sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
-    }
-    trap restore_test_settings EXIT
     compute_test_machine "${nodes}"
     sed -i "s/^maxexecutiontime=.*/maxexecutiontime=60/" "${CONFIG_FILE}"
 fi
@@ -73,35 +88,26 @@ maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
     pull_images
-    # Write CSV header for breakdown results (clients column added after S)
     echo "protocol,S,clients,city,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/swap/breakdown.csv
 
-    # Compute cities list once (nodes is fixed)
     cities_list=""
     for i in $(seq 1 ${nodes}); do
         loc=$(get_location $i ${DIR}/latencies.csv)
         cities_list="${cities_list} ${loc}"
     done
 
-    # Unified loop over client counts and protocols.
-    # Tracing is enabled in every run so a breakdown can always be collected.
-    # Accord must be stopped between client counts because its internal metrics
-    # are cumulative and are not reset during the lifetime of a server.
     for p in ${protocols}
     do
-        # clean prior logs for this protocol
         rm -f ${LOGDIR}/swap/*${p}*
 	
 	for clients in ${client_counts}
 	do
-	    
             do_create_and_load=1
             for s in ${s_values}
             do
                 ts=$(date +%Y%m%d%H%M%S%N)
                 output_file="${LOGDIR}/swap/${p}_${nodes}_${workload}_${ts}.dat"
 
-                # Always enable tracing so breakdown data can be collected
                 tracing_opts=()
                 if [[ "$p" == cockroachdb* ]]; then
                     tracing_opts=("-p" "db.tracing=true")
@@ -109,7 +115,6 @@ if [ "$dry_run" -eq 0 ]; then
 
                 run_benchmark ${p} ${clients} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((clients * ops_per_thread)) ${output_file} ${do_create_and_load} 0 "${tracing_opts[@]}" -p swap.s=${s} -p maxexecutiontime=${maxexecutiontime}
 
-                # Compute performance breakdown for this (clients, S) value
                 if [[ "$p" == cockroachdb* ]]; then
                     tmp_logdir=$(mktemp -d)
                     for i in $(seq 1 ${nodes}); do
@@ -131,9 +136,6 @@ if [ "$dry_run" -eq 0 ]; then
                 do_create_and_load=0
             done
 
-            # Stop the cluster after all S values for this (clients, protocol) combination.
-            # This is required for Accord to reset its internal metrics before the next
-            # client-count iteration; the cluster is restarted via do_create_and_load=1 above.
             stop_benchmark ${p} ${nodes}
         done
     done

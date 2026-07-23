@@ -857,3 +857,14 @@ for every other DC', draw a light dashed line from DC to DC' with the ping laten
 The ping latency is in milliseconds (ms).
 It is computable using the haverstine function and the distance between the two DCs since we know their geographical coordinates.
 Such a code is done in Python for the sake of running the experiment in Docker/emulate_latency.py.
+
+# 23.07.16 Agent
+
+Because sharding is physical in Tiga, we need to drastically change our evaluation scripts to permit having a variable number of machines per DC. Propose me a battle plan to implement this elegantly knowing that I want the following: 
+- exp.config now includes a nodesperdc=X parameter, with 1 as default value.
+- Within a DC, the latency between the nodes is negligeable so there are no tc rules. Actually, all containers simply share the same network interfacce.
+- There is still a single client per DC (as presently).
+- For all databases, the name of a node changes from "city" to "cityK", where K is between 1..M and M is the number of nodes per DC.
+- To make the comparison fair, each DC must fully replicate all data. Because CockroachDB and Cassandra use logical sharding, this implies that we must adjust the way data is replicated. For instance, with Cassandra, DC nodes are located in different racks. The replication strategy is also adjusted from a total number of replicas within the system (current) to a single replica per DC. The same applies although differently to CockroachDB.
+- For Tiga, the nodesperdc parameter defines the number of shards per DC.
+- All the experimental scripts that use a (transactional) multi-objects workload, that is closed_economy.sh and swap.sh, offers a new parameter to override the default number of nodes per DC.

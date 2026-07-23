@@ -2,19 +2,16 @@ import docker, sys, time, math, re, csv, os
 from datetime import datetime
 
 def debug(msg):
-    if config["debug"]:
+    if config.get("debug", 1):
         timestamp = datetime.now().strftime("%s:%f")
         print(f"[{timestamp}] \033[32m{msg}\033[0m")
 
 def read_locations(file_path):
-    """
-    Read lat, lon, and loc from the CSV file.
-    """
     locations = []
     with open(file_path, 'r') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            locations.append((float(row['lat']), float(row['lon']), row['loc']))
+            locations.append((float(row['lat']), float(row['lon']), row['loc'].strip().strip('"')))
     return locations
         
 def wait_for_log(container, log_pattern, timeout=300):
@@ -29,14 +26,13 @@ def wait_for_log(container, log_pattern, timeout=300):
             return False
     return False
 
-def create_cassandra_cluster(num_nodes, cassandra_image):
+def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     client = docker.from_env()
     network_name = config["network_name"]
 
-    # Determine resource limits from gcp.csv if machine type is specified
     nano_cpus = None
     mem_limit = None
-    cassandra_xmx = "4g"  # default fallback
+    cassandra_xmx = "4g"
     machine = config.get("machine", "")
     ephemeral_read_enabled = config.get("accord.ephemeral_read_enabled", "true")
     if machine:
@@ -47,90 +43,95 @@ def create_cassandra_cluster(num_nodes, cassandra_image):
                     if gcp_row['name'] == machine:
                         nano_cpus = int(float(gcp_row['vcpus']) * 1e9)
                         memory_gb = float(gcp_row['memory'])
-                        mem_limit = int(memory_gb * 1024 * 1024 * 1024 * 4/5) # need some headroom
+                        mem_limit = int(memory_gb * 1024 * 1024 * 1024 * 4/5)
                         cassandra_xmx = f"{math.floor(memory_gb)}g"
                         break
         except FileNotFoundError:
             debug(f"gcp.csv not found, no resource limits applied for machine '{machine}'")
     
-    # Start the Cassandra nodes
     containers = []
     log_pattern = r"Startup complete"
-    for i in range(1, num_nodes+1):
-        container_name = f'{config["node_name"]}{i}'
-        _, _, dc_name = locations[i-1]
-        try:
-            run_kwargs = dict(
-                image=cassandra_image,
-                name=container_name,
-                network=network_name,
-                auto_remove=True,
-                security_opt=[
-                "seccomp=unconfined",
-                "apparmor=unconfined",
-                "label=disable",
-                ],
-                log_config=docker.types.LogConfig(
-                    type="json-file",
-                    config={
-                        "max-size": "10m",  # Max size per log file (e.g. 10MB)
-                        "max-file": "3"     # Max number of rotated log files to keep
-                    }),
-                tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
-                ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
-                environment={
-                    "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx+" -XX:ActiveProcessorCount="+gcp_row['vcpus'],
-                    "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
-                    "CASSANDRA_SEEDS": f'{config["node_name"]}1' if i > 1 else "",
-                    "CASSANDRA_CLUSTER_NAME": "TestCluster",
-                    "CASSANDRA_DC": dc_name,
-                    "CASSANDRA_RACK": "RAC1",
-                    "CASSANDRA_EPHEMERAL_READ_ENABLED": ephemeral_read_enabled
-                },
-                cap_add=["NET_ADMIN"],  # Add NET_ADMIN capability,
-                ports={ '9042/tcp': ('127.0.0.1', (3333+i)), '5005/tcp': ('127.0.0.1', (5005+i)) },
-                detach=True
-            )
-            if nano_cpus is not None:
-                run_kwargs['nano_cpus'] = nano_cpus
-            if mem_limit is not None:
-                run_kwargs['mem_limit'] = mem_limit
-            container = client.containers.run(**run_kwargs)
-            containers.append(container)            
-            debug(f"Starting container '{container_name}' in data center '{dc_name}'.")
-            if not wait_for_log(container, log_pattern):
-                debug(f"Failed to start container '{container_name}' within the timeout period.")
-                exit(-1)
-        except docker.errors.APIError as e:
-            debug(f"Error starting container '{container_name}': {e}")
+    seed_container = f"{locations[0][2]}1"
 
-    debug(f"Started {num_nodes} Cassandra nodes.")
-    
+    port_offset = 0
+    for i in range(1, num_dcs + 1):
+        _, _, dc_name = locations[i-1]
+        for k in range(1, nodes_per_dc + 1):
+            container_name = f"{dc_name}{k}"
+            is_first_node = (i == 1 and k == 1)
+            port_offset += 1
+            try:
+                run_kwargs = dict(
+                    image=cassandra_image,
+                    name=container_name,
+                    network=network_name,
+                    auto_remove=True,
+                    security_opt=[
+                        "seccomp=unconfined",
+                        "apparmor=unconfined",
+                        "label=disable",
+                    ],
+                    log_config=docker.types.LogConfig(
+                        type="json-file",
+                        config={
+                            "max-size": "10m",
+                            "max-file": "3"
+                        }),
+                    tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
+                    ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
+                    environment={
+                        "JVM_OPTS" : " -Xms2g -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else ""),
+                        "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
+                        "CASSANDRA_SEEDS": "" if is_first_node else seed_container,
+                        "CASSANDRA_CLUSTER_NAME": "TestCluster",
+                        "CASSANDRA_DC": dc_name,
+                        "CASSANDRA_RACK": f"RAC{k}",
+                        "CASSANDRA_EPHEMERAL_READ_ENABLED": ephemeral_read_enabled
+                    },
+                    cap_add=["NET_ADMIN"],
+                    detach=True
+                )
+                if nano_cpus is not None:
+                    run_kwargs['nano_cpus'] = nano_cpus
+                if mem_limit is not None:
+                    run_kwargs['mem_limit'] = mem_limit
+                container = client.containers.run(**run_kwargs)
+                containers.append(container)            
+                debug(f"Starting container '{container_name}' in DC '{dc_name}', rack 'RAC{k}'.")
+                if not wait_for_log(container, log_pattern):
+                    debug(f"Failed to start container '{container_name}' within timeout.")
+                    exit(-1)
+            except docker.errors.APIError as e:
+                debug(f"Error starting container '{container_name}': {e}")
+
+    debug(f"Started {len(containers)} Cassandra nodes across {num_dcs} DCs ({nodes_per_dc} nodes/DC).")
+
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python3 start_cassandra_data_centers.py <num_nodes> <cassandra_image>")
+    if len(sys.argv) < 3:
+        print("Usage: python3 start_cassandra_data_centers.py <num_dcs> <protocol> [nodes_per_dc]")
         sys.exit(1)
 
     try:        
-        num_nodes = int(sys.argv[1])
+        num_dcs = int(sys.argv[1])
         protocol = sys.argv[2]
-        if protocol != "accord" and protocol != "paxos" and protocol != "quorum" and protocol != "one":
-            raise ValueError("Protocol must be either 'accord', 'paxos', 'quorum', or 'one' ")
-        if num_nodes < 1:
-            raise ValueError("Number of nodes must be at least 1.")
+        if protocol not in ["accord", "paxos", "quorum", "one"]:
+            raise ValueError("Protocol must be either 'accord', 'paxos', 'quorum', or 'one'")
+        if num_dcs < 1:
+            raise ValueError("Number of DCs must be at least 1.")
 
-        locations = read_locations('latencies.csv')
+        latencies_file = os.path.join(os.path.dirname(__file__), '..', 'latencies.csv')
+        locations = read_locations(latencies_file)
         
         config = {}
-        with open('exp.config', 'r') as f:
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'exp.config')
+        with open(config_path, 'r') as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith('#'):
-                    continue  # Skip empty lines and comments
+                    continue
                 if '=' in line:
                     key, value = line.split('=', 1)
                     value = value.strip()
-                    # Try to cast to int, then float, else keep as string
                     try:
                         value = int(value)
                     except ValueError:
@@ -139,10 +140,11 @@ if __name__ == "__main__":
                         except ValueError:
                             pass
                     config[key.strip()] = value
-                    
+
+        nodes_per_dc = int(sys.argv[3]) if len(sys.argv) > 3 else int(config.get("nodesperdc", 1))
         cassandra_image = config["accord_cassandra_image"] if protocol == "accord" else config["normal_cassandra_image"]
     except ValueError as e:
         print(f"Invalid parameters: {e}")
         sys.exit(1)
 
-    create_cassandra_cluster(num_nodes, cassandra_image)
+    create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image)
