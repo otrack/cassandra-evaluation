@@ -16,9 +16,7 @@ clockOffset:
   mean: 0
   std: 0
 designate_replica_id:
-- 0
 - 1
-- 2
 host:
   janus-lan-proxy-0000: localhost
   janus-lan-server-0000: Hanoi1

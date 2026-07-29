@@ -28,12 +28,36 @@ tiga_dir = sys.argv[3]
 latencies_csv = sys.argv[4]
 
 locations = []
+lat_lons = []
 with open(latencies_csv, newline='') as f:
     reader = csv.DictReader(f)
     for row in reader:
         locations.append(row['loc'].strip().strip('\"'))
+        lat_lons.append((float(row['lat']), float(row['lon'])))
         if len(locations) >= num_dcs:
             break
+
+def haversine(lat1, lon1, lat2, lon2):
+    import math
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon1 - lon2)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+best_leader_idx = 0
+min_total_owd = float('inf')
+for i in range(num_dcs):
+    lat1, lon1 = lat_lons[i]
+    total_owd = 0
+    for j in range(num_dcs):
+        if i == j: continue
+        lat2, lon2 = lat_lons[j]
+        dist = haversine(lat1, lon1, lat2, lon2)
+        total_owd += int(dist / 204)
+    if total_owd < min_total_owd:
+        min_total_owd = total_owd
+        best_leader_idx = i
 
 base_config_path = os.path.join(tiga_dir, 'config-ycsb.yml')
 if not os.path.exists(base_config_path):
@@ -61,7 +85,7 @@ for j in range(nodes_per_dc):
         bound_caps.append(400000)
     shards.append(shard_servers)
 
-designate_replica = list(range(num_dcs))
+designate_replica = [best_leader_idx] * nodes_per_dc
 
 proxy_name = 'janus-lan-proxy-0000'
 host_map[proxy_name] = 'localhost'
@@ -150,4 +174,46 @@ tiga_get_node_count() {
 
 tiga_get_port() {
     echo 10000
+}
+
+tiga_get_leaders() {
+    local num_dcs=$(tiga_get_node_count)
+    [ -z "$num_dcs" ] || [ "$num_dcs" -eq 0 ] && num_dcs=3
+    local best_city=$(python3 -c "
+import sys, csv, math
+num_dcs = int(sys.argv[1])
+latencies_csv = sys.argv[2]
+locations = []
+lat_lons = []
+with open(latencies_csv, newline='') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        locations.append(row['loc'].strip().strip('\"'))
+        lat_lons.append((float(row['lat']), float(row['lon'])))
+        if len(locations) >= num_dcs:
+            break
+
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon1 - lon2)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+best_leader_idx = 0
+min_total_owd = float('inf')
+for i in range(num_dcs):
+    lat1, lon1 = lat_lons[i]
+    total_owd = 0
+    for j in range(num_dcs):
+        if i == j: continue
+        lat2, lon2 = lat_lons[j]
+        total_owd += int(haversine(lat1, lon1, lat2, lon2) / 204)
+    if total_owd < min_total_owd:
+        min_total_owd = total_owd
+        best_leader_idx = i
+
+print(locations[best_leader_idx])
+" "$num_dcs" "${DIR}/latencies.csv")
+    echo "${best_city}1"
 }
