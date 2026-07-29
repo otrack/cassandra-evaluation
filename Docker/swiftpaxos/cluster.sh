@@ -30,7 +30,8 @@ swiftpaxos_start_cluster() {
 	else
 	    message="Server starting"
 	fi
-        container_name=$(config "node_name")$i
+        location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
+        container_name="${location}1"
 	start_container ${image} ${container_name} "${message}" ${LOGDIR}/${protocol}_node${i}.log --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} -e PROTOCOL=${protocol} -e NSERVERS=${node_count} -e TYPE=server -e THRIFTY=false -e MADDR=${maddr} || {
             error "Failed to start server $i"
             return 2
@@ -44,8 +45,10 @@ swiftpaxos_cleanup_cluster() {
     local node_count=${1:-$(swiftpaxos_get_node_count)}
     [ -z "$node_count" ] || [ "$node_count" -eq 0 ] && node_count=5
     for i in $(seq 1 $node_count); do
-	container_name=$(config "node_name")$i
+        location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
+        container_name="${location}1"
 	stop_container ${container_name} || true
+	stop_container "database-node${i}" || true
 	stop_container "ycsb-${i}" || true
     done	
     stop_container "ycsb" || true
@@ -59,16 +62,19 @@ swiftpaxos_get_hosts() {
 swiftpaxos_get_node_count() {
     i=1
     while true; do
-	container_name=$(config "node_name")$i
+        location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
+        if [ -z "$location" ]; then
+            break
+        fi
+        container_name="${location}1"
 	ip=$(get_container_ip "$container_name")
         if [ -z "$ip" ]; then
-            break # FIXME
+            break
         fi
         i=$((i + 1))
     done
     echo $((i - 1))
 }
-
 
 swiftpaxos_get_port() {
     local port=7087 # master
@@ -78,15 +84,14 @@ swiftpaxos_get_port() {
 swiftpaxos_get_leaders() {
     # For the paxos sub-protocol, find the leader by scanning container logs for
     # the message "I am the leader".  For other sub-protocols (epaxos, curp, …)
-    # there is no single leader; fall back to database-node1.
+    # there is no single leader; fall back to nearest DC node.
     local sub_protocol
     sub_protocol=$(echo "$1" | awk -F- '{print $2}')
+    local node_count=$(swiftpaxos_get_node_count)
     if [ "${sub_protocol}" = "paxos" ]; then
-        local node_count
-        node_count=$(swiftpaxos_get_node_count)
         for i in $(seq 1 "${node_count}"); do
-            local container_name
-            container_name="$(config "node_name")${i}"
+            location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
+            container_name="${location}1"
             if docker logs --tail 1000 "${container_name}" 2>&1 | grep -q "I am the leader"; then
                 echo "${container_name}"
                 return
@@ -94,5 +99,6 @@ swiftpaxos_get_leaders() {
         done
     fi
     # Default: node 3
-    echo "$(config "node_name")3"
+    location=$(get_location 3 ${SWIFTPAXOS_DIR}/../latencies.csv)
+    echo "${location}1"
 }

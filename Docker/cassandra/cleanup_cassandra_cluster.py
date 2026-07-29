@@ -15,12 +15,28 @@ def stop_and_remove_container(container):
 def cleanup_cassandra_cluster():
     client = docker.from_env()
     
-    # Define the network and container name patterns
-    network_name = 'cassandra-network'
-    container_name_prefix = config["node_name"]
-    
-    # Stop and remove all Cassandra containers
-    containers = client.containers.list(all=True, filters={"name": container_name_prefix})
+    cities = []
+    try:
+        import csv
+        with open('latencies.csv', newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                cities.append(row['loc'].strip().strip('"'))
+    except Exception:
+        pass
+
+    container_name_prefix = config.get("node_name", "database-node")
+    all_containers = client.containers.list(all=True)
+    containers = []
+
+    for c in all_containers:
+        name = c.name
+        matches_city = any(name.startswith(city) for city in cities) if cities else False
+        matches_prefix = name.startswith(container_name_prefix)
+        matches_image = any(img in c.image.tags for img in [config.get("normal_cassandra_image", ""), config.get("accord_cassandra_image", "")] if img)
+        if matches_city or matches_prefix or matches_image:
+            containers.append(c)
+
     with ThreadPoolExecutor() as executor:
         futures = [executor.submit(stop_and_remove_container, container) for container in containers]
         for future in as_completed(futures):

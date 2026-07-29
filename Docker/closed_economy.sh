@@ -80,7 +80,10 @@ if [ -n "$nodesperdc_override" ]; then
 fi
 
 if [ "$test_run" -eq 1 ]; then
-    sed -i "s/^maxexecutiontime=.*/maxexecutiontime=60/" "${CONFIG_FILE}"
+    nodes=3
+    records=1000
+    compute_test_machine "${nodes}"
+    sed -i "s/^maxexecutiontime=.*/maxexecutiontime=10/" "${CONFIG_FILE}"
 fi
 
 maxexecutiontime=$(config maxexecutiontime)

@@ -296,12 +296,8 @@ run_benchmark() {
 		exit 1
 	fi
 
-	if [ "$pref" = "swiftpaxos" ]; then
-		nearby_database="$(config "node_name")1"
-	else
-		first_city=$(get_location 1 ${DIR}/latencies.csv)
-		nearby_database="${first_city}1"
-	fi
+	first_city=$(get_location 1 ${DIR}/latencies.csv)
+	nearby_database="${first_city}1"
 	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}.load" "$nthreads" "ycsb" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
 	wait_container "ycsb"
 
@@ -320,13 +316,8 @@ run_benchmark() {
 
     for i in $(seq 1 1 ${num_dcs});
     do
-        if [ "$pref" = "swiftpaxos" ]; then
-            nearby_database="$(config "node_name")${i}"
-        else
-            location=$(get_location $i ${DIR}/latencies.csv)
-            nearby_database="${location}1"
-        fi
         location=$(get_location $i ${DIR}/latencies.csv)
+        nearby_database="${location}1"
         log ${location}
 
         EXTRA_YCSB_OPTS2=("${EXTRA_YCSB_OPTS[@]}")
@@ -353,12 +344,8 @@ run_benchmark() {
     local ratio_count=0
 
     for i in $(seq 1 1 ${num_dcs}); do
-        if [ "$pref" = "swiftpaxos" ]; then
-            container_name="$(config "node_name")${i}"
-        else
-            location=$(get_location $i ${DIR}/latencies.csv)
-            container_name="${location}1"
-        fi
+        location=$(get_location $i ${DIR}/latencies.csv)
+        container_name="${location}1"
         fp_output=$("${fast_path_script}" "${container_name}" 2>/dev/null) || true
 
         fp_fast=$(echo "$fp_output" | grep "^Fast ratio:" | awk '{print $3}')
