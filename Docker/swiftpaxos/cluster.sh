@@ -3,9 +3,14 @@
 SWIFTPAXOS_DIR=$(dirname "${BASH_SOURCE[0]}")
 
 swiftpaxos_start_cluster() {
-    if [ $# -ne 2 ]; then
-        echo "usage: node_count protocol"
+    if [ $# -lt 2 ]; then
+        echo "usage: node_count protocol [nodes_per_dc]"
         exit -1
+    fi
+    local nodes_per_dc=${3:-$(config nodesperdc)}
+    if [ "${nodes_per_dc:-1}" -gt 1 ]; then
+        error "swiftpaxos protocol does not support nodesperdc > 1 (current nodesperdc=${nodes_per_dc})."
+        exit 1
     fi
     local node_count=$1
     local protocol=$(echo "$2" | awk -F- '{print $2}')
@@ -35,18 +40,15 @@ swiftpaxos_start_cluster() {
 
 swiftpaxos_cleanup_cluster() {
     log "Cleaning up Swiftpaxos cluster..."    
-    stop_container "swiftpaxos-master"|| {
-        error "Failed to stop master"
-        return 1
-    }
-    local node_count=$(swiftpaxos_get_node_count)    
+    stop_container "swiftpaxos-master" || true
+    local node_count=${1:-$(swiftpaxos_get_node_count)}
+    [ -z "$node_count" ] || [ "$node_count" -eq 0 ] && node_count=5
     for i in $(seq 1 $node_count); do
 	container_name=$(config "node_name")$i
-	stop_container ${container_name} || {
-            error "Failed to start server $i"
-            return 2
-	}
+	stop_container ${container_name} || true
+	stop_container "ycsb-${i}" || true
     done	
+    stop_container "ycsb" || true
 }
 
 swiftpaxos_get_hosts() {

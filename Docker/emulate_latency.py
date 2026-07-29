@@ -38,17 +38,29 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
     client = docker.from_env()
     network_name = config["network_name"]
 
-    # Build container list: (dc_index, node_in_dc_1indexed, container_name, global_index)
     containers_info = []
     global_idx = 0
     for i in range(num_dcs):
         _, _, city = dc_locations[i]
         for k in range(1, nodes_per_dc + 1):
             container_name = f"{city}{k}"
+            try:
+                client.containers.get(container_name)
+            except docker.errors.NotFound:
+                alt_name = f"database-node{i + 1}"
+                try:
+                    client.containers.get(alt_name)
+                    container_name = alt_name
+                except docker.errors.NotFound:
+                    debug(f"Container '{container_name}' / '{alt_name}' not found. Skipping.")
+                    continue
             containers_info.append((i, k, container_name, global_idx))
             global_idx += 1
 
     total_containers = len(containers_info)
+    if total_containers == 0:
+        debug("No active database containers found for latency emulation.")
+        return
 
     try:
         priomap = " ".join(["0"] * 16)
@@ -92,7 +104,7 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
 
                 debug(f"Added {latency}ms ping latency between '{src_name}' and '{dst_name}' (distance: {distance:.2f} km).")
 
-    except docker.errors.APIError as e:
+    except Exception as e:
         print(f"Error adding latency: {e}")
 
 if __name__ == "__main__":
