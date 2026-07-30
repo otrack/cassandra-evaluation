@@ -84,7 +84,7 @@ def main():
             protocol_order.append(proto)
 
     # Median latency (ms) per (protocol, workload), computed from the p50 (median)
-    # percentile column across all executed operations and all clients (cities).
+    # percentile column across all executed operations and all clients (DCs).
     # p50 values are already in ms — no unit conversion needed.
     # CLEANUP rows are already excluded by parse_ycsb_to_csv.sh, but filter
     # defensively.

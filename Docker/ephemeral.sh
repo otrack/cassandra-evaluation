@@ -80,9 +80,9 @@ if [ "$dry_run" -eq 0 ]; then
     total=$(echo ${workloads} | wc -w)
 
     # --- Run with ephemeral reads ENABLED ---
-    # Output files are named accord_<nodes>_<workload>_<ts>_<city>.dat so that
+    # Output files are named accord_<nodes>_<workload>_<ts>_<dc>.dat so that
     # parse_ycsb_to_csv.sh labels them with protocol "accord".
-    # Note: run_benchmark appends _<city>.dat per YCSB client, so the variable
+    # Note: run_benchmark appends _<dc>.dat per YCSB client, so the variable
     # below is only the base template passed to run_benchmark.
     set_ephemeral_read "true"
     rm -f ${LOGDIR}/ephemeral/accord_*
@@ -99,9 +99,9 @@ if [ "$dry_run" -eq 0 ]; then
     done
 
     # --- Run with ephemeral reads DISABLED ---
-    # Output files are named accord-noephem_<nodes>_<workload>_<ts>_<city>.dat so
+    # Output files are named accord-noephem_<nodes>_<workload>_<ts>_<dc>.dat so
     # that parse_ycsb_to_csv.sh labels them with protocol "accord-noephem".
-    # Note: run_benchmark appends _<city>.dat per YCSB client, so the variable
+    # Note: run_benchmark appends _<dc>.dat per YCSB client, so the variable
     # below is only the base template passed to run_benchmark.
     set_ephemeral_read "false"
     rm -f ${LOGDIR}/ephemeral/accord-noephem_*

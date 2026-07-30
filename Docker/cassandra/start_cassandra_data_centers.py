@@ -32,7 +32,7 @@ def wait_for_nodetool_status(containers, expected_count, timeout=120):
     while time.time() - start_time < timeout:
         for c in container_list:
             try:
-                res = c.exec_run("nodetool status")
+                res = c.exec_run("env JVM_OPTS='' nodetool status")
                 if res.exit_code == 0:
                     output = res.output.decode('utf-8', errors='ignore')
                     un_count = sum(1 for line in output.splitlines() if re.match(r'^\s*UN\b', line))
@@ -106,6 +106,7 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                     tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
                     ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                     environment={
+                        "JVM_EXTRA_OPTS" : " -Xms"+cassandra_xms+" -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else ""),
                         "JVM_OPTS" : " -Xms"+cassandra_xms+" -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else ""),
                         "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
                         "CASSANDRA_SEEDS": "" if is_first_node else seeds_str,

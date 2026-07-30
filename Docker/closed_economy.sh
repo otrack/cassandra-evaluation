@@ -91,7 +91,7 @@ maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
     pull_images
-    echo "protocol,nodes,city,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/closed_economy/breakdown.csv
+    echo "protocol,nodes,dc,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/closed_economy/breakdown.csv
 
     for p in ${protocols}
     do
@@ -120,15 +120,15 @@ if [ "$dry_run" -eq 0 ]; then
 
 	    run_benchmark ${p} ${single_client_threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((single_client_threads * ops_per_thread)) ${output_file} 1 0 "${tracing_opts[@]}" -p maxexecutiontime=${maxexecutiontime}
 
-	    cities_list=""
+	    dcs_list=""
 	    for i in $(seq 1 ${nodes}); do
 	        loc=$(get_location $i ${DIR}/latencies.csv)
-	        cities_list="${cities_list} ${loc}"
+	        dcs_list="${dcs_list} ${loc}"
 	    done
 
 	    if [[ "$p" == cockroachdb* ]]; then
 	        python3 ${DIR}/cockroachdb/cockroachdb_breakdown.py \
-	            ${p} ${LOGDIR}/closed_economy ${workload} ${nodes} ${cities_list} | \
+	            ${p} ${LOGDIR}/closed_economy ${workload} ${nodes} ${dcs_list} | \
 	            awk -F',' -v n="${nodes}" -v proto="${p}" '{print proto "," n "," $0}' >> ${RESULTSDIR}/closed_economy/breakdown.csv
 	    elif [ "$p" == "accord" ]; then
 	        compute_breakdown ${nodes} accord | \
@@ -139,30 +139,29 @@ if [ "$dry_run" -eq 0 ]; then
         done
     done
 
-    mkdir -p ${LOGDIR}/closed_economy_multi
-    for p in ${protocols}
-    do
-        if [[ "$p" == "cockroachdb-opt" ]]; then
-            sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
-        elif [[ "$p" == "cockroachdb-bad" ]]; then
-            sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=bad/" "${CONFIG_FILE}"
-        else
-            sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=false/" "${CONFIG_FILE}"
-        fi
-
-        rm -f ${LOGDIR}/closed_economy_multi/*${p}*
-
-        for nodes in ${dc_counts}
+    if [ "$test_run" -eq 0 ]; then
+        mkdir -p ${LOGDIR}/closed_economy_multi
+        for p in ${protocols}
         do
-	    if [ "$test_run" -eq 1 ]; then
-	        compute_test_machine "${nodes}"
-	    fi
-	    ts=$(date +%Y%m%d%H%M%S%N)
-	    output_file="${LOGDIR}/closed_economy_multi/${p}_${nodes}_${workload}_${ts}.dat"
+            if [[ "$p" == "cockroachdb-opt" ]]; then
+                sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=true/" "${CONFIG_FILE}"
+            elif [[ "$p" == "cockroachdb-bad" ]]; then
+                sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=bad/" "${CONFIG_FILE}"
+            else
+                sed -i "s/^cockroachdb\.fix_lease_holder=.*/cockroachdb.fix_lease_holder=false/" "${CONFIG_FILE}"
+            fi
 
-	    run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} 1 1 -p maxexecutiontime=${maxexecutiontime}
+            rm -f ${LOGDIR}/closed_economy_multi/*${p}*
+
+            for nodes in ${dc_counts}
+            do
+                ts=$(date +%Y%m%d%H%M%S%N)
+                output_file="${LOGDIR}/closed_economy_multi/${p}_${nodes}_${workload}_${ts}.dat"
+
+                run_benchmark ${p} ${threads} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} 1 1 -p maxexecutiontime=${maxexecutiontime}
+            done
         done
-    done
+    fi
 fi
 
 debug "Parsing results..."

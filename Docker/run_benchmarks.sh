@@ -296,8 +296,8 @@ run_benchmark() {
 		exit 1
 	fi
 
-	first_city=$(get_location 1 ${DIR}/latencies.csv)
-	nearby_database="${first_city}1"
+	first_dc=$(get_location 1 ${DIR}/latencies.csv)
+	nearby_database="${first_dc}1"
 	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}.load" "$nthreads" "ycsb" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
 	wait_container "ycsb"
 

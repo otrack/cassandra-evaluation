@@ -332,28 +332,28 @@ TRACE_PARSERS = {
 
 
 # ---------------------------------------------------------------------------
-# File discovery and per-city breakdown
+# File discovery and per-DC breakdown
 # ---------------------------------------------------------------------------
 
-def find_log_files(logdir, protocol, nodes, workload, city):
+def find_log_files(logdir, protocol, nodes, workload, dc):
     """
-    Return all log files matching ``{logdir}/{protocol}_{nodes}_{workload}_*_{city}.dat``.
+    Return all log files matching ``{logdir}/{protocol}_{nodes}_{workload}_*_{dc}.dat``.
     """
-    pattern = os.path.join(logdir, f"{protocol}_{nodes}_{workload}_*_{city}.dat")
+    pattern = os.path.join(logdir, f"{protocol}_{nodes}_{workload}_*_{dc}.dat")
     return sorted(glob_module.glob(pattern))
 
 
-def compute_city_breakdown(logdir, protocol, nodes, workload, city):
+def compute_dc_breakdown(logdir, protocol, nodes, workload, dc):
     """
-    Compute the average latency breakdown for *protocol*/*city*.
+    Compute the average latency breakdown for *protocol*/*dc*.
 
     Returns a dict {processing, execution, ordering, commit, total,
     n_traces} or None if no data are found.
     """
-    files = find_log_files(logdir, protocol, nodes, workload, city)
+    files = find_log_files(logdir, protocol, nodes, workload, dc)
     if not files:
         print(
-            f"WARNING: No log file for {protocol}/{city} "
+            f"WARNING: No log file for {protocol}/{dc} "
             f"(workload={workload}, nodes={nodes})",
             file=sys.stderr,
         )
@@ -370,7 +370,7 @@ def compute_city_breakdown(logdir, protocol, nodes, workload, city):
 
     if not all_traces:
         print(
-            f"WARNING: No valid traces found for {protocol}/{city} in {files}",
+            f"WARNING: No valid traces found for {protocol}/{dc} in {files}",
             file=sys.stderr,
         )
         return None
@@ -386,34 +386,34 @@ def compute_city_breakdown(logdir, protocol, nodes, workload, city):
 # Plotting
 # ---------------------------------------------------------------------------
 
-def plot_breakdown(protocol, cities, breakdowns, output_prefix):
+def plot_breakdown(protocol, dcs, breakdowns, output_prefix):
     """
     Generate a stacked bar chart of the latency breakdown for *protocol*.
 
-    One bar per city; bars are stacked processing / execution / ordering / commit.
+    One bar per DC; bars are stacked processing / execution / ordering / commit.
     Saves ``{output_prefix}_{protocol}.pdf`` (and ``.png``).
     """
-    valid_cities = [c for c in cities if breakdowns.get(c) is not None]
-    if not valid_cities:
+    valid_dcs = [c for c in dcs if breakdowns.get(c) is not None]
+    if not valid_dcs:
         print(f"WARNING: No breakdown data for protocol '{protocol}'", file=sys.stderr)
         return
 
-    x = np.arange(len(valid_cities))
+    x = np.arange(len(valid_dcs))
     width = 0.5
 
-    fig, ax = plt.subplots(figsize=(max(4, len(valid_cities) * 1.5 + 2), 5))
+    fig, ax = plt.subplots(figsize=(max(4, len(valid_dcs) * 1.5 + 2), 5))
 
-    bottoms = np.zeros(len(valid_cities))
+    bottoms = np.zeros(len(valid_dcs))
     for comp, color in zip(COMPONENTS, COMPONENT_COLORS):
-        values = np.array([breakdowns[c][comp] * 1000 for c in valid_cities])
+        values = np.array([breakdowns[c][comp] * 1000 for c in valid_dcs])
         ax.bar(x, values, width, bottom=bottoms, label=comp.capitalize(), color=color)
         bottoms += values
 
-    ax.set_xlabel('City')
+    ax.set_xlabel('DC')
     ax.set_ylabel('Average latency (ms)')
     ax.set_title(f'Latency breakdown — {protocol}')
     ax.set_xticks(x)
-    ax.set_xticklabels(valid_cities)
+    ax.set_xticklabels(valid_dcs)
     ax.legend(loc='upper right')
     ax.grid(axis='y', alpha=0.3)
 
@@ -434,7 +434,7 @@ def main():
     if len(sys.argv) < 6:
         print(
             "Usage: python3 cdf-breakdown.py <logdir> <workload1> [<workload2> ...] "
-            "<num_nodes> <city1> [<city2> ...] <output_prefix>",
+            "<num_nodes> <dc1> [<dc2> ...] <output_prefix>",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -442,7 +442,7 @@ def main():
     logdir = sys.argv[1]
     remaining = sys.argv[2:]
 
-    # Split remaining args into workloads / num_nodes / cities / output_prefix
+    # Split remaining args into workloads / num_nodes / dcs / output_prefix
     # using the same convention as cdf.py: the first integer is num_nodes.
     nodes = None
     nodes_idx = None
@@ -462,12 +462,12 @@ def main():
     after_nodes = remaining[nodes_idx + 1:]
 
     if not workloads or len(after_nodes) < 2:
-        print("ERROR: Must specify at least one workload, one city, and an output prefix",
+        print("ERROR: Must specify at least one workload, one DC, and an output prefix",
               file=sys.stderr)
         sys.exit(1)
 
-    # Last argument is the output prefix; everything before it are cities
-    cities = after_nodes[:-1]
+    # Last argument is the output prefix; everything before it are dcs
+    dcs = after_nodes[:-1]
     output_prefix = after_nodes[-1]
 
     # Discover which trace-capable protocols have log files in logdir
@@ -493,10 +493,10 @@ def main():
     for protocol in sorted(discovered):
         print(f"Processing protocol: {protocol}")
         breakdowns = {}
-        for city in cities:
+        for dc in dcs:
             bd = None
             for workload in workloads:
-                bd_w = compute_city_breakdown(logdir, protocol, nodes, workload, city)
+                bd_w = compute_dc_breakdown(logdir, protocol, nodes, workload, dc)
                 if bd_w is not None:
                     if bd is None:
                         bd = {comp: 0.0 for comp in COMPONENTS}
@@ -513,10 +513,10 @@ def main():
                     bd[comp] /= bd['_count']
                 bd['total'] /= bd['_count']
                 del bd['_count']
-            breakdowns[city] = bd
+            breakdowns[dc] = bd
             if bd:
                 print(
-                    f"  {city}: {bd['n_traces']} traces, "
+                    f"  {dc}: {bd['n_traces']} traces, "
                     f"avg total={bd['total']*1000:.1f}ms  "
                     f"processing={bd['processing']*1000:.1f}ms  "
                     f"execution={bd['execution']*1000:.1f}ms  "
@@ -524,7 +524,7 @@ def main():
                     f"commit={bd['commit']*1000:.1f}ms"
                 )
 
-        plot_breakdown(protocol, cities, breakdowns, output_prefix)
+        plot_breakdown(protocol, dcs, breakdowns, output_prefix)
 
 
 if __name__ == "__main__":

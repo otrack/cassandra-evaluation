@@ -83,16 +83,16 @@ def get_global_latency_range(df, workloads, all_ops, num_nodes):
     if max_latency == float('-inf'): max_latency = 1
     return min_latency, max_latency
 
-def compute_average_latencies_across_cities(df, workload, op, num_nodes):
+def compute_average_latencies_across_dcs(df, workload, op, num_nodes):
     """
-    Compute average latencies across all cities in the dataframe for a specific workload and operation.
+    Compute average latencies across all DCs in the dataframe for a specific workload and operation.
 
-    For each protocol, averages the p1-p100 values across all cities.
+    For each protocol, averages the p1-p100 values across all DCs.
     Returns a dict: {protocol: [avg_p1, avg_p2, ..., avg_p100]}
     """
     averages = {}
 
-    # Get data for all cities for this workload and operation
+    # Get data for all DCs for this workload and operation
     dfw = df[(df['workload'] == workload) &
              (df['nodes'] == num_nodes) &
              (df['op'] == op)]
@@ -104,7 +104,7 @@ def compute_average_latencies_across_cities(df, workload, op, num_nodes):
     for proto in dfw['protocol'].unique():
         proto_rows = dfw[dfw['protocol'] == proto]
 
-        # Collect and average latency percentiles across all cities
+        # Collect and average latency percentiles across all DCs
         latency_sums = {}
         latency_counts = {}
 
@@ -135,7 +135,7 @@ def compute_average_latencies_across_cities(df, workload, op, num_nodes):
 def main():
     if len(sys.argv) < 7:
         print(
-            "Usage: python cdf.py results.csv workload1 [workload2 ...] num_nodes city1 [city2 ...] latitudes.csv output.tex [--average]"
+            "Usage: python cdf.py results.csv workload1 [workload2 ...] num_nodes dc1 [dc2 ...] latitudes.csv output.tex [--average]"
         )
         sys.exit(1)
 
@@ -153,7 +153,7 @@ def main():
         lat_csv = sys.argv[-2]
         args_end_idx = -2
 
-    # Parse workloads, num_nodes, cities
+    # Parse workloads, num_nodes, dcs
     remaining = sys.argv[2:args_end_idx]
 
     # Find num_nodes (first integer)
@@ -172,24 +172,25 @@ def main():
         sys.exit(1)
 
     workloads = remaining[:num_nodes_idx]
-    cities = remaining[num_nodes_idx + 1:]
+    dcs = remaining[num_nodes_idx + 1:]
 
-    if not workloads or not cities:
-        print("ERROR: Must specify at least one workload and one city", file=sys.stderr)
+    if not workloads or not dcs:
+        print("ERROR: Must specify at least one workload and one DC", file=sys.stderr)
         sys.exit(1)
 
     # Load data
     df_unfiltered = pd.read_csv(results_csv)
     df = df_unfiltered.copy()
-    no_cities = False
+    no_dcs = False
 
-    # Filter for plotting by listed cities
-    if 'city' in df.columns:
-        df_filtered = df[df['city'].isin(cities)]
+    # Filter for plotting by listed dcs
+    dc_col = 'dc' if 'dc' in df.columns else ('city' if 'city' in df.columns else None)
+    if dc_col:
+        df_filtered = df[df[dc_col].isin(dcs)]
         if df_filtered.empty:
-            available_cities = df['city'].unique().tolist()
-            print(f"WARNING: No data found for cities {cities}. Available cities: {available_cities}", file=sys.stderr)
-            no_cities = True
+            available_dcs = df[dc_col].unique().tolist()
+            print(f"WARNING: No data found for DCs {dcs}. Available DCs: {available_dcs}", file=sys.stderr)
+            no_dcs = True
             if include_average:
                 print(f"Plotting only the average", file=sys.stderr)
             else:
@@ -209,31 +210,31 @@ def main():
             print(f"WARNING: Skipping row {idx+2} in latitudes.csv due to error: {e}", file=sys.stderr)
     latlon = list(zip(node_lats, node_lons))
 
-    # Compute theoretical optimum for each listed city
-    city_optimums = {}
-    for city in cities:
-        city_index = None
+    # Compute theoretical optimum for each listed DC
+    dc_optimums = {}
+    for dc in dcs:
+        dc_index = None
         for idx, loc in enumerate(node_locs):
-            if loc == city:
-                city_index = idx
+            if loc == dc:
+                dc_index = idx
                 break
-        if city_index is not None and len(latlon) > 0:
+        if dc_index is not None and len(latlon) > 0:
             optimums = compute_optimum_per_replica(latlon, num_nodes)
-            if city_index < len(optimums):
-                city_optimums[city] = optimums[city_index]
+            if dc_index < len(optimums):
+                dc_optimums[dc] = optimums[dc_index]
 
-    # Compute theoretical optimum for ALL cities in latitudes file
-    all_city_optimums = {}
+    # Compute theoretical optimum for ALL DCs in latitudes file
+    all_dc_optimums = {}
     for idx, loc in enumerate(node_locs):
         if len(latlon) > 0:
             optimums = compute_optimum_per_replica(latlon, num_nodes)
             if idx < len(optimums):
-                all_city_optimums[loc] = optimums[idx]
+                all_dc_optimums[loc] = optimums[idx]
 
-    # Compute average optimum across ALL cities
+    # Compute average optimum across ALL DCs
     avg_optimum = None
-    if all_city_optimums:
-        avg_optimum = sum(all_city_optimums.values()) / len(all_city_optimums)
+    if all_dc_optimums:
+        avg_optimum = sum(all_dc_optimums.values()) / len(all_dc_optimums)
 
     # Get all unique operations
     all_ops = set()
@@ -243,13 +244,13 @@ def main():
     all_ops = sorted(list(all_ops))
     n_ops = len(all_ops)
     n_wl = len(workloads)
-    n_cities = len(cities)
+    n_dcs = len(dcs)
 
-    actual_cities = df['city'].unique().tolist() if 'city' in df.columns and not no_cities else []
-    actual_n_cities = len(actual_cities)
+    actual_dcs = df[dc_col].unique().tolist() if dc_col and not no_dcs else []
+    actual_n_dcs = len(actual_dcs)
 
     # Protocol order for consistent color assignment
-    if no_cities:
+    if no_dcs:
         df_for_protocols = df_unfiltered
     else:
         df_for_protocols = df
@@ -274,7 +275,7 @@ def main():
     if include_average:
         for workload in workloads:
             for op in all_ops:
-                avg_dict = compute_average_latencies_across_cities(df_unfiltered, workload, op, num_nodes)
+                avg_dict = compute_average_latencies_across_dcs(df_unfiltered, workload, op, num_nodes)
                 for proto, lats in avg_dict.items():
                     # indices 97-99 (0-based) correspond to p98-p100,
                     # covering roughly pct 0.98-1.0 (just below the [0.99,1] tail)
@@ -289,11 +290,11 @@ def main():
         tail_min_lat = max(0, tail_min_lat - tail_xpad)
         tail_max_lat = tail_max_lat + tail_xpad
 
-    # Calculate total rows (cities first, then average, then tail latency)
+    # Calculate total rows (DCs first, then average, then tail latency)
     if include_average:
-        total_rows = (actual_n_cities * n_wl) + n_wl + n_wl
+        total_rows = (actual_n_dcs * n_wl) + n_wl + n_wl
     else:
-        total_rows = actual_n_cities * n_wl
+        total_rows = actual_n_dcs * n_wl
 
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
@@ -326,12 +327,12 @@ def main():
         if include_average:
             for wl_index, workload in enumerate(workloads):
                 for op_index, op in enumerate(all_ops):
-                    # Compute average latencies from unfiltered data (all cities)
-                    avg_latencies_dict = compute_average_latencies_across_cities(df_unfiltered, workload, op, num_nodes)
+                    # Compute average latencies from unfiltered data (all DCs)
+                    avg_latencies_dict = compute_average_latencies_across_dcs(df_unfiltered, workload, op, num_nodes)
 
                     f.write("        \\nextgroupplot[\n")
                     if op_index == 0:
-                        if no_cities:
+                        if no_dcs:
                             f.write(f"          ylabel={{{workload}}},\n")
                         else:
                             f.write(f"          ylabel={{All sites}},\n")
@@ -363,29 +364,29 @@ def main():
                             f.write(f"          {val} {pct}\n")
                         f.write("          };\n")
         
-        # Then, plot city rows
-        if not no_cities:
-            for city_index, city in enumerate(cities):
+        # Then, plot DC rows
+        if not no_dcs:
+            for dc_index, dc in enumerate(dcs):
                 for wl_index, workload in enumerate(workloads):
                     for op_index, op in enumerate(all_ops):
                         dfw = df[(df['workload'] == workload) & (df['nodes'] == num_nodes)
-                                 & (df['op'] == op) & (df['city'] == city)]
+                                 & (df['op'] == op) & (df[dc_col] == dc)]
 
                         if dfw.empty:
                             continue
                         f.write("        \\ifdetails")
                         f.write("        \\nextgroupplot[\n")
                         if op_index == 0:
-                            if actual_n_cities == 1 and not include_average:
+                            if actual_n_dcs == 1 and not include_average:
                                 f.write(f"          ylabel={{{workload}}},\n")
                             else:
-                                f.write(f"          ylabel={{{city}}},\n")
+                                f.write(f"          ylabel={{{dc}}},\n")
                         else:
                             f.write("          yticklabels={{}},\n")
-                        if not include_average and city_index == n_cities - 1 and wl_index == n_wl - 1:
+                        if not include_average and dc_index == n_dcs - 1 and wl_index == n_wl - 1:
                             f.write("          xlabel={{Latency (ms)}},\n")
-                        if city in city_optimums:
-                            f.write(f"          extra x ticks={{{city_optimums[city]:.2f}}},\n")
+                        if dc in dc_optimums:
+                            f.write(f"          extra x ticks={{{dc_optimums[dc]:.2f}}},\n")
                             f.write(f"          extra x tick labels={{Q}},\n")
                             f.write(f"          extra x tick style={{gray, tick align=outside, tick label style={{gray, font=\\tiny}}}},\n")
                         f.write("        ]\n")
@@ -412,18 +413,18 @@ def main():
         f.write("    \\end{tikzpicture}\n")
 
         # --- Caption (no color swatches; legend is at the top of the figure) ---
-        cities_escaped = ", ".join([escape_latex(c) for c in actual_cities])
+        dcs_escaped = ", ".join([escape_latex(c) for c in actual_dcs])
         workloads_escaped = ", ".join([escape_latex(w.upper()) for w in workloads])
-        if include_average and no_cities:
+        if include_average and no_dcs:
             caption_start = f"CDF of operation latencies for YCSB across all sites {(workloads_escaped)}."
         elif include_average:
-            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} acrosss all sites \\ifdetails and at {cities_escaped}\\fi."
+            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} acrosss all sites \\ifdetails and at {dcs_escaped}\\fi."
         else:
-            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} at {cities_escaped}."
+            caption_start = f"CDF of operation latencies for YCSB {(workloads_escaped)} at {dcs_escaped}."
 
         f.write(f"    \\caption{{{caption_start}")
         # Add reference to the gray optimum line in the caption
-        if city_optimums or avg_optimum:
+        if dc_optimums or avg_optimum:
             f.write(" ")
             f.write(r"\textcolor{gray}{Q}~denotes the closest-quorum latency bound.")
         f.write("    \\label{fig:workload-cdf\\ifdetails-ext\\fi}}\n")

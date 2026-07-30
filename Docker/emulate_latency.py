@@ -41,9 +41,9 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
     containers_info = []
     global_idx = 0
     for i in range(num_dcs):
-        _, _, city = dc_locations[i]
+        _, _, dc_name = dc_locations[i]
         for k in range(1, nodes_per_dc + 1):
-            container_name = f"{city}{k}"
+            container_name = f"{dc_name}{k}"
             try:
                 client.containers.get(container_name)
             except docker.errors.NotFound:

@@ -106,25 +106,25 @@ if [ "$dry_run" -eq 0 ]; then
 	    fi
 		
             # Extract global metrics aggregated across all sites:
-            # sum throughput and average latency over the first ${nodes} cities
+            # sum throughput and average latency over the first ${nodes} DCs
             total_tput=0
             total_latency=0
-            city_count=0
+            dc_count=0
             for i in $(seq 1 ${nodes}); do
-                city=$(get_location ${i} ${DIR}/latencies.csv)
-                city_file="${output_file%.dat}_${city}.dat"
-                [ -f "${city_file}" ] || continue
-                city_tput=$(awk -F',' '/^\[OVERALL\], Throughput\(ops\/sec\),/{t=$3; gsub(/[[:space:]]/,"",t); print int(t+0.5); exit}' "${city_file}")
-                city_tput=${city_tput:-0}
-                city_lat=$(grep -v CLEANUP "${city_file}" | grep -v FAILED | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print int(max/1000)}')
-                city_lat=${city_lat:-0}
-                total_tput=$(( total_tput + city_tput ))
-                total_latency=$(( total_latency + city_lat ))
-                city_count=$(( city_count + 1 ))
+                dc=$(get_location ${i} ${DIR}/latencies.csv)
+                dc_file="${output_file%.dat}_${dc}.dat"
+                [ -f "${dc_file}" ] || continue
+                dc_tput=$(awk -F',' '/^\[OVERALL\], Throughput\(ops\/sec\),/{t=$3; gsub(/[[:space:]]/,"",t); print int(t+0.5); exit}' "${dc_file}")
+                dc_tput=${dc_tput:-0}
+                dc_lat=$(grep -v CLEANUP "${dc_file}" | grep -v FAILED | awk -F',' '/AverageLatency\(us\)/{lat=$3; gsub(/[[:space:]]/,"",lat); if(lat+0>max) max=lat+0} END{print int(max/1000)}')
+                dc_lat=${dc_lat:-0}
+                total_tput=$(( total_tput + dc_tput ))
+                total_latency=$(( total_latency + dc_lat ))
+                dc_count=$(( dc_count + 1 ))
             done
             tput=${total_tput}
-            if [ "${city_count}" -gt 0 ]; then
-                max_avg_latency=$(( total_latency / city_count ))
+            if [ "${dc_count}" -gt 0 ]; then
+                max_avg_latency=$(( total_latency / dc_count ))
             else
                 max_avg_latency=0
             fi

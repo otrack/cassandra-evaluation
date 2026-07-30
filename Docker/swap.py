@@ -45,7 +45,7 @@ def row_median_latency(row):
 def load_swap_breakdown(breakdown_csv):
     """Load swap breakdown data from breakdown.csv.
 
-    Returns a dict: {protocol: {clients: {S: {city: {fast_commit, slow_commit, commit, ordering, execution}}}}}
+    Returns a dict: {protocol: {clients: {S: {dc: {fast_commit, slow_commit, commit, ordering, execution}}}}}
     Values are in microseconds.
     """
     result = {}
@@ -54,7 +54,8 @@ def load_swap_breakdown(breakdown_csv):
     except (FileNotFoundError, IOError):
         return result
 
-    required = {'protocol', 'S', 'clients', 'city', 'fast_commit', 'slow_commit', 'commit', 'ordering', 'execution'}
+    dc_col = 'dc' if 'dc' in df.columns else 'city'
+    required = {'protocol', 'S', 'clients', dc_col, 'fast_commit', 'slow_commit', 'commit', 'ordering', 'execution'}
     if not required.issubset(df.columns):
         return result
 
@@ -68,7 +69,7 @@ def load_swap_breakdown(breakdown_csv):
             clients_val = int(row['clients'])
         except (TypeError, ValueError):
             continue
-        city = str(row['city']).strip()
+        dc = str(row[dc_col]).strip()
         try:
             fc = float(row['fast_commit'])
             sc = float(row['slow_commit'])
@@ -77,7 +78,7 @@ def load_swap_breakdown(breakdown_csv):
             ex = float(row['execution'])
         except (TypeError, ValueError):
             continue
-        result.setdefault(proto, {}).setdefault(clients_val, {}).setdefault(s_val, {})[city] = {
+        result.setdefault(proto, {}).setdefault(clients_val, {}).setdefault(s_val, {})[dc] = {
             'fast_commit': fc,
             'slow_commit': sc,
             'commit': cm,
@@ -88,20 +89,20 @@ def load_swap_breakdown(breakdown_csv):
 
 
 def compute_average_swap_breakdown(breakdown_data, protocol, clients_val, s_val):
-    """Return the average breakdown across all cities for (protocol, clients_val, s_val).
+    """Return the average breakdown across all DCs for (protocol, clients_val, s_val).
 
     Returns a dict {fast_commit, slow_commit, commit, ordering, execution} in
     microseconds, or None if no data are available.
     """
-    cities_data = breakdown_data.get(protocol, {}).get(clients_val, {}).get(s_val, {})
-    if not cities_data:
+    dcs_data = breakdown_data.get(protocol, {}).get(clients_val, {}).get(s_val, {})
+    if not dcs_data:
         return None
     components = ['fast_commit', 'slow_commit', 'commit', 'ordering', 'execution']
     totals = {c: 0.0 for c in components}
-    n = len(cities_data)
-    for city_bd in cities_data.values():
+    n = len(dcs_data)
+    for dc_bd in dcs_data.values():
         for c in components:
-            totals[c] += city_bd.get(c, 0.0)
+            totals[c] += dc_bd.get(c, 0.0)
     return {c: totals[c] / n for c in components}
 
 

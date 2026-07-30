@@ -7,7 +7,7 @@ DIR=$(dirname "${BASH_SOURCE[0]}")
 source ${DIR}/utils.sh
 
 # Output concise header
-header="protocol,nodes,workload,conflict_rate,city,op,clients,tput,avg_latency_us"
+header="protocol,nodes,workload,conflict_rate,dc,op,clients,tput,avg_latency_us"
 for p in $(seq 1 100); do
     header="$header,p$p"
 done
@@ -20,13 +20,13 @@ process_file() {
     local filename
     filename=$(basename "$file")
 
-    # Parse filename: <protocol>_<nodes>_<workload>_<timestamp>_<city>.dat
+    # Parse filename: <protocol>_<nodes>_<workload>_<timestamp>_<dc>.dat
     if [[ "$filename" =~ ^([^_]+)_([0-9]+)_([^_]+)_([0-9]+)_([A-Za-z]+)\.dat$ ]]; then
         local protocol="${BASH_REMATCH[1]}"
         local nodes="${BASH_REMATCH[2]}"
         local workload="${BASH_REMATCH[3]}"
         local timestamp="${BASH_REMATCH[4]}"
-        local city="${BASH_REMATCH[5]}"
+        local dc="${BASH_REMATCH[5]}"
     else
         error "Ignoring ${filename}"
         return
@@ -54,7 +54,7 @@ process_file() {
 
     # Single awk pass: extract all needed values and generate CSV rows
     awk -v protocol="$protocol" -v nodes="$nodes" \
-        -v workload="$workload" -v city="$city" \
+        -v workload="$workload" -v dc="$dc" \
         -v fast_path="$fast_path" -v medium_path="$medium_path" \
         -v slow_path="$slow_path" -v ephemeral_path="$ephemeral_path" '
     BEGIN {
@@ -170,7 +170,7 @@ process_file() {
         n_ops = split("read insert update scan readmodifywrite tx-readmodifywrite", ops, " ")
         for (o = 1; o <= n_ops; o++) {
             op  = ops[o]
-            row = protocol "," nodes "," workload "," conflict_rate "," city \
+            row = protocol "," nodes "," workload "," conflict_rate "," dc \
                   "," op "," clients "," tput "," (op in avg_lat ? sprintf("%.2f", avg_lat[op]) : "unknown")
             for (p = 1; p <= 100; p++) {
                 key = op SUBSEP p

@@ -282,23 +282,24 @@ def main():
         replica_means = []
         replica_labels = []
 
-    # Prepare a caption showing all cities present in the results
-    data_cities_caption = ""
+    # Prepare a caption showing all DCs present in the results
+    data_dcs_caption = ""
     try:
-        if 'city' in df_valid.columns:
-            # Get all unique cities from the valid data
-            cities = sorted(df_valid['city'].unique().tolist())
-            # Escape city names
-            safe_cities = []
-            for city in cities:
-                if pd.notna(city):
-                    safe = str(city).replace("\\", "\\textbackslash{}").replace("_", "\\_").replace("%", "\\%")
-                    safe_cities.append(safe)
-            if safe_cities:
-                cities_str = ", ".join(safe_cities)
-                data_cities_caption = f" Data locations: \\texttt{{{cities_str}}}."
+        dc_col = 'dc' if 'dc' in df_valid.columns else ('city' if 'city' in df_valid.columns else None)
+        if dc_col:
+            # Get all unique DCs from the valid data
+            dcs = sorted(df_valid[dc_col].unique().tolist())
+            # Escape DC names
+            safe_dcs = []
+            for dc in dcs:
+                if pd.notna(dc):
+                    safe = str(dc).replace("\\", "\\textbackslash{}").replace("_", "\\_").replace("%", "\\%")
+                    safe_dcs.append(safe)
+            if safe_dcs:
+                dcs_str = ", ".join(safe_dcs)
+                data_dcs_caption = f" Data locations: \\texttt{{{dcs_str}}}."
     except Exception:
-        data_cities_caption = ""
+        data_dcs_caption = ""
 
     # Write TikZ/pgfplots file
     with open(output_tikz, "w") as f:
@@ -381,7 +382,7 @@ def main():
         f.write(f"   \\node[font=\\tiny] at (10.6,0.6) {{\\color{{gray}}{{$Q$}}}};\n")
         f.write("  \\end{tikzpicture}\n")
         f.write("  \\caption{Median operation latency across all locations as a function of the conflict parameter ($\\theta$).")
-        # f.write(data_cities_caption)
+        # f.write(data_dcs_caption)
         f.write("}\n")
         f.write("  \\label{fig:conflict-latency}\n")
         f.write("\\end{figure}\n")

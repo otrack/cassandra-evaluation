@@ -50,7 +50,7 @@ if [ "$test_run" -eq 1 ]; then
     records=1000
 fi
 replication_factor=${nodes}
-cities="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""
+dcs="Hanoi Lyon NewYork Rotterdam SaoPaulo" # can be ""
 plot_average=true
 records=$(config records)
 threads=$(config threads)
@@ -106,9 +106,9 @@ ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/cdf/* > ${RESULTSDIR}/cdf.csv
 
 debug "Plotting..."
 if [ "$plot_average" = true ]; then
-    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${cities} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex --average
+    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${dcs} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex --average
 else
-    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${cities} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
+    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${dcs} ${DIR}/latencies.csv ${RESULTSDIR}/cdf.tex
 fi
 
 pdflatex -interaction nonstopmode -jobname=cdf -output-directory=${RESULTSDIR} \

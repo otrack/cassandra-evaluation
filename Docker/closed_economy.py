@@ -230,7 +230,7 @@ def accord_latency_bounds(locations):
 def load_breakdown(breakdown_csv):
     """Load breakdown data from breakdown.csv.
 
-    Returns a dict: {protocol: {nodes: {city: {fast_commit, slow_commit, commit, ordering, execution}}}}
+    Returns a dict: {protocol: {nodes: {dc: {fast_commit, slow_commit, commit, ordering, execution}}}}}
     Values are in microseconds.
     """
     result = {}
@@ -239,7 +239,8 @@ def load_breakdown(breakdown_csv):
     except (FileNotFoundError, IOError):
         return result
 
-    required = {'protocol', 'nodes', 'city', 'fast_commit', 'slow_commit', 'commit', 'ordering', 'execution'}
+    dc_col = 'dc' if 'dc' in df.columns else 'city'
+    required = {'protocol', 'nodes', dc_col, 'fast_commit', 'slow_commit', 'commit', 'ordering', 'execution'}
     if not required.issubset(df.columns):
         return result
 
@@ -249,7 +250,7 @@ def load_breakdown(breakdown_csv):
             nodes = int(row['nodes'])
         except (TypeError, ValueError):
             continue
-        city = str(row['city']).strip()
+        dc = str(row[dc_col]).strip()
         try:
             fc = float(row['fast_commit'])
             sc = float(row['slow_commit'])
@@ -258,7 +259,7 @@ def load_breakdown(breakdown_csv):
             ex = float(row['execution'])
         except (TypeError, ValueError):
             continue
-        result.setdefault(proto, {}).setdefault(nodes, {})[city] = {
+        result.setdefault(proto, {}).setdefault(nodes, {})[dc] = {
             'fast_commit': fc,
             'slow_commit': sc,
             'commit': cm,
@@ -269,20 +270,20 @@ def load_breakdown(breakdown_csv):
 
 
 def compute_average_breakdown(breakdown_data, protocol, nodes):
-    """Return the average breakdown across all cities for (protocol, nodes).
+    """Return the average breakdown across all DCs for (protocol, nodes).
 
     Returns a dict {fast_commit, slow_commit, commit, ordering, execution} in
     microseconds, or None if no data are available.
     """
-    cities_data = breakdown_data.get(protocol, {}).get(nodes, {})
-    if not cities_data:
+    dcs_data = breakdown_data.get(protocol, {}).get(nodes, {})
+    if not dcs_data:
         return None
     components = ['fast_commit', 'slow_commit', 'commit', 'ordering', 'execution']
     totals = {c: 0.0 for c in components}
-    n = len(cities_data)
-    for city_bd in cities_data.values():
+    n = len(dcs_data)
+    for dc_bd in dcs_data.values():
         for c in components:
-            totals[c] += city_bd.get(c, 0.0)
+            totals[c] += dc_bd.get(c, 0.0)
     return {c: totals[c] / n for c in components}
 
 

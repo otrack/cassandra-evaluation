@@ -122,17 +122,17 @@ fi
 debug "Parsing results..."
 ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/conflict/* > ${RESULTSDIR}/conflict.csv
 
-# Append accord-cmt commit latency rows (one per node/city, per theta value)
+# Append accord-cmt commit latency rows (one per node/DC, per theta value)
 for t in ${thetas}
 do
     cmt_file="${RESULTSDIR}/conflict/accord_cmt_${t}.txt"
     if [ -f "${cmt_file}" ]; then
         awk -F',' -v t="${t}" -v n="${nodes}" '
         NF >= 4 {
-            city = $1
+            dc = $1
             commit_us = $4
             commit_ms = commit_us / 1000
-            row = "accord-cmt," n ",a," t "," city ",update,NA,NA,NA"
+            row = "accord-cmt," n ",a," t "," dc ",update,NA,NA,NA"
             # Percentile columns p1-p49: not available from JMX breakdown
             for (i = 1; i <= 49; i++) row = row ",unknown"
             # p50: commit latency in ms (the only percentile reported by compute_breakdown)

@@ -90,12 +90,12 @@ maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
     pull_images
-    echo "protocol,S,clients,city,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/swap/breakdown.csv
+    echo "protocol,S,clients,dc,fast_commit,slow_commit,commit,ordering,execution" > ${RESULTSDIR}/swap/breakdown.csv
 
-    cities_list=""
+    dcs_list=""
     for i in $(seq 1 ${nodes}); do
         loc=$(get_location $i ${DIR}/latencies.csv)
-        cities_list="${cities_list} ${loc}"
+        dcs_list="${dcs_list} ${loc}"
     done
 
     for p in ${protocols}
@@ -127,7 +127,7 @@ if [ "$dry_run" -eq 0 ]; then
                         fi
                     done
                     python3 ${DIR}/cockroachdb/cockroachdb_breakdown.py \
-                        ${p} ${tmp_logdir} ${workload} ${nodes} ${cities_list} | \
+                        ${p} ${tmp_logdir} ${workload} ${nodes} ${dcs_list} | \
                         awk -F',' -v s="${s}" -v c="${clients}" -v proto="${p}" '{print proto "," s "," c "," $0}' >> ${RESULTSDIR}/swap/breakdown.csv
                     rm -rf "${tmp_logdir}"
                 elif [ "$p" == "accord" ]; then
