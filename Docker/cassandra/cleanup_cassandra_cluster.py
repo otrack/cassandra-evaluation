@@ -9,8 +9,14 @@ def debug(msg):
 
 def stop_and_remove_container(container):
     debug(f"Stopping and removing container: {container.name}")
-    container.stop()
-    container.remove()
+    try:
+        container.stop(timeout=10)
+    except Exception:
+        pass
+    try:
+        container.remove()
+    except Exception:
+        pass
 
 def cleanup_cassandra_cluster():
     client = docker.from_env()

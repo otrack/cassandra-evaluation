@@ -26,18 +26,21 @@ def wait_for_log(container, log_pattern, timeout=300):
             return False
     return False
 
-def wait_for_nodetool_status(first_container, expected_count, timeout=120):
+def wait_for_nodetool_status(containers, expected_count, timeout=120):
     start_time = time.time()
+    container_list = containers if isinstance(containers, list) else [containers]
     while time.time() - start_time < timeout:
-        try:
-            res = first_container.exec_run("nodetool status")
-            output = res.output.decode('utf-8')
-            un_count = sum(1 for line in output.splitlines() if line.strip().startswith("UN "))
-            if un_count >= expected_count:
-                debug(f"All {expected_count} Cassandra nodes are UN (Up Normal) in nodetool status.")
-                return True
-        except Exception:
-            pass
+        for c in container_list:
+            try:
+                res = c.exec_run("nodetool status")
+                if res.exit_code == 0:
+                    output = res.output.decode('utf-8', errors='ignore')
+                    un_count = sum(1 for line in output.splitlines() if re.match(r'^\s*UN\b', line))
+                    if un_count >= expected_count:
+                        debug(f"All {expected_count} Cassandra nodes are UN (Up Normal) in nodetool status (verified via {c.name}).")
+                        return True
+            except Exception:
+                pass
         time.sleep(2)
     debug(f"Timeout waiting for all {expected_count} nodes to become UN.")
     return False
@@ -130,7 +133,7 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     debug(f"Started {len(containers)} Cassandra nodes across {num_dcs} DCs ({nodes_per_dc} nodes/DC).")
     if containers:
         debug("Waiting for all nodes to be UN in nodetool status...")
-        wait_for_nodetool_status(containers[0], len(containers))
+        wait_for_nodetool_status(containers, len(containers))
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:

@@ -129,7 +129,9 @@ if [ "$dry_run" -eq 0 ]; then
         fi
 
         # Load YCSB data
-        nearby_database=$(config "node_name")1
+        # Load YCSB data
+        location1=$(get_location 1 ${DIR}/latencies.csv)
+        nearby_database="${location1}1"
         run_ycsb "load" "${workload_type}" "${workload}" "${hosts}" "${port}" \
             "${records}" "${records}" "${protocol}" "${replication_factor}" \
             "${output_file%.dat}.load" "1" "ycsb" "${nearby_database}"
@@ -141,8 +143,8 @@ if [ "$dry_run" -eq 0 ]; then
 
         # Start YCSB run clients from each node (time-bounded via maxexecutiontime)
         for i in $(seq 1 ${node_count}); do
-            nearby_database=$(config "node_name")${i}
             location=$(get_location $i ${DIR}/latencies.csv)
+            nearby_database="${location}1"
             run_ycsb "run" "${workload_type}" "${workload}" "${hosts}" "${port}" \
                 "${records}" 0 "${protocol}" "${replication_factor}" \
                 "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
@@ -193,10 +195,7 @@ if [ "$dry_run" -eq 0 ]; then
         done
 
         # Cleanup
-        for i in $(seq 1 ${node_count}); do
-            docker stop "$(config 'node_name')${i}" 2>/dev/null || true
-        done
-        docker stop "swiftpaxos-master" 2>/dev/null || true
+        ${pref}_cleanup_cluster >/dev/null 2>&1 || true
         stop_network
 
     done
