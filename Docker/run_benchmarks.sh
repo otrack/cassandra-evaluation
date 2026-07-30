@@ -249,7 +249,7 @@ run_benchmark() {
     
     protocol=$1
     nthreads=$2
-    node_count=$3
+    dc_count=$3
     replication_factor=$4
     workload_type=$5
     workload=$6
@@ -279,13 +279,13 @@ run_benchmark() {
 	pref=tiga
     fi   
 
-    log "Running ${workload_type} ${workload^^} for ${node_count} DC(s) with ${nodes_per_dc} node(s)/DC..."
+    log "Running ${workload_type} ${workload^^} for ${dc_count} DC(s) with ${nodes_per_dc} node(s)/DC..."
 
     if [ $do_create_and_load == "1" ];
     then	
-	log "Starting ${protocol} deployment with ${node_count} DC(s)..."
+	log "Starting ${protocol} deployment with ${dc_count} DC(s)..."
 	start_network
-	${pref}_start_cluster "${node_count}" "$protocol" "${nodes_per_dc}"
+	${pref}_start_cluster "${dc_count}" "$protocol" "${nodes_per_dc}"
 
 	num_dcs=$(${pref}_get_node_count)
 	hosts=$(${pref}_get_hosts "${num_dcs}" "${nodes_per_dc}")
@@ -383,12 +383,12 @@ run_benchmark() {
 
 stop_benchmark() {
     if [ $# -lt 2 ]; then
-	echo "Usage: $0 <protocol> <node_count>"
+	echo "Usage: $0 <protocol> <dc_count>"
 	exit 1
     fi
 
     protocol=$1
-    node_count=$2
+    dc_count=$2
 
     pref=cassandra
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos"; then	
@@ -399,6 +399,6 @@ stop_benchmark() {
 	pref=tiga
     fi
     
-    ${pref}_cleanup_cluster ${node_count}
+    ${pref}_cleanup_cluster ${dc_count}
     stop_network
 }

@@ -55,7 +55,7 @@ protocols="accord cockroachdb-bad cockroachdb-opt"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-node_counts="3 5 7"
+dc_counts="3 5 7"
 replication_factor=3
 records=$(config records)
 threads=50
@@ -80,6 +80,7 @@ if [ -n "$nodesperdc_override" ]; then
 fi
 
 if [ "$test_run" -eq 1 ]; then
+    dc_counts="3"
     nodes=3
     records=1000
     compute_test_machine "${nodes}"
@@ -104,7 +105,7 @@ if [ "$dry_run" -eq 0 ]; then
 
         rm -f ${LOGDIR}/closed_economy/*${p}*
         
-        for nodes in ${node_counts}
+        for nodes in ${dc_counts}
         do
 	    if [ "$test_run" -eq 1 ]; then
 	        compute_test_machine "${nodes}"
@@ -151,7 +152,7 @@ if [ "$dry_run" -eq 0 ]; then
 
         rm -f ${LOGDIR}/closed_economy_multi/*${p}*
 
-        for nodes in ${node_counts}
+        for nodes in ${dc_counts}
         do
 	    if [ "$test_run" -eq 1 ]; then
 	        compute_test_machine "${nodes}"

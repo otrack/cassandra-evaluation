@@ -6,15 +6,17 @@ cassandra_create_keyspace() {
     local timeout=$1
     local num_dcs=$2
     local replication_factor=$3
+    local nodes_per_dc=${4:-$(config nodesperdc)}
+    nodes_per_dc=${nodes_per_dc:-1}
 
     local first_city=$(get_location 1 ${DIR}/latencies.csv)
     local container="${first_city}1"
 
-    # Build NetworkTopologyStrategy dict string with 1 replica per DC
+    # Build NetworkTopologyStrategy dict string with nodes_per_dc replicas per DC
     local dc_map="'class': 'NetworkTopologyStrategy'"
     for i in $(seq 1 $num_dcs); do
         local city=$(get_location $i ${DIR}/latencies.csv)
-        dc_map="${dc_map}, '${city}': 1"
+        dc_map="${dc_map}, '${city}': ${nodes_per_dc}"
     done
     
     drop_keyspace_command="DROP KEYSPACE IF EXISTS ycsb;"
@@ -30,7 +32,7 @@ cassandra_create_keyspace() {
 
     docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$create_keyspace_command"
     if [ $? -eq 0 ]; then
-        debug "Keyspace 'ycsb' created with NetworkTopologyStrategy (1 per DC)."
+        debug "Keyspace 'ycsb' created with NetworkTopologyStrategy (${nodes_per_dc} per DC)."
     else
         log "Error creating keyspace."
         exit 1

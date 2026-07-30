@@ -51,7 +51,7 @@ protocols="accord"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-node_counts=5
+dc_counts=5
 replication_factor=3
 records=4
 threads=1
@@ -92,7 +92,7 @@ do
         open http://localhost:3000 > /dev/null 2>&1 &
     fi
 
-    for nodes in ${node_counts}
+    for nodes in ${dc_counts}
     do
 	if [ "$test_run" -eq 1 ]; then
 	    compute_test_machine "${nodes}"

@@ -363,13 +363,13 @@ def main():
     # Get unique protocols and node counts; sort protocols by protocols.csv order.
     protocols_legend = sort_protocols_for_plotting(df_single['protocol'].unique().tolist())
     protocols_plot   = sort_protocols_for_plotting(df_single['protocol'].unique().tolist())
-    node_counts = sorted(df_single['nodes_int'].unique().tolist())
+    dc_counts = sorted(df_single['nodes_int'].unique().tolist())
 
     latencies_path = os.path.join(os.path.dirname(__file__), "latencies.csv")
     locations = load_locations(latencies_path)
     accord_latencies = []
     if locations:
-        for nodes in node_counts:
+        for nodes in dc_counts:
             if nodes <= len(locations):
                 best_latency, worst_latency = accord_latency_bounds(locations[:nodes])
                 if best_latency is not None and worst_latency is not None:
@@ -379,7 +379,7 @@ def main():
     data = {}
     for proto in protocols_plot:
         data[proto] = {}
-        for nodes in node_counts:
+        for nodes in dc_counts:
             subset = df_single[(df_single['protocol'] == proto) & (df_single['nodes_int'] == nodes)]
             if not subset.empty:
                 data[proto][nodes] = {}
@@ -397,7 +397,7 @@ def main():
     # Compute y-axis limits for the left (single-client) plot
     all_vals = []
     for proto in protocols_plot:
-        for nodes in node_counts:
+        for nodes in dc_counts:
             for metric in LATENCY_METRICS:
                 val = data[proto].get(nodes, {}).get(metric)
                 if val is not None:
@@ -435,7 +435,7 @@ def main():
         )
         for proto in all_protocols_right:
             data_multi[proto] = {}
-            for nodes in node_counts:
+            for nodes in dc_counts:
                 subset = df_multi[(df_multi['protocol'] == proto) & (df_multi['nodes_int'] == nodes)]
                 if not subset.empty:
                     data_multi[proto][nodes] = {}
@@ -448,7 +448,7 @@ def main():
 
     # Generate TikZ/pgfplots code for grouped latency range chart
     # Group by protocol on the x-axis with offsets per node count.
-    series_count = len(node_counts)
+    series_count = len(dc_counts)
     offset_step = calculate_offset_step(series_count)
 
     with open(output_tikz, 'w') as f:
@@ -485,7 +485,7 @@ def main():
             # Compute y-axis range from both sections
             left_vals = []
             for proto in all_protocols_right:
-                for nodes in node_counts:
+                for nodes in dc_counts:
                     for src in (data, data_multi):
                         for metric in LATENCY_METRICS:
                             v = src.get(proto, {}).get(nodes, {}).get(metric)
@@ -503,7 +503,7 @@ def main():
 
         # Center node count offsets around each protocol position.
         offsets = [
-            (idx - (len(node_counts) - 1) / 2) * offset_step for idx in range(len(node_counts))
+            (idx - (len(dc_counts) - 1) / 2) * offset_step for idx in range(len(dc_counts))
         ]
 
         f.write("  \\begin{tikzpicture}[scale=.6]\n")
@@ -520,7 +520,7 @@ def main():
         # Part 1: single-client data
         for proto_idx, proto in enumerate(all_protocols_right):
             col = get_protocol_color(proto, protocol_colors, proto_idx)
-            for node_idx, nodes in enumerate(node_counts):
+            for node_idx, nodes in enumerate(dc_counts):
                 offset = offsets[node_idx]
                 avg_val = data.get(proto, {}).get(nodes, {}).get("avg")
                 best_val = data.get(proto, {}).get(nodes, {}).get("best")
@@ -549,7 +549,7 @@ def main():
             # Part 2: multi-client data
             for proto_idx, proto in enumerate(all_protocols_right):
                 col = get_protocol_color(proto, protocol_colors, proto_idx)
-                for node_idx, nodes in enumerate(node_counts):
+                for node_idx, nodes in enumerate(dc_counts):
                     offset = offsets[node_idx]
                     avg_val = data_multi.get(proto, {}).get(nodes, {}).get("avg")
                     best_val = data_multi.get(proto, {}).get(nodes, {}).get("best")

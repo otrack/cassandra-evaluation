@@ -95,12 +95,12 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
                 src_band = idx1 + 2
 
                 # Add latency from src to dst
-                run_tc(src_container, f"tc qdisc add dev eth0 parent 1:{dst_band} handle {dst_band}0: netem delay {latency}ms")
-                run_tc(src_container, f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{dst_band}")
+                run_tc(src_container, f"tc qdisc add dev eth0 parent 1:{dst_band:x} handle {dst_band:x}0: netem delay {latency}ms")
+                run_tc(src_container, f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{dst_band:x}")
 
                 # Add latency from dst to src
-                run_tc(dst_container, f"tc qdisc add dev eth0 parent 1:{src_band} handle {src_band}0: netem delay {latency}ms")
-                run_tc(dst_container, f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{src_band}")
+                run_tc(dst_container, f"tc qdisc add dev eth0 parent 1:{src_band:x} handle {src_band:x}0: netem delay {latency}ms")
+                run_tc(dst_container, f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{src_band:x}")
 
                 debug(f"Added {latency}ms ping latency between '{src_name}' and '{dst_name}' (distance: {distance:.2f} km).")
 

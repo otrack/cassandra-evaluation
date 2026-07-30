@@ -69,6 +69,7 @@ restore_settings() {
 trap restore_settings EXIT
 
 if [ "$test_run" -eq 1 ]; then
+    nodes=3
     duration_minutes=3
     original_machine=$(config machine)
     compute_test_machine "${nodes}"
