@@ -55,7 +55,7 @@ protocols="accord cockroachdb-bad cockroachdb-opt"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-dc_counts="3 5 7"
+dc_counts="3"
 replication_factor=3
 records=$(config records)
 threads=50
