@@ -181,8 +181,8 @@ stop_container() {
     # Check container existence / get running state
     local running
     running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null) || {
-        error "Container '${cname}' does not exist or cannot be inspected"
-        return 3
+        log "Container '${cname}' does not exist or is already removed"
+        return 0
     }
 
     if [ "$running" != "true" ]; then

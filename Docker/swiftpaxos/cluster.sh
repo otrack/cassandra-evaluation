@@ -47,11 +47,19 @@ swiftpaxos_cleanup_cluster() {
     for i in $(seq 1 $node_count); do
         location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
         container_name="${location}1"
-	stop_container ${container_name} || true
-	stop_container "database-node${i}" || true
-	stop_container "ycsb-${i}" || true
+        if docker inspect "$container_name" >/dev/null 2>&1; then
+            stop_container "${container_name}" || true
+        fi
+        if docker inspect "database-node${i}" >/dev/null 2>&1; then
+            stop_container "database-node${i}" || true
+        fi
+        if docker inspect "ycsb-${i}" >/dev/null 2>&1; then
+            stop_container "ycsb-${i}" || true
+        fi
     done	
-    stop_container "ycsb" || true
+    if docker inspect "ycsb" >/dev/null 2>&1; then
+        stop_container "ycsb" || true
+    fi
 }
 
 swiftpaxos_get_hosts() {
