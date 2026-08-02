@@ -1,3 +1,0 @@
-europe-north1-b
-europe-west1-b
-europe-west3-b

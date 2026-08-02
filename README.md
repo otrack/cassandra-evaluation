@@ -51,11 +51,7 @@ docker build -t user/cassandra-accord:latest .
 
 ## Benchmarking
 
-As mentioned before, there are two possible environments
-- `Docker` uses containers 
-- `GCP` uses Google Cloud Platform
-
-Below, we explain how to use the Docker one.
+Below, we detail the instructions for executing container-based benchmarks.
 
 ### Docker
 

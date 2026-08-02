@@ -1,3 +1,0 @@
-USE ycsb;
-TRACING ON;
-SELECT * FROM usertable LIMIT 1;

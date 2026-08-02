@@ -1,6 +1,0 @@
-accord
-cassandra-paxos
-cockroachdb
-swiftpaxos-paxos
-swiftpaxos-epaxos
-swiftpaxos-curp

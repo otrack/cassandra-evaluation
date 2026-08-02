@@ -159,8 +159,8 @@ The measured ratios directly explain the YCSB throughput, average latency, and t
 During experiments with larger topologies (e.g., 5-node clusters), two critical environment bugs were identified and resolved to allow the evaluation to proceed correctly:
 
 1. **Docker Latency Emulation Failure (Silent `tc` Bypass)**:
-   * **Issue**: In [Docker/tiga/cluster.sh](file:///home/otrack/Implementation/cassandra-evaluation/Docker/tiga/cluster.sh), Tiga/Calvin/Detock server containers were launched without `NET_ADMIN` and `NET_RAW` capabilities. When [Docker/emulate_latency.py](file:///home/otrack/Implementation/cassandra-evaluation/Docker/emulate_latency.py) ran traffic control (`tc`) commands inside these containers to emulate WAN delays, the commands failed silently with `Operation not permitted`. As a result, actual network latency between replicas remained `0 ms`, leading to incorrect uniform latency measurements of `~70 ms` across all locations.
-   * **Fix**: Added `--cap-add=NET_ADMIN --cap-add=NET_RAW` to the Tiga server containers inside [Docker/tiga/cluster.sh](file:///home/otrack/Implementation/cassandra-evaluation/Docker/tiga/cluster.sh), and modified [Docker/emulate_latency.py](file:///home/otrack/Implementation/cassandra-evaluation/Docker/emulate_latency.py) to validate `tc` command exit codes and raise an exception on failure.
+   * **Issue**: In [tiga/cluster.sh](file:///home/otrack/ALL/myWork/Implementation/cassandra-evaluation/tiga/cluster.sh), Tiga/Calvin/Detock server containers were launched without `NET_ADMIN` and `NET_RAW` capabilities. When [emulate_latency.py](file:///home/otrack/ALL/myWork/Implementation/cassandra-evaluation/emulate_latency.py) ran traffic control (`tc`) commands inside these containers to emulate WAN delays, the commands failed silently with `Operation not permitted`. As a result, actual network latency between replicas remained `0 ms`, leading to incorrect uniform latency measurements of `~70 ms` across all locations.
+   * **Fix**: Added `--cap-add=NET_ADMIN --cap-add=NET_RAW` to the Tiga server containers inside [tiga/cluster.sh](file:///home/otrack/ALL/myWork/Implementation/cassandra-evaluation/tiga/cluster.sh), and modified [emulate_latency.py](file:///home/otrack/ALL/myWork/Implementation/cassandra-evaluation/emulate_latency.py) to validate `tc` command exit codes and raise an exception on failure.
 
 2. **Replication Group Boundary Overflow**:
    * **Issue**: When running with 5 nodes, Tiga servers crashed with `*** buffer overflow detected ***: terminated`. This was traced back to `#define MAX_REPLICA_NUM (3)` defined statically in `Tiga/Common.h`. Indexing connection and tracking structures using replica IDs `3` and `4` caused out-of-bounds writes on array structures.
@@ -168,9 +168,9 @@ During experiments with larger topologies (e.g., 5-node clusters), two critical 
 
 ---
 
-## 10. Empirical Performance & Physical Latency Model (`/Docker/results/cdf.csv`)
+## 10. Empirical Performance & Physical Latency Model (`results/cdf.csv`)
 
-The empirical benchmark results recorded in `/Docker/results/cdf.csv` demonstrate Tiga's performance across 3 Data Centers (Hanoi, Lyon, New York) under YCSB Workload A when configuring the leader at the **topologically optimal central location (Lyon)**:
+The empirical benchmark results recorded in `results/cdf.csv` demonstrate Tiga's performance across 3 Data Centers (Hanoi, Lyon, New York) under YCSB Workload A when configuring the leader at the **topologically optimal central location (Lyon)**:
 
 ### Measured Tiga Benchmark Metrics (Optimal Leader: Lyon)
 
@@ -190,7 +190,7 @@ The empirical benchmark results recorded in `/Docker/results/cdf.csv` demonstrat
 The measured latency numbers align precisely with the underlying network topology (`latencies.csv`) and Tiga's preventive headroom protocol:
 
 #### 1. Great-Circle Distance & OWD Formula
-The One-Way Delay (OWD) between data centers is calculated in [`Docker/emulate_latency.py`](file:///home/otrack/Implementation/cassandra-evaluation/Docker/emulate_latency.py) using the Haversine formula for great-circle geographical distance and the speed of light in optical fiber ($v_{\text{fiber}} \approx 204\text{ km/ms}$):
+The One-Way Delay (OWD) between data centers is calculated in [`emulate_latency.py`](file:///home/otrack/ALL/myWork/Implementation/cassandra-evaluation/emulate_latency.py) using the Haversine formula for great-circle geographical distance and the speed of light in optical fiber ($v_{\text{fiber}} \approx 204\text{ km/ms}$):
 
 $$\text{Distance } (d) = 2 R \cdot \arcsin\left( \sqrt{ \sin^2\left(\frac{\Delta \text{lat}}{2}\right) + \cos(\text{lat}_1) \cos(\text{lat}_2) \sin^2\left(\frac{\Delta \text{lon}}{2}\right) } \right)$$
 
