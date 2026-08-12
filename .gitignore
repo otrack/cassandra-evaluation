@@ -105,5 +105,5 @@ venv.bak/
 *.swo
 *~
 
-Docker/results/
-Docker/logs/
+results/
+logs/

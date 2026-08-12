@@ -86,7 +86,7 @@ run_ycsb() {
     fi
 
     if [ "$action" == "load" ]; then
-        ycsb_threads=10
+        ycsb_threads=1 # FIXME CRDB parallel load is failing
     fi
     
     shift 13
