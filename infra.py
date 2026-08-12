@@ -87,7 +87,19 @@ def locations_file():
     derived = os.path.join(_ROOT, ".deployment", "%s.locations.csv" % provider())
     if os.path.exists(derived):
         return derived
-    return os.path.join(_ROOT, "infra", provider(), "locations.csv")
+
+    authored = os.path.join(_ROOT, "infra", provider(), "locations.csv")
+    # A provider that derives its map ships something else here (a zone list,
+    # say).  Handing that back would let callers parse zero locations and plot
+    # silently without their theoretical bounds, so say what is wrong instead.
+    with open(authored, newline="") as f:
+        header = (f.readline() or "").strip().split(",")
+    if not {"lat", "lon", "loc"} <= {h.strip() for h in header}:
+        raise RuntimeError(
+            "%s is not a lat,lon,loc map: provider '%s' derives its locations. "
+            "Run any benchmark entry point (or ./deploy.sh status) once so that "
+            "%s is materialised." % (authored, provider(), derived))
+    return authored
 
 
 def state_file():
