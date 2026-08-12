@@ -197,7 +197,9 @@ def host_for(name):
     host = row.get("host")
     if not host:
         return None, None
-    return host, row.get("ssh_user") or os.environ.get("USER")
+    return host, (row.get("ssh_user")
+                  or os.environ.get("BENCH_SSH_USER")
+                  or os.environ.get("USER"))
 
 
 def net_device(name):

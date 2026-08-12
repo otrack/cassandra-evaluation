@@ -155,7 +155,7 @@ infra/
 # exp.config
 infra=simulation        # or gcp, aws
 infra_region_map=       # optional provider-specific placement override
-ssh_user=bench
+# SSH identity comes from $BENCH_SSH_KEY / $BENCH_SSH_USER
 machine=e2-highcpu-8    # in real mode: the VM shape to provision
 ```
 
@@ -451,7 +451,7 @@ infra_provision() {
         local ip; ip=$(gcloud compute instances describe "$name" --zone "$zone" \
             --format='get(networkInterfaces[0].networkIP)')
         registry_set "$i" host "$ip"
-        registry_set "$i" ssh_user "$(config ssh_user)"
+        state_set "$i" ssh_user "${BENCH_SSH_USER:-$USER}"
         registry_set "$i" net_device ens4
     done
     infra_wait_ssh "$n"
@@ -526,7 +526,7 @@ through the injected `/etc/hosts` entries, so the generator needs no change.
 | --- | --- |
 | `infra/{simulation,gcp,aws}.sh`, `infra/install-docker.sh`, `infra/README.md` | **New.** The ten contract functions per provider. |
 | `latencies.csv` | **Removed.** Replaced by a per-provider locations map plus a gitignored deployment-state file. |
-| `exp.config` | Add `infra=`, `ssh_user=`; set `latency_simulation=0` in real mode (flag already exists). |
+| `exp.config` | Add `infra=`; set `latency_simulation=0` in real mode (flag already exists). The SSH identity comes from `$BENCH_SSH_KEY`/`$BENCH_SSH_USER` instead, since `exp.config` is tracked. |
 | `utils.sh` | Add `node_index_of`, `d`/`drun`/`dexec`/`dinspect`/`dlogs`/`dstop`/`dkill`, `registry_field`, `registry_set`, `host_aliases`, `infra_bootstrap`, `infra_all_contexts`; make `get_container_ip` and `start_container` mode-aware; move `get_resource_limits` body into `infra/simulation.sh`; `pull_images` loops over hosts. |
 | `run_benchmarks.sh` | `start_network`/`stop_network` become mode-aware; YCSB context resolved from `${nearby_database}`; `infra_stage_file` before the `-v` at line 134. |
 | `cassandra/cluster.sh`, `cockroachdb/cluster.sh`, `swiftpaxos/cluster.sh`, `tiga/cluster.sh` | Raw `docker` → `d*` wrappers; `${pref}_get_node_count` probes liveness rather than IP presence. |

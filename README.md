@@ -64,7 +64,8 @@ At a high-level, the benchmark creates a set of replicas and clients.
 These are spread across several locations to simulate datacenters.
 By default there is one data replica and one client per datacenter; this can be changed with the
 `nodesperdc` parameter (SwiftPaxos only supports `nodesperdc=1`).
-The locations are taken, in order, from `latencies.csv`; the WAN delay between two of them is
+The locations are taken, in order, from the active infrastructure's locations map
+(`infra/simulation/locations.csv` by default); the WAN delay between two of them is
 derived from their coordinates and enforced with the Linux traffic shapping tool (tc).
 Replicas and clients are running in Docker containers.
 The client share the same network interface as the nearby replica.
@@ -91,10 +92,41 @@ that are defined in the file `exp.config`:
 | `*_image` | The Docker image used for each system; all of them are pulled before an experiment starts. |
 | `network_name` | The Docker bridge network the containers are attached to. |
 | `latency_simulation` | Enable the emulation of the WAN delays with tc. |
+| `infra` | Where the containers run: `simulation` (the local Docker daemon, the default) or a cloud provider such as `gcp`. See [infra/README.md](infra/README.md). |
 | `machine` | The GCP machine type whose CPU/memory limits are applied to each container (see `gcp.csv`). |
 | `records` / `threads` / `maxexecutiontime` | The YCSB record count, client threads and duration of a run (in seconds). |
 | `nodesperdc` | The number of replicas per datacenter. |
 | `accord.*` / `cockroachdb.*` | Per-system tuning knobs (e.g., ephemeral reads, lease holder placement). |
+
+### Running on real machines
+
+`exp.config` describes the *experiment* and is version controlled. Anything that
+describes *your machine* — which SSH key and account reach the cloud VMs — is
+taken from the environment instead:
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `BENCH_SSH_KEY` | Path to the **private** SSH key used to reach the provisioned machines. Its public half is registered in each instance's metadata at creation. | the first of `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`, `~/.ssh/id_ecdsa` |
+| `BENCH_SSH_USER` | Login name on the provisioned machines. The account is created from the key metadata, so it need not pre-exist. | `$USER` |
+
+Neither is normally needed: the defaults suit a laptop with an ordinary SSH key.
+Set them when you keep a dedicated benchmark key, or when the cloud project
+enforces OS Login and derives its own username. **Only paths and names belong
+here — no key material.**
+
+``` bash
+export BENCH_SSH_KEY=~/.ssh/bench_ed25519      # optional
+export BENCH_SSH_USER=bench                    # optional
+
+# exp.config: infra=gcp, latency_simulation=0
+./deploy.sh bootstrap 3      # provision the machines and open the protocol ports
+./deploy.sh status
+./cdf.sh --protocols=cassandra-paxos
+./deploy.sh teardown         # cloud machines bill by the second
+```
+
+`.deployment/` holds everything provisioning discovers (addresses, zones,
+interface names). It is generated, and gitignored for the same reason.
 
 ### Experiments
 

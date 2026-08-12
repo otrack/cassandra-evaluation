@@ -102,11 +102,14 @@ _gcp_dc_of()    { echo $(( ($1 - 1) / $(_gcp_nodes_per_dc) + 1 )); }
 _gcp_instance() { echo "${GCP_INSTANCE_PREFIX}$1"; }
 
 # Private half of the key whose public half is pushed to instance metadata.
+#
+# Taken from the environment rather than exp.config: which key and account an
+# operator uses is a property of their machine, not of the experiment, and
+# exp.config is version controlled.
 _gcp_ssh_key() {
     local k
-    k=$(config ssh_key)
-    if [ -n "${k}" ]; then
-        echo "${k/#\~/${HOME}}"
+    if [ -n "${BENCH_SSH_KEY}" ]; then
+        echo "${BENCH_SSH_KEY/#\~/${HOME}}"
         return 0
     fi
     for k in "${GCP_SSH_DEFAULT_KEYS[@]}"; do
@@ -234,7 +237,7 @@ _gcp_ssh_keys_file() {
     pub="${key}.pub"
     if [ -z "${key}" ] || [ ! -f "${pub}" ]; then
         error "gcp: no SSH public key found; generate one with 'ssh-keygen'"
-        error "     or point 'ssh_key' in exp.config at an existing private key"
+        error "     or set BENCH_SSH_KEY to an existing private key"
         return 1
     fi
     local f="${DIR}/.deployment/${INFRA}.ssh-keys"
@@ -253,9 +256,7 @@ _gcp_gcloud() {
 }
 
 _gcp_ssh_user() {
-    local u
-    u=$(config ssh_user)
-    echo "${u:-${USER}}"
+    echo "${BENCH_SSH_USER:-${USER}}"
 }
 
 ###############################################################################

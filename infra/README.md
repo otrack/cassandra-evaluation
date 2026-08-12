@@ -63,12 +63,13 @@ deployment.
 What provisioning discovered, one row per node:
 
 ```csv
-node,host,ssh_user,net_device
-1,10.0.0.1,bench,ens4
+node,zone,host,ssh_host,ssh_user,net_device
+1,asia-southeast1-b,10.0.0.1,34.10.20.30,bench,ens4
 ```
 
 This is generated, not configured, so it lives under a gitignored directory and
-never touches a tracked file. `host` is the address **peers** use. Read and
+never touches a tracked file. `host` is the address **peers** use; `ssh_host` is
+the one the orchestrator connects to. Read and
 write it with `state_get <node> <col>`, `state_set <node> <col> <value>`,
 `state_nodes` and `state_clear` from `utils.sh`; `infra_all_indices` is just
 the set of nodes it records.
@@ -88,7 +89,7 @@ reached through SSH-backed Docker contexts.
 ```bash
 gcloud config set project <id>          # once
 # exp.config: infra=gcp, latency_simulation=0
-./deploy.sh bootstrap 3                 # create 3 VMs, open ports, pull images
+./deploy.sh bootstrap 3                 # create 3 VMs and open the protocol ports
 ./deploy.sh status
 ./cdf.sh --protocols=cassandra-paxos
 ./deploy.sh teardown                    # VMs bill by the second — do not skip
@@ -102,8 +103,8 @@ orchestrator reaches each VM over its *external* IP. Both are recorded per node
 in the state file, as `host` and `ssh_host`.
 
 **Nothing is written to `~/.ssh/config`.** The public half of the operator's key
-(`ssh_key` in `exp.config`, defaulting to the first of `~/.ssh/id_ed25519`,
-`id_rsa`, `id_ecdsa`) is registered in each instance's `ssh-keys` metadata at
+(`$BENCH_SSH_KEY`, defaulting to the first of `~/.ssh/id_ed25519`, `id_rsa`,
+`id_ecdsa`) is registered in each instance's `ssh-keys` metadata at
 creation. The suite's own remote calls state the key and address explicitly
 (`ssh -i … user@ip`), and Docker contexts point at `ssh://user@<external-ip>`.
 For an interactive shell, use `gcloud compute ssh bench-nodeN --zone <zone>` —
@@ -116,8 +117,13 @@ because contexts embed the address, a restarted instance gets a new ephemeral
 IP — `./deploy.sh sync` re-reads the addresses and rebuilds the contexts.
 
 Projects that enforce **OS Login** ignore instance-level `ssh-keys` metadata and
-derive their own usernames; there, set `ssh_user` to the derived name and rely
-on `gcloud compute ssh` having published your key.
+derive their own usernames; there, set `$BENCH_SSH_USER` to the derived name and
+rely on `gcloud compute ssh` having published your key.
+
+`BENCH_SSH_KEY` and `BENCH_SSH_USER` are read from the environment rather than
+`exp.config` on purpose: they describe the operator's machine, not the
+experiment, and `exp.config` is version controlled. See the main
+[README](../README.md#running-on-real-machines).
 
 **Locations are derived from the zones.** `locations.csv` lists the zones this
 deployment uses, in order; `regions.csv` says where each of Google's regions
