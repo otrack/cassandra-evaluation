@@ -12,6 +12,8 @@ import sys
 import re
 import docker
 
+import infra
+
 
 def hex_to_dotted_ip(hex_str):
     """Convert an 8-character hex string like '0a000002' to dotted IP like '10.0.0.2'."""
@@ -28,8 +30,8 @@ def run_tc(container, cmd):
 
 
 def restore_tc(container_name):
-    client = docker.from_env()
-    container = client.containers.get(container_name)
+    container = infra.container_for(container_name)
+    dev = infra.net_device(container_name)
 
     # Read saved state from inside the container.
     qdisc_result = container.exec_run("cat /tmp/tc_qdisc_save.txt")
@@ -57,7 +59,7 @@ def restore_tc(container_name):
             handle = m.group(1)
             bands = m.group(2)
             priomap = m.group(3).strip()
-            cmd = f"tc qdisc add dev eth0 root handle {handle}: prio bands {bands} priomap {priomap}"
+            cmd = f"tc qdisc add dev {dev} root handle {handle}: prio bands {bands} priomap {priomap}"
             run_tc(container, cmd)
 
     for line in qdisc_lines:
@@ -69,7 +71,7 @@ def restore_tc(container_name):
             handle = m.group(1)
             parent = m.group(2)
             delay = m.group(3)
-            cmd = f"tc qdisc add dev eth0 parent {parent} handle {handle}: netem delay {delay}"
+            cmd = f"tc qdisc add dev {dev} parent {parent} handle {handle}: netem delay {delay}"
             run_tc(container, cmd)
 
     # Restore u32 filters.  The tc filter show output for each entry spans two
@@ -103,7 +105,7 @@ def restore_tc(container_name):
                         # expects "parent 1:0" (the root class of the prio qdisc).
                         parent_for_add = parent_handle.rstrip(":") + ":0"
                         cmd = (
-                            f"tc filter add dev eth0 protocol {protocol} "
+                            f"tc filter add dev {dev} protocol {protocol} "
                             f"parent {parent_for_add} prio {pref} "
                             f"u32 match ip dst {ip}/32 flowid {flowid}"
                         )

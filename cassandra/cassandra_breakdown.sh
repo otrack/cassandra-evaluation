@@ -22,13 +22,13 @@ compute_breakdown() {
    
    for i in $(seq 1 $node_count); do
        location=$(get_location $i ${CASSANDRA_DIR}/../latencies.csv 2>/dev/null)
-       if [ -n "$location" ] && docker inspect "${location}1" >/dev/null 2>&1; then
+       if [ -n "$location" ] && container_exists "${location}1"; then
            CONTAINER_ID="${location}1"
        else
            CONTAINER_ID="$(config "node_name")$i"
        fi
 
-       if ! docker inspect "$CONTAINER_ID" >/dev/null 2>&1; then
+       if ! container_exists "$CONTAINER_ID"; then
            continue
        fi
 
@@ -38,12 +38,12 @@ compute_breakdown() {
        JMXTERM_URL="https://github.com/jiaqi/jmxterm/releases/download/v1.0.4/jmxterm-1.0.4-uber.jar"
        
        # Download jmxterm to the container if not already present
-       docker exec "$CONTAINER_ID" bash -c "test -f $JMXTERM_JAR || curl -sL -o $JMXTERM_JAR $JMXTERM_URL" >/dev/null 2>&1 || true
+       dexec "$CONTAINER_ID" bash -c "test -f $JMXTERM_JAR || curl -sL -o $JMXTERM_JAR $JMXTERM_URL" >/dev/null 2>&1 || true
 
        jmx_get() {
            local bean_name="$1"
            local attribute="$2"
-           docker exec "$CONTAINER_ID" bash -c "
+           dexec "$CONTAINER_ID" bash -c "
 cat > /tmp/jmx_cmds.txt << INNER
 domain org.apache.cassandra.metrics
 bean $bean_name

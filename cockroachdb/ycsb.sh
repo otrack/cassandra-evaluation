@@ -32,13 +32,13 @@ cockroachdb_create_usertable() {
         create_table_command="CREATE TABLE IF NOT EXISTS usertable (YCSB_KEY VARCHAR(255) PRIMARY KEY${fields_sql});"
     fi
 
-    docker exec "${container}" cockroach sql --insecure -e "${create_table_command}"
+    dexec "${container}" cockroach sql --insecure -e "${create_table_command}"
     if [ $? -ne 0 ]; then
         error "Error creating table."
         exit 1
     fi
 
-    docker exec "${container}" cockroach sql --insecure -e "${zonecfg_command}"
+    dexec "${container}" cockroach sql --insecure -e "${zonecfg_command}"
     if [ $? -eq 0 ]; then
         debug "Table 'usertable' created or already exists; zone config set (num_replicas=${target_replicas})."
     else
@@ -57,6 +57,6 @@ cockroachdb_create_usertable() {
     local range_max_bytes=$(config "cockroachdb.range_max_bytes")
     if [ ${range_max_bytes} -ne 536870912 ]; then
         local shard_command="ALTER TABLE usertable CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = ${range_max_bytes};"
-        docker exec "${container}" cockroach sql --insecure -e "${shard_command}"
+        dexec "${container}" cockroach sql --insecure -e "${shard_command}"
     fi
 }

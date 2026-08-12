@@ -1,18 +1,21 @@
 #!/bin/bash
 set -e
 
+FAST_PATH_DIR=$(dirname "${BASH_SOURCE[0]}")
+source ${FAST_PATH_DIR}/../utils.sh
+
 CONTAINER_ID="${1:?Usage: $0 <container_id_or_name>}"
 JMX_HOST="localhost:9010"
 JMXTERM_JAR="/tmp/jmxterm-1.0.4-uber.jar"
 JMXTERM_URL="https://github.com/jiaqi/jmxterm/releases/download/v1.0.4/jmxterm-1.0.4-uber.jar"
 
 # Download jmxterm to the container if not already present
-docker exec "$CONTAINER_ID" bash -c "test -f $JMXTERM_JAR || curl -sL -o $JMXTERM_JAR $JMXTERM_URL"
+dexec "$CONTAINER_ID" bash -c "test -f $JMXTERM_JAR || curl -sL -o $JMXTERM_JAR $JMXTERM_URL"
 
 jmx_get() {
   local bean_name="$1"
   local attribute="$2"
-  docker exec "$CONTAINER_ID" bash -c "
+  dexec "$CONTAINER_ID" bash -c "
 cat > /tmp/jmx_cmds.txt << INNER
 domain org.apache.cassandra.metrics
 bean $bean_name

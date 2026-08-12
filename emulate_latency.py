@@ -6,6 +6,8 @@ import re
 import csv
 from datetime import datetime
 
+import infra
+
 def debug(msg):
     if config.get("debug", 1):
         timestamp = datetime.now().strftime("%s:%f")
@@ -35,7 +37,6 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
     if not config.get("latency_simulation", 1):
         return
             
-    client = docker.from_env()
     network_name = config["network_name"]
 
     containers_info = []
@@ -45,11 +46,11 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
         for k in range(1, nodes_per_dc + 1):
             container_name = f"{dc_name}{k}"
             try:
-                client.containers.get(container_name)
+                infra.container_for(container_name)
             except docker.errors.NotFound:
                 alt_name = f"database-node{i + 1}"
                 try:
-                    client.containers.get(alt_name)
+                    infra.container_for(alt_name)
                     container_name = alt_name
                 except docker.errors.NotFound:
                     debug(f"Container '{container_name}' / '{alt_name}' not found. Skipping.")
@@ -65,17 +66,19 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
     try:
         priomap = " ".join(["0"] * 16)
         for _, _, cname, _ in containers_info:
-            c = client.containers.get(cname)
+            c = infra.container_for(cname)
+            dev = infra.net_device(cname)
             if c.exec_run("tc -help").exit_code != 0:
                 raise Exception(f"tc is missing in container {cname}!")
-            run_tc(c, "tc qdisc del dev eth0 root")
-            run_tc(c, f"tc qdisc add dev eth0 root handle 1: prio bands {total_containers + 1} priomap {priomap}")
+            run_tc(c, f"tc qdisc del dev {dev} root")
+            run_tc(c, f"tc qdisc add dev {dev} root handle 1: prio bands {total_containers + 1} priomap {priomap}")
 
         # Add specific latencies based on geographical distances between different DCs
         for idx1 in range(total_containers):
             dc1, k1, src_name, _ = containers_info[idx1]
             lat1, lon1, _ = dc_locations[dc1]
-            src_container = client.containers.get(src_name)
+            src_container = infra.container_for(src_name)
+            src_dev = infra.net_device(src_name)
 
             for idx2 in range(idx1 + 1, total_containers):
                 dc2, k2, dst_name, _ = containers_info[idx2]
@@ -86,7 +89,8 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
                 lat2, lon2, _ = dc_locations[dc2]
                 distance = haversine(lat1, lon1, lat2, lon2)
                 latency = estimate_latency(distance)
-                dst_container = client.containers.get(dst_name)
+                dst_container = infra.container_for(dst_name)
+                dst_dev = infra.net_device(dst_name)
 
                 dst_ip = dst_container.attrs['NetworkSettings']['Networks'][network_name]['IPAddress']
                 src_ip = src_container.attrs['NetworkSettings']['Networks'][network_name]['IPAddress']
@@ -95,12 +99,12 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
                 src_band = idx1 + 2
 
                 # Add latency from src to dst
-                run_tc(src_container, f"tc qdisc add dev eth0 parent 1:{dst_band:x} handle {dst_band:x}0: netem delay {latency}ms")
-                run_tc(src_container, f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{dst_band:x}")
+                run_tc(src_container, f"tc qdisc add dev {src_dev} parent 1:{dst_band:x} handle {dst_band:x}0: netem delay {latency}ms")
+                run_tc(src_container, f"tc filter add dev {src_dev} protocol ip parent 1:0 prio 1 u32 match ip dst {dst_ip} flowid 1:{dst_band:x}")
 
                 # Add latency from dst to src
-                run_tc(dst_container, f"tc qdisc add dev eth0 parent 1:{src_band:x} handle {src_band:x}0: netem delay {latency}ms")
-                run_tc(dst_container, f"tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{src_band:x}")
+                run_tc(dst_container, f"tc qdisc add dev {dst_dev} parent 1:{src_band:x} handle {src_band:x}0: netem delay {latency}ms")
+                run_tc(dst_container, f"tc filter add dev {dst_dev} protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{src_band:x}")
 
                 debug(f"Added {latency}ms ping latency between '{src_name}' and '{dst_name}' (distance: {distance:.2f} km).")
 

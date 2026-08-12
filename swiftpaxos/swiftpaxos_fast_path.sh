@@ -1,10 +1,13 @@
 #!/bin/bash
 set -e
 
+FAST_PATH_DIR=$(dirname "${BASH_SOURCE[0]}")
+source ${FAST_PATH_DIR}/../utils.sh
+
 CONTAINER_ID="${1:?Usage: $0 <container_id_or_name>}"
 
 # Get the last log line matching the swiftpaxos path stats format
-LAST_LINE=$(docker logs "$CONTAINER_ID" 2>&1 | grep -E "weird [0-9]+; conflicted [0-9]+; slow [0-9]+; fast [0-9]+" | tail -n 1)
+LAST_LINE=$(dlogs "$CONTAINER_ID" 2>&1 | grep -E "weird [0-9]+; conflicted [0-9]+; slow [0-9]+; fast [0-9]+" | tail -n 1)
 
 if [ -z "$LAST_LINE" ]; then
     echo "Fast ratio: 0.0"

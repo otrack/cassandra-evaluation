@@ -22,19 +22,10 @@ cassandra_start_cluster() {
         for k in $(seq 1 $nodes_per_dc); do
             local container_name="${city}${k}"
             local log_file=${LOGDIR}/${protocol}_node${global_node_id}.log
-            docker logs -f $container_name > ${log_file} 2>&1 &
+            dlogs $container_name -f > ${log_file} 2>&1 &
             global_node_id=$((global_node_id + 1))
         done
     done
-}
-
-cassandra_add_node() {
-    local mode=$1
-    python3 ${CASSANDRA_DIR}/create_new_node.py "$mode"
-    if [ $? -ne 0 ]; then
-        error "Failed to add new Cassandra node."
-        exit 1
-    fi
 }
 
 cassandra_cleanup_cluster() {
@@ -69,8 +60,7 @@ cassandra_get_node_count() {
     for i in $(seq 1 15); do
         local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
         [ -z "$city" ] && continue
-        local ip=$(get_container_ip "${city}1")
-        if [ -n "$ip" ]; then
+        if node_is_up "${city}1"; then
             num_dcs=$((num_dcs + 1))
         fi
     done
@@ -84,7 +74,7 @@ cassandra_get_port() {
 
 cassandra_get_dc() {
     local container=$1
-    docker inspect "$container" -f '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+    dinspect "$container" -f '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
         | grep '^CASSANDRA_DC=' | cut -d'=' -f2
 }
 

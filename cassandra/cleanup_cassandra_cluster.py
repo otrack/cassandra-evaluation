@@ -1,6 +1,12 @@
+import os
+import sys
+
 import docker
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+import infra
 
 def debug(msg):
     if config["debug"]:
@@ -19,8 +25,6 @@ def stop_and_remove_container(container):
         pass
 
 def cleanup_cassandra_cluster():
-    client = docker.from_env()
-    
     cities = []
     try:
         import csv
@@ -32,7 +36,9 @@ def cleanup_cassandra_cluster():
         pass
 
     container_name_prefix = config.get("node_name", "database-node")
-    all_containers = client.containers.list(all=True)
+    # Spans every daemon of the deployment: one locally, one per machine when a
+    # real provider is in use.
+    all_containers = infra.all_containers(all=True)
     containers = []
 
     for c in all_containers:

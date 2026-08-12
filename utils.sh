@@ -47,6 +47,192 @@ clean_logdir() {
 
 DEBUG=$(config debug)
 
+###############################################################################
+# Registry
+#
+# latencies.csv is the single source of truth for both the simulated geography
+# (lat,lon,loc) and the real machines backing each DC (region,host,ssh_user,
+# net_device).  An empty `host` column means simulated mode.  See
+# infra/README.md.
+###############################################################################
+
+REGISTRY_FILE="${DIR}/latencies.csv"
+
+registry_field() {
+    if [ $# -ne 2 ]; then
+        error "usage: registry_field <dc_index> <column>"
+        return 2
+    fi
+    local dc=$1 col=$2
+    awk -F',' -v n=$((dc + 1)) -v c="$col" '
+        NR==1 { for (i = 1; i <= NF; i++) { gsub(/\r|^[ \t]+|[ \t]+$/, "", $i); if ($i == c) k = i } next }
+        NR==n { if (k) { gsub(/\r|^[ \t]+|[ \t]+$/, "", $k); print $k } }
+    ' "${REGISTRY_FILE}"
+}
+
+registry_set() {
+    if [ $# -ne 3 ]; then
+        error "usage: registry_set <dc_index> <column> <value>"
+        return 2
+    fi
+    local dc=$1 col=$2 val=$3 tmp
+    tmp=$(mktemp)
+    awk -F',' -v OFS=',' -v n=$((dc + 1)) -v c="$col" -v v="$val" '
+        NR==1 { for (i = 1; i <= NF; i++) { h = $i; gsub(/\r|^[ \t]+|[ \t]+$/, "", h); if (h == c) k = i } }
+        NR==n && k { $k = v }
+        { sub(/\r$/, ""); print }
+    ' "${REGISTRY_FILE}" > "${tmp}" && mv "${tmp}" "${REGISTRY_FILE}"
+}
+
+# node_index_of <container_name> -> 1..N, or 0 for the orchestrator.
+#
+# Database containers are named "${city}${k}", so the DC is recovered by a
+# reverse lookup on the city name: the numeric suffix is the index of the node
+# *within* its DC, not the node index.
+node_index_of() {
+    local name="$1"
+    local nodes_per_dc
+    nodes_per_dc=$(config nodesperdc)
+    nodes_per_dc=${nodes_per_dc:-1}
+
+    case "${name}" in
+        ""|accord-viz)
+            # Runs alongside the benchmark scripts, not on a node.
+            echo 0; return 0 ;;
+        swiftpaxos-master|ycsb)
+            # No DC of their own; pinned to the first node.
+            echo 1; return 0 ;;
+        ycsb-*|database-node*)
+            local dc="${name#ycsb-}"
+            dc="${dc#database-node}"
+            if [[ "$dc" =~ ^[0-9]+$ ]]; then
+                echo $(( (dc - 1) * nodes_per_dc + 1 )); return 0
+            fi
+            echo 0; return 0 ;;
+    esac
+
+    local city="${name%%[0-9]*}"
+    local k="${name##*[!0-9]}"
+    [[ "$k" =~ ^[0-9]+$ ]] || k=1
+    if [ -n "${city}" ]; then
+        local i=1 loc
+        while loc=$(get_location $i "${REGISTRY_FILE}" 2>/dev/null) && [ -n "$loc" ]; do
+            if [ "$loc" = "$city" ]; then
+                echo $(( (i - 1) * nodes_per_dc + k ))
+                return 0
+            fi
+            i=$((i + 1))
+        done
+    fi
+
+    error "node_index_of: cannot resolve container name '${name}'"
+    echo 0
+    return 1
+}
+
+# Every provisioned node index (registry rows carrying a host).
+infra_all_indices() {
+    local nodes_per_dc i host k
+    nodes_per_dc=$(config nodesperdc)
+    nodes_per_dc=${nodes_per_dc:-1}
+    i=1
+    while host=$(registry_field $i host 2>/dev/null); [ -n "$host" ]; do
+        for k in $(seq 1 "${nodes_per_dc}"); do
+            echo $(( (i - 1) * nodes_per_dc + k ))
+        done
+        i=$((i + 1))
+    done
+}
+
+# --add-host entries for every container of the deployment, for providers that
+# give up Docker's embedded DNS.
+host_aliases() {
+    local nodes_per_dc i k loc
+    nodes_per_dc=$(config nodesperdc)
+    nodes_per_dc=${nodes_per_dc:-1}
+    i=1
+    while loc=$(get_location $i "${REGISTRY_FILE}" 2>/dev/null) && [ -n "$loc" ]; do
+        for k in $(seq 1 "${nodes_per_dc}"); do
+            local ip
+            ip=$(infra_host_ip $(( (i - 1) * nodes_per_dc + k )))
+            [ -n "$ip" ] && printf -- '--add-host %s%s:%s ' "$loc" "$k" "$ip"
+        done
+        i=$((i + 1))
+    done
+    local first
+    first=$(infra_host_ip 1)
+    [ -n "$first" ] && printf -- '--add-host swiftpaxos-master:%s ' "$first"
+}
+
+infra_bootstrap() {
+    local num_nodes=$1
+    infra_provision "${num_nodes}" || return 1
+    infra_open_ports 7000 7087 8080 9042 10000 26257 || return 1
+    pull_images
+}
+
+###############################################################################
+# Docker dispatch
+#
+# Every Docker operation is routed to the daemon owning the container through
+# these wrappers.  The first argument is always the container name, used only
+# to pick the daemon; in simulated mode infra_is_real fails and the wrappers
+# degenerate to plain `docker` calls.
+###############################################################################
+
+d() {
+    if [ $# -lt 2 ]; then
+        error "usage: d <container_name> <docker args...>"
+        return 2
+    fi
+    local name="$1"; shift
+    local ctx=""
+    if infra_is_real; then
+        ctx=$(infra_context "$(node_index_of "${name}")")
+    fi
+    if [ -n "${ctx}" ]; then
+        docker --context "${ctx}" "$@"
+    else
+        docker "$@"
+    fi
+}
+
+# dexec <container> [-i|-t|-u user|-e VAR=val ...] <command...>
+dexec() {
+    local name="$1"; shift
+    local flags=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -i|-t|-it|-ti|--interactive|--tty|--privileged|-d|--detach)
+                flags+=("$1"); shift ;;
+            -u|--user|-w|--workdir|-e|--env)
+                flags+=("$1" "$2"); shift 2 ;;
+            *) break ;;
+        esac
+    done
+    d "${name}" exec "${flags[@]}" "${name}" "$@"
+}
+
+# The remaining verbs all take the container name last on the docker command
+# line, so any flags the caller passes are simply forwarded ahead of it.
+dlogs()    { local name="$1"; shift; d "${name}" logs    "$@" "${name}"; }
+dinspect() { local name="$1"; shift; d "${name}" inspect "$@" "${name}"; }
+dstop()    { local name="$1"; shift; d "${name}" stop    "$@" "${name}"; }
+dkill()    { local name="$1"; shift; d "${name}" kill    "$@" "${name}"; }
+
+# dpull <node_idx> <image>
+dpull() {
+    local idx=$1 image=$2 ctx=""
+    if infra_is_real; then
+        ctx=$(infra_context "${idx}")
+    fi
+    if [ -n "${ctx}" ]; then
+        docker --context "${ctx}" pull "${image}"
+    else
+        docker pull "${image}"
+    fi
+}
+
 start_container() {
     if [ $# -lt 4 ]; then
         error "usage: start_container <image> <name> <message> <logfile> [docker args...] [-- container_cmd...]"
@@ -78,20 +264,27 @@ start_container() {
         fi
     done
     
+    # Let the provider adjust placement-related arguments (network mode, host
+    # aliases, ...).  Skipped entirely in simulated mode so that the command
+    # line stays exactly what the caller asked for.
+    if infra_is_real; then
+        docker_args=($(infra_rewrite_docker_args "${cname}" "${docker_args[@]}"))
+    fi
+
     log "Starting container from image '${image}' as '${cname}' using ${log_file} to log and args '${docker_args[*]}'"
     if [ ${#container_cmd[@]} -gt 0 ]; then
         log "Container command: ${container_cmd[*]}"
     fi
-    
+
     local cid
     echo "docker run ${docker_args[@]} --name $cname $image ${container_cmd[@]}"
-    cid=$(docker run ${docker_args[@]} --log-opt max-size=10m  --log-opt max-file=3 --name $cname $image ${container_cmd[@]} 2>&1) || {
+    cid=$(d $cname run ${docker_args[@]} --log-opt max-size=10m  --log-opt max-file=3 --name $cname $image ${container_cmd[@]} 2>&1) || {
          error "docker run failed: ${cid}"
          return 3
     }
     log "Started container '${cname}' (id: ${cid})"
 
-    docker logs -f $cname > ${log_file} 2>&1 &
+    dlogs $cname -f > ${log_file} 2>&1 &
 
     local start_time
     start_time=$(date +%s)
@@ -100,29 +293,29 @@ start_container() {
 
     while true; do
         # Check for the readiness message in logs
-        if docker logs "$cname" 2>&1 | grep -F -- "$wait_msg" >/dev/null; then
+        if dlogs "$cname" 2>&1 | grep -F -- "$wait_msg" >/dev/null; then
             log "Container '${cname}' is ready (found: '${wait_msg}')"
             return 0
         fi
 
         # Check whether container is still running
         local running
-        running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null) || {
+        running=$(dinspect "$cname" -f '{{.State.Running}}' 2>/dev/null) || {
             error "Failed to inspect container '${cname}'"
             return 4
         }
         if [ "$running" != "true" ]; then
             local exit_code
-            exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$cname" 2>/dev/null || echo "unknown")
+            exit_code=$(dinspect "$cname" -f '{{.State.ExitCode}}' 2>/dev/null || echo "unknown")
             error "Container '${cname}' exited with code ${exit_code} before readiness message appeared. Logs:"
-            docker logs "$cname" 2>&1 | sed 's/^/  /'
+            dlogs "$cname" 2>&1 | sed 's/^/  /'
             return 5
         fi
 
         # Timeout check
         if (( $(date +%s) - start_time >= timeout )); then
             error "Timeout (${timeout}s) waiting for '${wait_msg}' in container '${cname}' logs. Logs:"
-            docker logs "$cname" 2>&1 | sed 's/^/  /'
+            dlogs "$cname" 2>&1 | sed 's/^/  /'
             return 6
         fi
 
@@ -141,7 +334,7 @@ wait_container() {
     # Wait until container is no longer running (or inspect disappears)
     log "Waiting container '${cname}' to terminate"
     while true; do
-        running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null) || {
+        running=$(dinspect "$cname" -f '{{.State.Running}}' 2>/dev/null) || {
             # Inspect failing -> container removed or no longer present; treat as stopped
             log "Container '${cname}' no longer present; considered stopped"
             return 0
@@ -163,8 +356,8 @@ fetch_logs_container() {
     fi
 
     local cname="$1"
-    
-    docker logs "$cname" 2>&1 | sed 's/^/  /'    
+
+    dlogs "$cname" 2>&1 | sed 's/^/  /'
 }
 
 stop_container() {
@@ -180,7 +373,7 @@ stop_container() {
 
     # Check container existence / get running state
     local running
-    running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null) || {
+    running=$(dinspect "$cname" -f '{{.State.Running}}' 2>/dev/null) || {
         log "Container '${cname}' does not exist or is already removed"
         return 0
     }
@@ -190,7 +383,7 @@ stop_container() {
         return 0
     fi
 
-    if ! docker stop "$cname" >/dev/null 2>&1; then
+    if ! dstop "$cname" >/dev/null 2>&1; then
         error "docker stop failed for container '${cname}'"
         return 4
     fi
@@ -200,7 +393,7 @@ stop_container() {
 
     # Wait until container is no longer running (or inspect disappears)
     while true; do
-        running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null) || {
+        running=$(dinspect "$cname" -f '{{.State.Running}}' 2>/dev/null) || {
             # Inspect failing -> container removed or no longer present; treat as stopped
             log "Container '${cname}' no longer present; considered stopped"
             return 0
@@ -219,11 +412,39 @@ stop_container() {
     done
 }
 
-# Function to get the IP address of a container
+# Function to get the IP address of a container.
+#
+# Simulated mode reads the bridge IP off the daemon.  With a real provider the
+# container shares its machine's network, so the address is the machine's --
+# note that this answers even when the container is down, which is why callers
+# that need liveness must use container_exists() instead.
 get_container_ip() {
     container_name=$1
-    ip_address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$container_name" 2>/dev/null)
+    if infra_is_real; then
+        infra_host_ip "$(node_index_of "$container_name")"
+        return
+    fi
+    ip_address=$(dinspect "$container_name" -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null)
     echo "$ip_address"
+}
+
+# True when the container exists on the daemon that owns it.
+container_exists() {
+    dinspect "$1" >/dev/null 2>&1
+}
+
+# True when the node backing *container* is part of the running deployment.
+#
+# Simulated mode infers this from the presence of a bridge IP, which is how the
+# ${pref}_get_node_count functions have always counted nodes.  That inference
+# does not survive a real provider, where get_container_ip answers from the
+# registry whether or not the container is up, so liveness is probed directly.
+node_is_up() {
+    if infra_is_real; then
+        container_exists "$1"
+    else
+        [ -n "$(get_container_ip "$1")" ]
+    fi
 }
 
 # Function to stop a container after a delay
@@ -232,41 +453,16 @@ stop_container_after_delay() {
     delay=$2
     (
         sleep "$delay"
-        docker stop "$container_name"
+        dstop "$container_name"
         log "Stopped container '$container_name' after $delay seconds."
     ) &
 }
 
+# Container CPU/memory caps.  The policy belongs to the provider: simulated
+# mode squeezes several nodes onto one machine and caps each of them, whereas a
+# real provider gives every node a machine of its own and returns nothing.
 get_resource_limits() {
-    local machine
-    machine=$(config machine)
-
-    if [ -z "$machine" ]; then
-        echo ""
-        return 0
-    fi
-
-    local gcp_csv="${DIR}/gcp.csv"
-    if [ ! -f "$gcp_csv" ]; then
-        error "gcp.csv not found: ${gcp_csv}"
-        echo ""
-        return 1
-    fi
-
-    local row
-    row=$(awk -F',' -v name="$machine" 'NR>1 && $1==name {print $0; exit}' "$gcp_csv")
-    if [ -z "$row" ]; then
-        error "Machine type '${machine}' not found in gcp.csv"
-        echo ""
-        return 1
-    fi
-
-    local vcpus memory_gb memory_mb
-    vcpus=$(echo "$row" | cut -d',' -f2)
-    memory_gb=$(echo "$row" | cut -d',' -f3)
-    memory_mb=$(awk "BEGIN { printf \"%d\", ${memory_gb} * 1024 }")
-
-    echo "--cpus ${vcpus} --memory ${memory_mb}m"
+    infra_resource_limits "${1:-1}"
 }
 
 compute_test_machine() {
@@ -323,17 +519,32 @@ compute_test_machine() {
 
 pull_images() {
     log "Pulling all Docker images from ${CONFIG_FILE}..."
-    while IFS='=' read -r key value; do
-        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-        [[ "$key" =~ _image$ ]] || continue
-        value=$(echo "$value" | xargs)
-        log "Pulling image: ${value}"
-        docker pull "${value}"
-        if [ $? -ne 0 ]; then
-            log "ERROR: Failed to pull image '${value}'. Aborting."
-            exit 1
-        fi
-    done < "${CONFIG_FILE}"
+
+    # Simulated mode has a single daemon (index 1 resolves to the local one);
+    # a real provider needs every image on every machine.
+    local -a indices=(1)
+    if infra_is_real; then
+        indices=($(infra_all_indices))
+    fi
+
+    local idx
+    for idx in "${indices[@]}"; do
+        while IFS='=' read -r key value; do
+            [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+            [[ "$key" =~ _image$ ]] || continue
+            value=$(echo "$value" | xargs)
+            if infra_is_real; then
+                log "Pulling image: ${value} (node ${idx})"
+            else
+                log "Pulling image: ${value}"
+            fi
+            dpull "${idx}" "${value}"
+            if [ $? -ne 0 ]; then
+                log "ERROR: Failed to pull image '${value}'. Aborting."
+                exit 1
+            fi
+        done < "${CONFIG_FILE}"
+    done
     log "All Docker images pulled successfully."
 }
 
@@ -388,3 +599,18 @@ get_location() {
   echo "Error: location value does not contain alphabetic name: '$loc'" >&2
   return 5
 }
+
+###############################################################################
+# Infrastructure provider
+#
+# Sourced last so that a provider may use every helper above.  See
+# infra/README.md for the contract each provider implements.
+###############################################################################
+
+INFRA=$(config infra)
+INFRA=${INFRA:-simulation}
+if [ ! -r "${DIR}/infra/${INFRA}.sh" ]; then
+    error "Unknown infra provider '${INFRA}' (no ${DIR}/infra/${INFRA}.sh)"
+    exit 1
+fi
+source "${DIR}/infra/${INFRA}.sh"

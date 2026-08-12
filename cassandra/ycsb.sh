@@ -22,7 +22,7 @@ cassandra_create_keyspace() {
     drop_keyspace_command="DROP KEYSPACE IF EXISTS ycsb;"
     create_keyspace_command="CREATE KEYSPACE IF NOT EXISTS ycsb WITH replication = { ${dc_map} } AND durable_writes = false;"
     
-    docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$drop_keyspace_command"
+    dexec ${container} -i cqlsh --request-timeout="$timeout" -e "$drop_keyspace_command"
     if [ $? -eq 0 ]; then
         debug "Keyspace 'ycsb' dropped if it existed."
     else
@@ -30,7 +30,7 @@ cassandra_create_keyspace() {
         exit 1
     fi
 
-    docker exec -i ${container} cqlsh --request-timeout="$timeout" -e "$create_keyspace_command"
+    dexec ${container} -i cqlsh --request-timeout="$timeout" -e "$create_keyspace_command"
     if [ $? -eq 0 ]; then
         debug "Keyspace 'ycsb' created with NetworkTopologyStrategy (${nodes_per_dc} per DC)."
     else
@@ -61,7 +61,7 @@ cassandra_create_usertable() {
     fi
     create_table_command="${create_table_command};"
 
-    docker exec -i ${container} cqlsh --request-timeout="${timeout}" -e "${create_table_command}"
+    dexec ${container} -i cqlsh --request-timeout="${timeout}" -e "${create_table_command}"
     if [ $? -eq 0 ]; then
         debug "Table 'usertable' created or already exists."
     else

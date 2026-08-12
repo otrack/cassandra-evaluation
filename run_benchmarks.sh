@@ -13,7 +13,13 @@ source ${DIR}/tiga/cluster.sh
 
 start_network() {
     local network_name=$(config "network_name")
-    
+
+    # A real provider gives every node its own machine and its own network
+    # namespace; there is no shared bridge to create.
+    if infra_is_real; then
+        return 0
+    fi
+
     # Check if network already exists
     if docker network inspect "${network_name}" >/dev/null 2>&1; then
         log "Docker network '${network_name}' already exists."
@@ -32,6 +38,10 @@ start_network() {
 
 stop_network() {
     local network_name=$(config "network_name")
+
+    if infra_is_real; then
+        return 0
+    fi
 
     # Check if network exists
     if ! docker network inspect "${network_name}" >/dev/null 2>&1; then
@@ -129,9 +139,15 @@ run_ycsb() {
     fi
     log ${extra_opts_str[@]}
 
+    # --env-file is read by the Docker client, so it needs no staging even when
+    # the daemon lives on another machine.
     local docker_args="--rm -d --security-opt apparmor=unconfined --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
     if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
-        docker_args+=" -v ${DIR}/tiga/config-ycsb.yml:/ycsb/config-ycsb.yml"
+        # Bind-mounts, on the other hand, resolve on the daemon's filesystem.
+        local staged_config
+        staged_config=$(infra_stage_file "$(node_index_of "${nearby_database}")" \
+                                         "${DIR}/tiga/config-ycsb.yml" /tmp/config-ycsb.yml)
+        docker_args+=" -v ${staged_config}:/ycsb/config-ycsb.yml"
     fi
     
     if [ "$action" == "load" ];

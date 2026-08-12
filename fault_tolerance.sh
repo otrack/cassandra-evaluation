@@ -169,25 +169,26 @@ if [ "$dry_run" -eq 0 ]; then
 	wait $leader_pid; leader=$(cat "$tmp_file"); rm "$tmp_file"
         # Save the leader's current tc policies before injecting the slowdown so
         # they can be restored when the slowdown disappears.
-        docker exec "${leader}" bash -c \
-            "tc qdisc show dev eth0 > /tmp/tc_qdisc_save.txt && \
-             tc filter show dev eth0 2>/dev/null > /tmp/tc_filter_save.txt" \
+        dev=$(infra_net_device "$(node_index_of "${leader}")")
+        dexec "${leader}" bash -c \
+            "tc qdisc show dev ${dev} > /tmp/tc_qdisc_save.txt && \
+             tc filter show dev ${dev} 2>/dev/null > /tmp/tc_filter_save.txt" \
             || log "Warning: failed to save tc policies for ${leader}; restore after slowdown may be incomplete"
         log "Event 1 @ ${slowdown_s}s: Adding 400ms latency to ${leader}"
-        docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
-        docker exec "${leader}" tc qdisc add dev eth0 root netem delay 400ms
+        dexec "${leader}" tc qdisc del dev ${dev} root 2>/dev/null || true
+        dexec "${leader}" tc qdisc add dev ${dev} root netem delay 400ms
 
         # Event 1b: at X/4+X/8, remove the slowdown from leader and restore the
         # tc policies that were in effect before the slowdown was injected.
         sleep ${slowdown_end_s}
         log "Event 1b @t1 = t0 + ${slowdown_end_s}s: Removing slowdown from ${leader} and restoring tc policies"
-        docker exec "${leader}" tc qdisc del dev eth0 root 2>/dev/null || true
+        dexec "${leader}" tc qdisc del dev ${dev} root 2>/dev/null || true
         python3 ${DIR}/restore_tc.py "${leader}"
 
         # Event 2: at 3X/4, suspend leader (to mimick an actual crash)
         sleep ${crash_s}
         log "Event 2 @t2 = t1 + ${crash_s}s: Killing ${leader}"
-        docker kill --signal=19 ${leader}
+        dkill ${leader} --signal=19
 
         # Wait for all YCSB clients to complete
         for i in $(seq 1 ${node_count}); do

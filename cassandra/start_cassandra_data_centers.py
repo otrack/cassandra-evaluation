@@ -1,6 +1,9 @@
 import docker, sys, time, math, re, csv, os
 from datetime import datetime
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+import infra
+
 def debug(msg):
     if config.get("debug", 1):
         timestamp = datetime.now().strftime("%s:%f")
@@ -46,7 +49,6 @@ def wait_for_nodetool_status(containers, expected_count, timeout=120):
     return False
 
 def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
-    client = docker.from_env()
     network_name = config["network_name"]
 
     nano_cpus = None
@@ -122,7 +124,7 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                     run_kwargs['nano_cpus'] = nano_cpus
                 if mem_limit is not None:
                     run_kwargs['mem_limit'] = mem_limit
-                container = client.containers.run(**run_kwargs)
+                container = infra.client_for(container_name).containers.run(**run_kwargs)
                 containers.append(container)            
                 debug(f"Starting container '{container_name}' in DC '{dc_name}', rack 'RAC{k}'.")
                 if not wait_for_log(container, log_pattern):

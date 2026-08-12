@@ -37,10 +37,9 @@ through a handful of choke points:
   `get_container_ip`, `fetch_logs_container`, `stop_container_after_delay`,
   `pull_images` in `utils.sh`; `start_network`/`stop_network` in
   `run_benchmarks.sh:14-50`.
-- Python: `docker.from_env()` in exactly six files — `emulate_latency.py:38`,
-  `restore_tc.py:31`, `start_cassandra_cluster.py:56`,
-  `cassandra/start_cassandra_data_centers.py:49`,
-  `cassandra/cleanup_cassandra_cluster.py:22`, `cassandra/create_new_node.py:54`.
+- Python: `docker.from_env()` in exactly four files — `emulate_latency.py:38`,
+  `restore_tc.py:31`, `cassandra/start_cassandra_data_centers.py:49`,
+  `cassandra/cleanup_cassandra_cluster.py:22`.
 - Residual raw `docker` calls outside those choke points, which must be ported
   individually: `cassandra/cluster.sh:25,87`, `cockroachdb/cluster.sh:33,180`,
   `cassandra/ycsb.sh:25,33,64`, `cockroachdb/ycsb.sh:35,41,60`,
@@ -398,11 +397,13 @@ def net_device(name):
     return _registry()[_dc_of(name)].get("net_device") or "eth0"
 ```
 
-Then in each of the six files, replace `docker.from_env()` with
+Then in each of the four files, replace `docker.from_env()` with
 `client_for(<container name>)`. `emulate_latency.py` and
-`start_cassandra_cluster.py` touch several containers per call, so they take a
-client per container rather than one client per script — a small loop change,
-no logic change. `emulate_latency.py` additionally returns early in real mode
+`cassandra/start_cassandra_data_centers.py` touch several containers per call,
+so they take a client per container rather than one client per script — a small
+loop change, no logic change. `cassandra/cleanup_cassandra_cluster.py` lists
+containers globally and so needs the whole set of daemons, via
+`all_containers()`. `emulate_latency.py` additionally returns early in real mode
 via the **existing** `latency_simulation` guard (`emulate_latency.py:35`), so
 its remote path only matters if someone deliberately shapes traffic on real
 hardware.
@@ -530,7 +531,7 @@ through the injected `/etc/hosts` entries, so the generator needs no change.
 | `cassandra/cassandra_fast_path.sh`, `cassandra/cassandra_breakdown.sh`, `swiftpaxos/swiftpaxos_fast_path.sh` | `docker exec`/`docker logs` → `dexec`/`dlogs` (7 sites). |
 | `fault_tolerance.sh`, `restore_tc.py` | `d*`/`client_for`; `eth0` → `infra_net_device`. |
 | `infra.py` | **New.** `client_for`, `node_index_of`, `net_device`. |
-| `emulate_latency.py`, `restore_tc.py`, `start_cassandra_cluster.py`, `cassandra/start_cassandra_data_centers.py`, `cassandra/cleanup_cassandra_cluster.py`, `cassandra/create_new_node.py` | `docker.from_env()` → `client_for(name)`. |
+| `emulate_latency.py`, `restore_tc.py`, `cassandra/start_cassandra_data_centers.py`, `cassandra/cleanup_cassandra_cluster.py` | `docker.from_env()` → `client_for(name)`. |
 
 **Not touched:** per-protocol keyspace/table creation logic, YCSB invocation and
 options, `parse_ycsb_to_csv.sh`, `cockroachdb/cockroachdb_breakdown.py`,

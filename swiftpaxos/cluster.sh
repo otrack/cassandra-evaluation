@@ -47,17 +47,17 @@ swiftpaxos_cleanup_cluster() {
     for i in $(seq 1 $node_count); do
         location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
         container_name="${location}1"
-        if docker inspect "$container_name" >/dev/null 2>&1; then
+        if container_exists "$container_name"; then
             stop_container "${container_name}" || true
         fi
-        if docker inspect "database-node${i}" >/dev/null 2>&1; then
+        if container_exists "database-node${i}"; then
             stop_container "database-node${i}" || true
         fi
-        if docker inspect "ycsb-${i}" >/dev/null 2>&1; then
+        if container_exists "ycsb-${i}"; then
             stop_container "ycsb-${i}" || true
         fi
     done	
-    if docker inspect "ycsb" >/dev/null 2>&1; then
+    if container_exists "ycsb"; then
         stop_container "ycsb" || true
     fi
 }
@@ -75,8 +75,7 @@ swiftpaxos_get_node_count() {
             break
         fi
         container_name="${location}1"
-	ip=$(get_container_ip "$container_name")
-        if [ -z "$ip" ]; then
+        if ! node_is_up "$container_name"; then
             break
         fi
         i=$((i + 1))
@@ -100,7 +99,7 @@ swiftpaxos_get_leaders() {
         for i in $(seq 1 "${node_count}"); do
             location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
             container_name="${location}1"
-            if docker logs --tail 1000 "${container_name}" 2>&1 | grep -q "I am the leader"; then
+            if dlogs "${container_name}" --tail 1000 2>&1 | grep -q "I am the leader"; then
                 echo "${container_name}"
                 return
             fi

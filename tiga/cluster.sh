@@ -113,9 +113,13 @@ with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
             local server_name=$(printf "janus-lan-server-%04d" $(( (i-1) * 100 + (k-1) )))
             local container_name="${city}${k}"
 
+            local staged_config
+            staged_config=$(infra_stage_file "$(node_index_of "${container_name}")" \
+                                             "${TIGA_DIR}/config-ycsb.yml" /tmp/config-ycsb.yml)
+
             start_container ${image} ${container_name} "started on" ${LOGDIR}/${protocol}_node${global_node_id}.log \
                 --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
-                -v ${TIGA_DIR}/config-ycsb.yml:/app/config/config-ycsb.yml \
+                -v ${staged_config}:/app/config/config-ycsb.yml \
                 -e PROTOCOL=${protocol} \
                 -e SERVER_NAME=${server_name} \
                 -e CONFIG_PATH=/app/config/config-ycsb.yml || {
@@ -136,7 +140,7 @@ tiga_cleanup_cluster() {
         [ -z "$city" ] && continue
         for k in $(seq 1 8); do
             local container_name="${city}${k}"
-            docker stop ${container_name} >/dev/null 2>&1 || true
+            dstop ${container_name} >/dev/null 2>&1 || true
         done
     done
 }
@@ -164,8 +168,7 @@ tiga_get_node_count() {
     for i in $(seq 1 15); do
         local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
         [ -z "$city" ] && continue
-        local ip=$(get_container_ip "${city}1")
-        if [ -n "$ip" ]; then
+        if node_is_up "${city}1"; then
             num_dcs=$((num_dcs + 1))
         fi
     done

@@ -30,7 +30,7 @@ cockroachdb_start_cluster() {
     }
 
     local first_ip=$(get_container_ip ${first_node})
-    docker exec ${first_node} ./cockroach init --insecure --host=${first_node} || {
+    dexec ${first_node} ./cockroach init --insecure --host=${first_node} || {
         error "Failed to initialize CockroachDB cluster"
         return 2
     }
@@ -94,8 +94,7 @@ cockroachdb_get_node_count() {
     for i in $(seq 1 15); do
         local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
         [ -z "$city" ] && continue
-        local ip=$(get_container_ip "${city}1")
-        if [ -n "$ip" ]; then
+        if node_is_up "${city}1"; then
             num_dcs=$((num_dcs + 1))
         fi
     done
@@ -177,5 +176,5 @@ PYEOF
     local first_city=$(get_location 1 ${DIR}/latencies.csv)
     local container="${first_city}1"
     local stmt="ALTER TABLE usertable CONFIGURE ZONE USING constraints = '{+region=${chosen_city}: 1}', lease_preferences = '[[\"+region=${chosen_city}\"]]';"
-    docker exec "${container}" cockroach sql --insecure -e "${stmt}"
+    dexec "${container}" cockroach sql --insecure -e "${stmt}"
 }
