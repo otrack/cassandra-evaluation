@@ -81,7 +81,7 @@ do
         slow_env="-e SLOW_MODE=true"
     fi
 
-    docker run --rm -d --name accord-viz -p 3000:3000 $slow_env -v ${DIR}/logs/demo:/app/logs/demo -v ${DIR}/latencies.csv:/app/latencies.csv:ro --network $(config network_name) accord-live-viz > /dev/null 2>&1
+    docker run --rm -d --name accord-viz -p 3000:3000 $slow_env -v ${DIR}/logs/demo:/app/logs/demo -v ${LOCATIONS_FILE}:/app/latencies.csv:ro --network $(config network_name) accord-live-viz > /dev/null 2>&1
     echo "========================================================"
     echo "Live visualization running at http://localhost:3000"
     echo "========================================================"

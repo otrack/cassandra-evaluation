@@ -14,6 +14,13 @@ infra_is_real() {
     return 1
 }
 
+# The set of cities this provider pretends to deploy to.  Authored by hand and
+# version controlled: it *is* the simulated geography, and the distances
+# between these coordinates are what tc reproduces.
+infra_locations_file() {
+    echo "${INFRA_DIR}/locations.csv"
+}
+
 infra_provision() {
     debug "simulation: no machine to provision"
     return 0
@@ -21,6 +28,22 @@ infra_provision() {
 
 infra_teardown() {
     debug "simulation: no machine to tear down"
+    return 0
+}
+
+infra_sync() {
+    debug "simulation: no remote state to re-establish"
+    return 0
+}
+
+infra_ssh() {
+    error "simulation: containers run locally; there is no machine to connect to"
+    return 1
+}
+
+infra_reset_network() {
+    # tc rules live in each container's own network namespace and are destroyed
+    # along with it, so there is never stale shaping to clear.
     return 0
 }
 

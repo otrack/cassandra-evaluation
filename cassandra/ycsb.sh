@@ -9,13 +9,13 @@ cassandra_create_keyspace() {
     local nodes_per_dc=${4:-$(config nodesperdc)}
     nodes_per_dc=${nodes_per_dc:-1}
 
-    local first_city=$(get_location 1 ${DIR}/latencies.csv)
+    local first_city=$(get_location 1 ${LOCATIONS_FILE})
     local container="${first_city}1"
 
     # Build NetworkTopologyStrategy dict string with nodes_per_dc replicas per DC
     local dc_map="'class': 'NetworkTopologyStrategy'"
     for i in $(seq 1 $num_dcs); do
-        local city=$(get_location $i ${DIR}/latencies.csv)
+        local city=$(get_location $i ${LOCATIONS_FILE})
         dc_map="${dc_map}, '${city}': ${nodes_per_dc}"
     done
     
@@ -44,7 +44,7 @@ cassandra_create_usertable() {
     local transaction_mode=$2
     local num_dcs=$3
     local workload_type=$4
-    local first_city=$(get_location 1 ${DIR}/latencies.csv)
+    local first_city=$(get_location 1 ${LOCATIONS_FILE})
     local container="${first_city}1"
 
     local create_table_command=""

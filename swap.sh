@@ -94,7 +94,7 @@ if [ "$dry_run" -eq 0 ]; then
 
     dcs_list=""
     for i in $(seq 1 ${nodes}); do
-        loc=$(get_location $i ${DIR}/latencies.csv)
+        loc=$(get_location $i ${LOCATIONS_FILE})
         dcs_list="${dcs_list} ${loc}"
     done
 
@@ -120,7 +120,7 @@ if [ "$dry_run" -eq 0 ]; then
                 if [[ "$p" == cockroachdb* ]]; then
                     tmp_logdir=$(mktemp -d)
                     for i in $(seq 1 ${nodes}); do
-                        loc=$(get_location $i ${DIR}/latencies.csv)
+                        loc=$(get_location $i ${LOCATIONS_FILE})
                         src="${output_file%.dat}_${loc}.dat"
                         if [ -f "${src}" ]; then
                             cp "${src}" "${tmp_logdir}/${p}_${nodes}_${workload}_${ts}_${loc}.dat"

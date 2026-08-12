@@ -64,7 +64,8 @@ host-local and break the moment containers land on different machines:
 
 **Container naming is city-based, not index-based.** All four systems name
 their database containers `${city}${k}` — `Hanoi1`, `Lyon1`, `NewYork1` — where
-the city is line *i+1* of `latencies.csv` and `k` is the index within the DC.
+the city is line *i+1* of the provider's locations map, and `k` the index
+within the DC.
 The numeric suffix is therefore the *intra-DC* index, not the DC index, so
 mapping a container name back to a machine requires a **reverse lookup on the
 city name**, not suffix parsing. Four names are special: `swiftpaxos-master`
@@ -174,7 +175,7 @@ Every `infra/*.sh` must define exactly these functions. Nothing outside
 | Function | Contract |
 | --- | --- |
 | `infra_is_real` | Exit 0 if containers run on remote machines, 1 for simulation. The single predicate every mode-dependent branch tests. |
-| `infra_provision <n>` | **Create `n` machines** through the IaaS: one per node, named `bench-node1..bench-noden`, in the regions matching the first `n` rows of `latencies.csv`; wait for SSH; install Docker; add `ssh_user` to the `docker` group. Idempotent — re-running with existing machines is a no-op. Writes the discovered addresses back into the registry (§2.4). |
+| `infra_provision <n>` | **Create `n` machines** through the IaaS: one per node, named `bench-node1..bench-noden`, in the zone of that node's DC; wait for SSH; install Docker; add `ssh_user` to the `docker` group. Idempotent — re-running with existing machines is a no-op. Records the discovered addresses as deployment state (§2.4). |
 | `infra_teardown` | Delete every machine created by `infra_provision`, plus firewall rules and Docker contexts. |
 | `infra_host_ip <idx>` | Routable IP of node `idx` (the address peers use: private IP within one cloud, public IP across providers). |
 | `infra_context <idx>` | Name of the Docker context for node `idx`, creating it lazily via `docker context create … "host=ssh://${ssh_user}@$(infra_host_ip idx)"`. Empty string in simulation. |
@@ -190,35 +191,37 @@ Two orchestration helpers built on top, in `utils.sh` rather than per provider:
 - `infra_bootstrap <n>` — `infra_provision`, then `infra_open_ports` for the
   union of every protocol's ports, then `pull_images` on each host.
 
-### 2.4 The registry
+### 2.4 Locations and state
 
-`latencies.csv` already maps node index → city → lat/lon and is read everywhere
-through `get_location()`. Extend it rather than inventing a second source of
-truth:
+`latencies.csv` was never a universal ground truth: it is the *simulation's*
+deployment map, a set of cities the local containers pretend to sit in. A real
+infra has no need to imitate anything — its locations are the cloud regions it
+runs in, and their coordinates are published by the provider. So the map moves
+into the provider:
 
-```csv
-lat,lon,loc,region,host,ssh_user,net_device
-21.027763,105.834160,Hanoi,asia-southeast1-a,,,
-45.764042,4.835659,Lyon,europe-west9-a,,,
-40.712776,-74.005974,NewYork,us-east4-a,,,
+```
+infra/simulation/locations.csv   lat,lon,loc            authored: the simulated geography
+infra/gcp/regions.csv            region,loc,lat,lon     provider knowledge: where the regions are
+infra/gcp/locations.csv          zone                   the zones this deployment uses, in order
+.deployment/gcp.locations.csv    lat,lon,loc            derived by joining the two above
+.deployment/gcp.csv              node,host,ssh_user,net_device   discovered at provisioning
 ```
 
-`region` is authored by hand (the provider zone closest to the city); `host`,
-`ssh_user` and `net_device` are left empty and **filled in by
-`infra_provision`**. Empty `host` means simulation, which keeps the file valid
-for today's workflow and makes the mode self-describing.
+`infra_locations_file` hands the rest of the suite the same `lat,lon,loc` shape
+whichever provider is active, so `get_location` and the plotting scripts are
+unaffected. Two consequences are worth stating:
 
-Add one accessor next to `get_location`:
+- the geography-based overlays (`compute_optimum_per_replica`, `distance.py`,
+  the Accord bounds in `closed_economy.py`) become *correct* for real runs
+  rather than approximately right, because the coordinates now describe where
+  the machines actually are;
+- `loc` changes with the provider — a GCP run produces `Paris1`, `Ashburn1`
+  instead of `Lyon1`, `NewYork1` — so logs and plots from different infras
+  carry different DC names and are not directly comparable.
 
-```bash
-# utils.sh — field 5 = host, 6 = ssh_user, 7 = net_device
-registry_field() {  # registry_field <node_idx> <column_name>
-    local idx=$1 col=$2
-    awk -F',' -v n=$((idx+1)) -v c="$col" '
-        NR==1 { for (i=1;i<=NF;i++) if ($i==c) k=i; next }
-        NR==n { gsub(/\r|^[ \t]+|[ \t]+$/,"",$k); print $k }' "${DIR}/latencies.csv"
-}
-```
+Deployment state is generated, so it lives under a gitignored `.deployment/`
+and never dirties a tracked file. Keyed by node index, it also removes any need
+to pack several nodes' addresses into one DC row.
 
 ## 3. Implementation skeleton
 
@@ -246,7 +249,7 @@ node_index_of() {   # node_index_of <container_name> -> 1..N
     # ${city}${k}: split trailing digits, reverse-lookup the city
     local city="${name%%[0-9]*}" k="${name##*[!0-9]}"
     local i=1 loc
-    while loc=$(get_location $i "${DIR}/latencies.csv" 2>/dev/null) && [ -n "$loc" ]; do
+    while loc=$(get_location $i "${LOCATIONS_FILE}" 2>/dev/null) && [ -n "$loc" ]; do
         if [ "$loc" == "$city" ]; then
             echo $(( (i - 1) * nodes_per_dc + k )); return
         fi
@@ -309,7 +312,7 @@ start_container() {
 
 host_aliases() {   # --add-host for every node in the deployment
     local i=1 loc
-    while loc=$(get_location $i "${DIR}/latencies.csv" 2>/dev/null) && [ -n "$loc" ]; do
+    while loc=$(get_location $i "${LOCATIONS_FILE}" 2>/dev/null) && [ -n "$loc" ]; do
         for k in $(seq 1 "$(config nodesperdc)"); do
             printf -- '--add-host %s%s:%s ' "$loc" "$k" "$(infra_host_ip "$(node_index_of "${loc}${k}")")"
         done
@@ -378,7 +381,7 @@ Add `infra.py` next to `emulate_latency.py`:
 ```python
 import csv, docker, os
 
-def _registry(path="latencies.csv"):
+def _state(path=None):   # .deployment/<provider>.csv
     with open(path, newline="") as f:
         return list(csv.DictReader(f))
 
@@ -522,7 +525,7 @@ through the injected `/etc/hosts` entries, so the generator needs no change.
 | File | Change |
 | --- | --- |
 | `infra/{simulation,gcp,aws}.sh`, `infra/install-docker.sh`, `infra/README.md` | **New.** The ten contract functions per provider. |
-| `latencies.csv` | Add `region,host,ssh_user,net_device` columns. |
+| `latencies.csv` | **Removed.** Replaced by a per-provider locations map plus a gitignored deployment-state file. |
 | `exp.config` | Add `infra=`, `ssh_user=`; set `latency_simulation=0` in real mode (flag already exists). |
 | `utils.sh` | Add `node_index_of`, `d`/`drun`/`dexec`/`dinspect`/`dlogs`/`dstop`/`dkill`, `registry_field`, `registry_set`, `host_aliases`, `infra_bootstrap`, `infra_all_contexts`; make `get_container_ip` and `start_container` mode-aware; move `get_resource_limits` body into `infra/simulation.sh`; `pull_images` loops over hosts. |
 | `run_benchmarks.sh` | `start_network`/`stop_network` become mode-aware; YCSB context resolved from `${nearby_database}`; `infra_stage_file` before the `-v` at line 134. |

@@ -4,24 +4,23 @@
 
 set -e
 
+TIGA_FAST_PATH_DIR=$(dirname "${BASH_SOURCE[0]}")
+source ${TIGA_FAST_PATH_DIR}/../utils.sh
+
 CONTAINER_ID="${1:?Usage: $0 <container_id_or_name>}"
 
-# Extract node index from CONTAINER_ID (e.g., database-node1 -> 1)
-INDEX=$(echo "$CONTAINER_ID" | grep -oE '[0-9]+$')
-
-# Map node index to location (1=Hanoi, 2=Lyon, 3=NewYork, etc.)
-case "$INDEX" in
-    1) LOCATION="Hanoi" ;;
-    2) LOCATION="Lyon" ;;
-    3) LOCATION="NewYork" ;;
-    4) LOCATION="SaoPaulo" ;;
-    5) LOCATION="Tokyo" ;;
-    *) LOCATION="unknown" ;;
-esac
+# The container name carries its own location (Lyon1 -> Lyon).  Deriving it
+# from the trailing digit instead would read the *intra-DC* index, which is 1
+# for every DC at the default nodesperdc.
+LOCATION="${CONTAINER_ID%%[0-9]*}"
+if [ -z "${LOCATION}" ] || [ "${LOCATION}" = "$(config node_name)" ]; then
+    # Legacy database-nodeN naming: fall back to the provider's location map.
+    INDEX=$(echo "$CONTAINER_ID" | grep -oE '[0-9]+$')
+    LOCATION=$(get_location "${INDEX:-1}")
+fi
 
 # Find the most recent YCSB log file for this location in logs/ycsb/
-DIR=$(dirname "${BASH_SOURCE[0]}")
-LAST_LOG=$(ls -t "${DIR}/../logs/ycsb"/*_${LOCATION}.dat 2>/dev/null | head -n 1)
+LAST_LOG=$(ls -t "${LOGDIR}/ycsb"/*_${LOCATION}.dat 2>/dev/null | head -n 1)
 
 LAST_LINE=""
 if [ -n "$LAST_LOG" ] && [ -f "$LAST_LOG" ]; then

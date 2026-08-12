@@ -111,7 +111,7 @@ if [ "$dry_run" -eq 0 ]; then
             total_latency=0
             dc_count=0
             for i in $(seq 1 ${nodes}); do
-                dc=$(get_location ${i} ${DIR}/latencies.csv)
+                dc=$(get_location ${i} ${LOCATIONS_FILE})
                 dc_file="${output_file%.dat}_${dc}.dat"
                 [ -f "${dc_file}" ] || continue
                 dc_tput=$(awk -F',' '/^\[OVERALL\], Throughput\(ops\/sec\),/{t=$3; gsub(/[[:space:]]/,"",t); print int(t+0.5); exit}' "${dc_file}")

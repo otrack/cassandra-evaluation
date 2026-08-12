@@ -18,7 +18,7 @@ cockroachdb_start_cluster() {
     log "Starting CockroachDB cluster with ${num_dcs} DC(s) x ${nodes_per_dc} node(s)/DC..."
     cockroachdb_cleanup_cluster >/dev/null 2>&1 || true
 
-    local first_city=$(get_location 1 ${DIR}/latencies.csv)
+    local first_city=$(get_location 1 ${LOCATIONS_FILE})
     local first_node="${first_city}1"
 
     # 1. Start the very first node
@@ -39,7 +39,7 @@ cockroachdb_start_cluster() {
     # 2. Start remaining nodes across all DCs
     local global_node_id=1
     for i in $(seq 1 $num_dcs); do
-        local city=$(get_location $i ${DIR}/latencies.csv)
+        local city=$(get_location $i ${LOCATIONS_FILE})
         for k in $(seq 1 $nodes_per_dc); do
             if [ $i -eq 1 ] && [ $k -eq 1 ]; then
                 global_node_id=$((global_node_id + 1))
@@ -62,7 +62,7 @@ cockroachdb_start_cluster() {
 cockroachdb_cleanup_cluster() {
     log "Cleaning up CockroachDB cluster..."
     for i in $(seq 1 15); do
-        local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
+        local city=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
         [ -z "$city" ] && continue
         for k in $(seq 1 8); do
             local container_name="${city}${k}"
@@ -76,7 +76,7 @@ cockroachdb_get_hosts() {
     local nodes_per_dc=${2:-$(config nodesperdc)}
     local ips=""
     for i in $(seq 1 $num_dcs); do
-        local city=$(get_location $i ${DIR}/latencies.csv)
+        local city=$(get_location $i ${LOCATIONS_FILE})
         for k in $(seq 1 $nodes_per_dc); do
             local container_name="${city}${k}"
             local ip=$(get_container_ip "$container_name")
@@ -92,7 +92,7 @@ cockroachdb_get_hosts() {
 cockroachdb_get_node_count() {
     local num_dcs=0
     for i in $(seq 1 15); do
-        local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
+        local city=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
         [ -z "$city" ] && continue
         if node_is_up "${city}1"; then
             num_dcs=$((num_dcs + 1))
@@ -106,7 +106,7 @@ cockroachdb_get_port() {
 }
 
 cockroachdb_get_leaders() {
-    local first_city=$(get_location 1 ${DIR}/latencies.csv)
+    local first_city=$(get_location 1 ${LOCATIONS_FILE})
     echo "${first_city}1"
 }
 
@@ -117,7 +117,7 @@ cockroachdb_fix_lease_holder() {
     fi
     local num_dcs=$1
     local best=${2:-true}
-    local latencies_csv="${COCKROACHDB_DIR}/../latencies.csv"
+    local latencies_csv="${LOCATIONS_FILE}"
 
     local chosen_city
     chosen_city=$(python3 - "${num_dcs}" "${latencies_csv}" "${best}" <<'PYEOF'
@@ -173,7 +173,7 @@ PYEOF
     fi
 
     log "Pinning CockroachDB lease holder to ${chosen_city}..."
-    local first_city=$(get_location 1 ${DIR}/latencies.csv)
+    local first_city=$(get_location 1 ${LOCATIONS_FILE})
     local container="${first_city}1"
     local stmt="ALTER TABLE usertable CONFIGURE ZONE USING constraints = '{+region=${chosen_city}: 1}', lease_preferences = '[[\"+region=${chosen_city}\"]]';"
     dexec "${container}" cockroach sql --insecure -e "${stmt}"

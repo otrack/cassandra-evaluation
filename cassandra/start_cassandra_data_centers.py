@@ -54,7 +54,7 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     nano_cpus = None
     mem_limit = None
     cassandra_xmx = "4g"
-    machine = config.get("machine", "")
+    machine = infra.machine_shape()
     ephemeral_read_enabled = config.get("accord.ephemeral_read_enabled", "true")
     if machine:
         try:
@@ -151,7 +151,7 @@ if __name__ == "__main__":
         if num_dcs < 1:
             raise ValueError("Number of DCs must be at least 1.")
 
-        latencies_file = os.path.join(os.path.dirname(__file__), '..', 'latencies.csv')
+        latencies_file = infra.locations_file()
         locations = read_locations(latencies_file)
         
         config = {}

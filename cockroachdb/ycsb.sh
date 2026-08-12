@@ -13,7 +13,7 @@ cockroachdb_create_usertable() {
         exit 1
     fi
 
-    local first_city=$(get_location 1 ${DIR}/latencies.csv)
+    local first_city=$(get_location 1 ${LOCATIONS_FILE})
     local container="${first_city}1"
 
     # Set replication factor to num_dcs so each DC gets 1 replica

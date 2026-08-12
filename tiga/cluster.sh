@@ -101,14 +101,14 @@ config['preventive'] = True
 
 with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
     yaml.dump(config, f, default_flow_style=False)
-" "$num_dcs" "$nodes_per_dc" "${TIGA_DIR}" "${DIR}/latencies.csv"
+" "$num_dcs" "$nodes_per_dc" "${TIGA_DIR}" "${LOCATIONS_FILE}"
 
     log "Generated dynamic config file in ${TIGA_DIR}/config-ycsb.yml for ${num_dcs} DCs x ${nodes_per_dc} nodes/DC"
 
     # 2. Start replica containers
     local global_node_id=1
     for i in $(seq 1 $num_dcs); do
-        local city=$(get_location $i ${DIR}/latencies.csv)
+        local city=$(get_location $i ${LOCATIONS_FILE})
         for k in $(seq 1 $nodes_per_dc); do
             local server_name=$(printf "janus-lan-server-%04d" $(( (i-1) * 100 + (k-1) )))
             local container_name="${city}${k}"
@@ -136,7 +136,7 @@ tiga_cleanup_cluster() {
     local num_dcs=$(config node_count 2>/dev/null || echo 5)
     local nodes_per_dc=$(config nodesperdc)
     for i in $(seq 1 15); do
-        local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
+        local city=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
         [ -z "$city" ] && continue
         for k in $(seq 1 8); do
             local container_name="${city}${k}"
@@ -150,7 +150,7 @@ tiga_get_hosts() {
     local nodes_per_dc=${2:-$(config nodesperdc)}
     local ips=""
     for i in $(seq 1 $num_dcs); do
-        local city=$(get_location $i ${DIR}/latencies.csv)
+        local city=$(get_location $i ${LOCATIONS_FILE})
         for k in $(seq 1 $nodes_per_dc); do
             local container_name="${city}${k}"
             local ip=$(get_container_ip "$container_name")
@@ -166,7 +166,7 @@ tiga_get_hosts() {
 tiga_get_node_count() {
     local num_dcs=0
     for i in $(seq 1 15); do
-        local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
+        local city=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
         [ -z "$city" ] && continue
         if node_is_up "${city}1"; then
             num_dcs=$((num_dcs + 1))
@@ -217,6 +217,6 @@ for i in range(num_dcs):
         best_leader_idx = i
 
 print(locations[best_leader_idx])
-" "$num_dcs" "${DIR}/latencies.csv")
+" "$num_dcs" "${LOCATIONS_FILE}")
     echo "${best_city}1"
 }

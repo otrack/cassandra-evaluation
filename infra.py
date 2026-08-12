@@ -2,29 +2,36 @@
 """Python side of the infrastructure abstraction (see infra/README.md).
 
 The shell scripts route every Docker operation through the d* wrappers in
-utils.sh; the Python scripts route theirs through this module.  Both share the
-same registry (latencies.csv) and the same node numbering:
+utils.sh; the Python scripts route theirs through this module.  Both read the
+same two files and share the same node numbering:
 
     index = (dc - 1) * nodesperdc + k
 
-where *dc* is the 1-based row of latencies.csv and *k* the 1-based node within
-that DC.  Index 0 is the orchestrator, i.e. the local daemon.
+where *dc* is the 1-based row of the active provider's locations map and *k*
+the 1-based node within that DC.  Index 0 is the orchestrator, i.e. the local
+daemon.
 
-In simulated mode (empty ``host`` column) every helper here returns the local
-Docker client, so callers behave exactly as they did before this module
+  * the locations map (lat,lon,loc) says which places this provider deploys to;
+    the simulation authors it by hand, a cloud provider derives it from the
+    regions it runs in.
+  * the deployment state (node,host,ssh_user,net_device) is written by
+    provisioning and lives under .deployment/, which is not version controlled.
+
+With no state recorded -- the simulated case -- every helper here returns the
+local Docker client, so callers behave exactly as they did before this module
 existed.
 """
 
 import csv
 import os
-import re
 
 import docker
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 
 _CONFIG_CACHE = None
-_REGISTRY_CACHE = None
+_LOCATIONS_CACHE = None
+_STATE_CACHE = None
 _CLIENT_CACHE = {}
 
 
@@ -56,20 +63,75 @@ def load_config(path=None):
     return config
 
 
-def read_registry(path=None):
-    """Rows of latencies.csv, one per DC, in order."""
-    global _REGISTRY_CACHE
-    if _REGISTRY_CACHE is not None and path is None:
-        return _REGISTRY_CACHE
+def provider():
+    return str(load_config().get("infra") or "simulation")
 
+
+def machine_shape():
+    """The VM/container shape for the active provider.
+
+    `machine` sizes the containers the simulation packs onto one host; a cloud
+    provider may need a different shape, set as `<provider>.machine`.
+    """
+    cfg = load_config()
+    return str(cfg.get("%s.machine" % provider()) or cfg.get("machine") or "")
+
+
+def locations_file():
+    """Path to the active provider's lat,lon,loc map.
+
+    A provider that derives its locations (a cloud one, joining its zone list
+    against a region table) materialises them under .deployment/; one that
+    authors them by hand ships them in its own directory.
+    """
+    derived = os.path.join(_ROOT, ".deployment", "%s.locations.csv" % provider())
+    if os.path.exists(derived):
+        return derived
+    return os.path.join(_ROOT, "infra", provider(), "locations.csv")
+
+
+def state_file():
+    return os.path.join(_ROOT, ".deployment", "%s.csv" % provider())
+
+
+def read_locations():
+    """Rows of the locations map, one per DC, in order."""
+    global _LOCATIONS_CACHE
+    if _LOCATIONS_CACHE is not None:
+        return _LOCATIONS_CACHE
+
+    path = locations_file()
     rows = []
-    with open(path or os.path.join(_ROOT, "latencies.csv"), newline="") as f:
+    with open(path, newline="") as f:
         for row in csv.DictReader(f):
             rows.append({k: (v.strip().strip('"') if isinstance(v, str) else v)
                          for k, v in row.items() if k})
 
-    if path is None:
-        _REGISTRY_CACHE = rows
+    if rows and not {"lat", "lon", "loc"} <= set(rows[0]):
+        raise RuntimeError(
+            "%s is not a lat,lon,loc map. Provider '%s' derives its locations; "
+            "run any benchmark entry point (or ./deploy.sh status) once so that "
+            "it is materialised." % (path, provider()))
+
+    _LOCATIONS_CACHE = rows
+    return rows
+
+
+def _read_state():
+    global _STATE_CACHE
+    if _STATE_CACHE is not None:
+        return _STATE_CACHE
+
+    rows = {}
+    path = state_file()
+    if os.path.exists(path):
+        with open(path, newline="") as f:
+            for row in csv.DictReader(f):
+                node = (row.get("node") or "").strip()
+                if node.isdigit():
+                    rows[int(node)] = {k: (v.strip() if isinstance(v, str) else v)
+                                       for k, v in row.items() if k}
+    _STATE_CACHE = rows
     return rows
 
 
@@ -78,25 +140,25 @@ def nodes_per_dc():
 
 
 def is_real():
-    """True when at least one DC is backed by a real machine."""
-    return any(row.get("host") for row in read_registry())
+    """True when at least one node is backed by a real machine."""
+    return any(row.get("host") for row in _read_state().values())
 
 
 def dc_index_of(name):
-    """1-based row of latencies.csv owning *name*, or 0 for the orchestrator."""
+    """1-based row of the locations map owning *name*, or 0 for the orchestrator."""
     if not name or name == "accord-viz":
         return 0
     if name in ("swiftpaxos-master", "ycsb"):
         return 1
 
-    m = re.fullmatch(r"(?:ycsb-|database-node)(\d+)", name)
-    if m:
-        return int(m.group(1))
+    for prefix in ("ycsb-", "database-node"):
+        if name.startswith(prefix):
+            suffix = name[len(prefix):]
+            return int(suffix) if suffix.isdigit() else 0
 
-    m = re.fullmatch(r"([A-Za-z]+)(\d*)", name)
-    if m:
-        city = m.group(1)
-        for i, row in enumerate(read_registry(), start=1):
+    city = "".join(c for c in name if not c.isdigit())
+    if city:
+        for i, row in enumerate(read_locations(), start=1):
             if row.get("loc") == city:
                 return i
     return 0
@@ -108,33 +170,27 @@ def node_index_of(name):
     if dc == 0:
         return 0
 
-    k = 1
-    m = re.fullmatch(r"[A-Za-z]+(\d+)", name)
-    if m:
-        k = int(m.group(1))
+    digits = "".join(c for c in name if c.isdigit())
+    k = int(digits) if digits and not name.startswith(("ycsb-", "database-node")) else 1
     return (dc - 1) * nodes_per_dc() + k
 
 
-def _row_for(name):
-    dc = dc_index_of(name)
-    if dc == 0:
-        return None
-    rows = read_registry()
-    return rows[dc - 1] if dc <= len(rows) else None
+def _state_of(name):
+    return _read_state().get(node_index_of(name), {})
 
 
 def host_for(name):
-    """(host, ssh_user) backing *name*, or (None, None) in simulated mode."""
-    row = _row_for(name)
-    if not row or not row.get("host"):
+    """(host, ssh_user) backing *name*, or (None, None) with no deployment."""
+    row = _state_of(name)
+    host = row.get("host")
+    if not host:
         return None, None
-    return row["host"], row.get("ssh_user") or os.environ.get("USER")
+    return host, row.get("ssh_user") or os.environ.get("USER")
 
 
 def net_device(name):
     """Interface name to hand to tc for *name*."""
-    row = _row_for(name)
-    return (row.get("net_device") if row else None) or "eth0"
+    return _state_of(name).get("net_device") or "eth0"
 
 
 def client_for(name):
@@ -164,12 +220,15 @@ def all_clients():
         return [docker.from_env()]
 
     clients, seen = [], set()
-    for row in read_registry():
+    for node, row in sorted(_read_state().items()):
         host = row.get("host")
         if not host or host in seen:
             continue
         seen.add(host)
-        clients.append(client_for(row["loc"] + "1"))
+        dc = (node - 1) // nodes_per_dc()
+        locations = read_locations()
+        if dc < len(locations):
+            clients.append(client_for(locations[dc]["loc"] + "1"))
     return clients
 
 

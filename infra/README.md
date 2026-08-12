@@ -1,7 +1,7 @@
 # Infrastructure providers
 
 An *infra provider* tells the benchmark suite **where containers run**. The
-default provider, `simulation.sh`, runs every container on the local Docker
+default provider, `simulation`, runs every container on the local Docker
 daemon — the historical behavior of this repository. Other providers place one
 container per remote machine, provisioned from an IaaS, and reach them through
 SSH-backed Docker contexts.
@@ -12,7 +12,7 @@ The provider is selected in `exp.config`:
 infra=simulation      # or gcp, aws, …
 ```
 
-`utils.sh` sources `infra/${infra}.sh` and exposes the wrappers described below.
+`utils.sh` sources `infra/${infra}/provider.sh` and exposes the wrappers described below.
 **No code outside `infra/` may call a provider tool** (`gcloud`, `aws`, `ssh`,
 `scp`) or `docker` directly.
 
@@ -24,36 +24,121 @@ Nodes are numbered `1..N`, where
 index = (dc - 1) * nodesperdc + k
 ```
 
-`dc` is the 1-based row of `latencies.csv` (so `dc=1` is `Hanoi` by default) and
-`k` is the 1-based node within that DC. Index **0** is reserved for the
+`dc` is the 1-based row of the provider's locations map and `k` is the 1-based
+node within that DC. Index **0** is reserved for the
 *orchestrator* — the machine running the benchmark scripts. Containers that
 belong to the orchestrator rather than to any node (the demo visualization) map
 to 0, and `infra_context 0` must always return the local daemon.
 
 `node_index_of <container-name>` (in `utils.sh`, mirrored in `infra.py`) maps a
-container name to its index. Database containers are named `${city}${k}`
-(`Hanoi1`, `NewYork2`), so the mapping is a reverse lookup on the city name —
+container name to its index. Database containers are named `${loc}${k}`
+(`Hanoi1`, `Paris2`), so the mapping is a reverse lookup on the location name —
 the numeric suffix is the intra-DC index, *not* the node index.
 
-## The registry
+## Locations and deployment state
 
-`latencies.csv` is the single source of truth. Columns `lat,lon,loc` describe
-the simulated geography and are authored by hand. Columns
-`region,host,ssh_user,net_device` describe the real machines:
+A provider owns **two** things, kept in separate files because they have
+different lifetimes.
 
-| Column | Meaning |
-| --- | --- |
-| `region` | Provider zone closest to `loc`, authored by hand (e.g. `europe-west9-a`). |
-| `host` | Routable address of the machine. **Empty means simulation.** Written by `infra_provision`. |
-| `ssh_user` | SSH user for the Docker context. Written by `infra_provision`. |
-| `net_device` | Primary interface for `tc` (`eth0` locally, `ens4` on GCE, `ens5` on EC2). |
+### The locations map — `infra_locations_file`
 
-Rows are indexed by DC. With `nodesperdc > 1`, every node of a DC shares that
-DC's row, so a real provider must extend the registry (or key its machines on
-the node index) before it can place more than one node per DC.
+Which places this infra deploys to, as `lat,lon,loc`, one row per DC, in order.
+Row *i* is DC *i*.
 
-Read and write it with `registry_field <dc> <column>` and
-`registry_set <dc> <column> <value>` from `utils.sh`.
+This is deliberately **per provider**, not global. The simulation's map is a
+list of cities it pretends to run in, and the distances between them are what
+`tc` reproduces. A cloud provider's map is *derived*: it names the zones it
+runs in, and looks their coordinates up in a table of where that cloud's
+regions physically are. Coordinates therefore describe where the machines
+actually are, which is what makes the theoretical-optimum overlays in `cdf.py`,
+`conflict.py`, `distance.py` and `closed_economy.py` meaningful on a real
+deployment.
+
+`loc` is load-bearing beyond the plots: it is the container-name prefix
+(`Paris1`), the Cassandra DC name, and the legend label. It must be
+**alphabetic and unique** across the deployment, or container names collide.
+
+### The deployment state — `.deployment/<provider>.csv`
+
+What provisioning discovered, one row per node:
+
+```csv
+node,host,ssh_user,net_device
+1,10.0.0.1,bench,ens4
+```
+
+This is generated, not configured, so it lives under a gitignored directory and
+never touches a tracked file. `host` is the address **peers** use. Read and
+write it with `state_get <node> <col>`, `state_set <node> <col> <value>`,
+`state_nodes` and `state_clear` from `utils.sh`; `infra_all_indices` is just
+the set of nodes it records.
+
+## Providers
+
+### `simulation` (default)
+
+Everything on the local Docker daemon, WAN emulated with `tc`. Historical
+behavior; every contract function is a no-op or returns the local daemon.
+
+### `gcp`
+
+One Compute Engine VM per node, in the zones listed by `infra/gcp/locations.csv`,
+reached through SSH-backed Docker contexts.
+
+```bash
+gcloud config set project <id>          # once
+# exp.config: infra=gcp, latency_simulation=0
+./deploy.sh bootstrap 3                 # create 3 VMs, open ports, pull images
+./deploy.sh status
+./cdf.sh --protocols=cassandra-paxos
+./deploy.sh teardown                    # VMs bill by the second — do not skip
+```
+
+Three things specific to this provider are worth knowing.
+
+**Two addresses per machine.** Peers talk over the VPC-internal IP — that is
+what `infra_host_ip` returns and what lands in the containers' `/etc/hosts`. The
+orchestrator reaches each VM over its *external* IP. Both are recorded per node
+in the state file, as `host` and `ssh_host`.
+
+**Nothing is written to `~/.ssh/config`.** The public half of the operator's key
+(`ssh_key` in `exp.config`, defaulting to the first of `~/.ssh/id_ed25519`,
+`id_rsa`, `id_ecdsa`) is registered in each instance's `ssh-keys` metadata at
+creation. The suite's own remote calls state the key and address explicitly
+(`ssh -i … user@ip`), and Docker contexts point at `ssh://user@<external-ip>`.
+For an interactive shell, use `gcloud compute ssh bench-nodeN --zone <zone>` —
+`./deploy.sh ssh <idx>` is a thin wrapper around exactly that.
+
+Two consequences. The key must be one `ssh` offers by default, since Docker's
+SSH transport accepts no `-i` flag; a key under a non-default name works for
+everything except Docker contexts unless it is loaded into an `ssh-agent`. And
+because contexts embed the address, a restarted instance gets a new ephemeral
+IP — `./deploy.sh sync` re-reads the addresses and rebuilds the contexts.
+
+Projects that enforce **OS Login** ignore instance-level `ssh-keys` metadata and
+derive their own usernames; there, set `ssh_user` to the derived name and rely
+on `gcloud compute ssh` having published your key.
+
+**Locations are derived from the zones.** `locations.csv` lists the zones this
+deployment uses, in order; `regions.csv` says where each of Google's regions
+physically is. Joining them produces the `lat,lon,loc` map, materialised at
+`.deployment/gcp.locations.csv` and refreshed whenever either input changes.
+So a run in `europe-west9-a` reports itself as `Paris`, at Paris's coordinates
+— nothing is imitating a city it is not in, and the theoretical bounds are
+computed from where the machines really are.
+
+The coordinates in `regions.csv` are **metro-level**: Google publishes the city
+of each region, not the position of the building. Two zones of the same region
+map to the same `loc` and are rejected, since their container names would
+collide.
+
+**Host networking.** `infra_rewrite_docker_args` swaps the bridge for
+`--network host`, drops `-p` publishing, and injects `--add-host` for every
+container of the deployment. A container joining `--network container:<name>`
+(the YCSB clients) is left alone: it shares its replica's namespace and hosts
+file. Because containers then share the VM's network namespace, `tc` rules from
+the fault-tolerance experiment shape the VM's own interface and outlive the
+container — `restore_tc.py` stops being cosmetic.
 
 ## The contract
 
@@ -61,9 +146,13 @@ Every provider must define all of the following.
 
 | Function | Contract |
 | --- | --- |
+| `infra_locations_file` | Path to this provider's `lat,lon,loc` map, materialising it first if it is derived. Called once, right after the provider is sourced. |
 | `infra_is_real` | Exit 0 if containers run on remote machines, 1 for the local daemon. This is the predicate every mode-dependent branch tests; it must be cheap, as it is called on each Docker operation. |
-| `infra_provision <n>` | Create `n` machines through the IaaS — one per node, in the region of each node's registry row — wait for SSH, install Docker, and write `host`, `ssh_user` and `net_device` back into the registry. Must be idempotent. |
-| `infra_teardown` | Destroy everything `infra_provision` created: machines, firewall rules, Docker contexts, and any `tc` state left on a host. Must clear the registry columns it wrote. |
+| `infra_provision <n>` | Create `n` machines through the IaaS — one per node, in the zone of that node's DC — wait for SSH, install Docker, and record `host`, `ssh_user` and `net_device` with `state_set`. Must be idempotent. |
+| `infra_teardown` | Destroy everything `infra_provision` created: machines, firewall rules, Docker contexts, and any `tc` state left on a host. Must call `state_clear`. |
+| `infra_sync` | Re-establish the *local* state of a deployment that already exists — Docker contexts, SSH aliases — without touching the machines. Needed after a reboot, or when driving an existing deployment from another laptop. |
+| `infra_ssh <idx> [cmd…]` | Open a shell on node `idx`, or run `cmd` there. Used by `./deploy.sh ssh`. |
+| `infra_reset_network` | Clear traffic shaping left on the machines by an interrupted run. Called from `start_network`, i.e. once per cluster creation. A no-op wherever `tc` state cannot outlive a container. |
 | `infra_host_ip <idx>` | The address peers use to reach node `idx` — the private IP within a single cloud, the public IP across providers. Empty for index 0. |
 | `infra_context <idx>` | Name of the Docker context for node `idx`, created lazily. **Empty string means the local daemon**, which is what index 0 and the simulation provider always return. |
 | `infra_net_device <idx>` | Interface name used by `tc` commands on node `idx`. |
@@ -76,8 +165,8 @@ Every provider must define all of the following.
 `utils.sh` builds three helpers on top of the contract, which providers inherit
 and must not redefine:
 
-- `infra_all_indices` — every provisioned node index (registry rows with a
-  non-empty `host`).
+- `infra_all_indices` — every provisioned node index, i.e. the nodes recorded
+  in the deployment state file.
 - `infra_bootstrap <n>` — `infra_provision`, then `infra_open_ports` for the
   union of all protocol ports, then `pull_images` on each machine.
 - `host_aliases` — `--add-host name:ip` for every container name in the
@@ -85,8 +174,10 @@ and must not redefine:
 
 ## Adding a provider
 
-1. Copy `simulation.sh` to `infra/<name>.sh` and implement the twelve functions.
-2. Fill the `region` column of `latencies.csv` with zones for your provider.
+1. Copy `infra/simulation/` to `infra/<name>/` and implement the contract in
+   `provider.sh`.
+2. Give it a locations map: a static `locations.csv`, or a derivation like
+   GCP's zone list joined against a region table.
 3. Set `infra=<name>` and `latency_simulation=0` in `exp.config`.
 4. Run `./cdf.sh --test --protocols=cassandra-paxos` against two machines
    first — it is the simplest protocol and exercises seeds, `get_container_ip`

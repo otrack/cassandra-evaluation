@@ -138,7 +138,7 @@ if __name__ == "__main__":
     nodes_per_dc = int(sys.argv[2]) if len(sys.argv) > 2 else int(config.get("nodesperdc", 1))
 
     locations = []
-    with open('latencies.csv', newline='') as csvfile:
+    with open(infra.locations_file(), newline='') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             lat = float(row['lat'])

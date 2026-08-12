@@ -366,7 +366,7 @@ def main():
     protocols_plot   = sort_protocols_for_plotting(df_single['protocol'].unique().tolist())
     dc_counts = sorted(df_single['nodes_int'].unique().tolist())
 
-    latencies_path = os.path.join(os.path.dirname(__file__), "latencies.csv")
+    latencies_path = infra.locations_file()
     locations = load_locations(latencies_path)
     accord_latencies = []
     if locations:

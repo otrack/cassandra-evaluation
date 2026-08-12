@@ -1,6 +1,8 @@
 import csv
 import math
 
+import infra
+
 from emulate_latency import haversine
 from emulate_latency import estimate_latency
 
@@ -52,7 +54,7 @@ def print_matrix(locations, ping_matrix):
         print()
 
 def main():
-    file_path = 'latencies.csv'  # Change file path if needed
+    file_path = infra.locations_file()
     locations = read_locations(file_path)
     ping_matrix = calculate_ping_matrix(locations)
     print_matrix(locations, ping_matrix)

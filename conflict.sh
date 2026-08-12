@@ -146,7 +146,7 @@ do
 done
 
 debug "Plotting..."
-python3 ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv ${workload} ${nodes} ${DIR}/latencies.csv ${RESULTSDIR}/conflict.tex
+python3 ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv ${workload} ${nodes} ${LOCATIONS_FILE} ${RESULTSDIR}/conflict.tex
 
 pdflatex -interaction nonstopmode -jobname=conflict -output-directory=${RESULTSDIR} \
 "\documentclass{article}\

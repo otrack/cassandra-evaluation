@@ -130,7 +130,7 @@ if [ "$dry_run" -eq 0 ]; then
 
         # Load YCSB data
         # Load YCSB data
-        location1=$(get_location 1 ${DIR}/latencies.csv)
+        location1=$(get_location 1 ${LOCATIONS_FILE})
         nearby_database="${location1}1"
         run_ycsb "load" "${workload_type}" "${workload}" "${hosts}" "${port}" \
             "${records}" "${records}" "${protocol}" "${replication_factor}" \
@@ -143,7 +143,7 @@ if [ "$dry_run" -eq 0 ]; then
 
         # Start YCSB run clients from each node (time-bounded via maxexecutiontime)
         for i in $(seq 1 ${node_count}); do
-            location=$(get_location $i ${DIR}/latencies.csv)
+            location=$(get_location $i ${LOCATIONS_FILE})
             nearby_database="${location}1"
             run_ycsb "run" "${workload_type}" "${workload}" "${hosts}" "${port}" \
                 "${records}" 0 "${protocol}" "${replication_factor}" \

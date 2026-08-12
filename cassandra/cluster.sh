@@ -18,7 +18,7 @@ cassandra_start_cluster() {
 
     local global_node_id=1
     for i in $(seq 1 $num_dcs); do
-        local city=$(get_location $i ${DIR}/latencies.csv)
+        local city=$(get_location $i ${LOCATIONS_FILE})
         for k in $(seq 1 $nodes_per_dc); do
             local container_name="${city}${k}"
             local log_file=${LOGDIR}/${protocol}_node${global_node_id}.log
@@ -42,7 +42,7 @@ cassandra_get_hosts() {
     local nodes_per_dc=${2:-$(config nodesperdc)}
     local ips=""
     for i in $(seq 1 $num_dcs); do
-        local city=$(get_location $i ${DIR}/latencies.csv)
+        local city=$(get_location $i ${LOCATIONS_FILE})
         for k in $(seq 1 $nodes_per_dc); do
             local container_name="${city}${k}"
             local ip=$(get_container_ip "$container_name")
@@ -58,7 +58,7 @@ cassandra_get_hosts() {
 cassandra_get_node_count() {
     local num_dcs=0
     for i in $(seq 1 15); do
-        local city=$(get_location $i ${DIR}/latencies.csv 2>/dev/null)
+        local city=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
         [ -z "$city" ] && continue
         if node_is_up "${city}1"; then
             num_dcs=$((num_dcs + 1))
@@ -79,6 +79,6 @@ cassandra_get_dc() {
 }
 
 cassandra_get_leaders() {
-    local first_city=$(get_location 1 ${DIR}/latencies.csv)
+    local first_city=$(get_location 1 ${LOCATIONS_FILE})
     echo "${first_city}1"
 }

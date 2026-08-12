@@ -21,7 +21,7 @@ compute_breakdown() {
    fi
    
    for i in $(seq 1 $node_count); do
-       location=$(get_location $i ${CASSANDRA_DIR}/../latencies.csv 2>/dev/null)
+       location=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
        if [ -n "$location" ] && container_exists "${location}1"; then
            CONTAINER_ID="${location}1"
        else

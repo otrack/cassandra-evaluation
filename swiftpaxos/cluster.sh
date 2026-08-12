@@ -30,7 +30,7 @@ swiftpaxos_start_cluster() {
 	else
 	    message="Server starting"
 	fi
-        location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
+        location=$(get_location $i ${LOCATIONS_FILE})
         container_name="${location}1"
 	start_container ${image} ${container_name} "${message}" ${LOGDIR}/${protocol}_node${i}.log --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} -e PROTOCOL=${protocol} -e NSERVERS=${node_count} -e TYPE=server -e THRIFTY=false -e MADDR=${maddr} || {
             error "Failed to start server $i"
@@ -45,7 +45,7 @@ swiftpaxos_cleanup_cluster() {
     local node_count=${1:-$(swiftpaxos_get_node_count)}
     [ -z "$node_count" ] || [ "$node_count" -eq 0 ] && node_count=5
     for i in $(seq 1 $node_count); do
-        location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
+        location=$(get_location $i ${LOCATIONS_FILE})
         container_name="${location}1"
         if container_exists "$container_name"; then
             stop_container "${container_name}" || true
@@ -70,7 +70,7 @@ swiftpaxos_get_hosts() {
 swiftpaxos_get_node_count() {
     i=1
     while true; do
-        location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
+        location=$(get_location $i ${LOCATIONS_FILE})
         if [ -z "$location" ]; then
             break
         fi
@@ -97,7 +97,7 @@ swiftpaxos_get_leaders() {
     local node_count=$(swiftpaxos_get_node_count)
     if [ "${sub_protocol}" = "paxos" ]; then
         for i in $(seq 1 "${node_count}"); do
-            location=$(get_location $i ${SWIFTPAXOS_DIR}/../latencies.csv)
+            location=$(get_location $i ${LOCATIONS_FILE})
             container_name="${location}1"
             if dlogs "${container_name}" --tail 1000 2>&1 | grep -q "I am the leader"; then
                 echo "${container_name}"
@@ -106,6 +106,6 @@ swiftpaxos_get_leaders() {
         done
     fi
     # Default: node 3
-    location=$(get_location 3 ${SWIFTPAXOS_DIR}/../latencies.csv)
+    location=$(get_location 3 ${LOCATIONS_FILE})
     echo "${location}1"
 }

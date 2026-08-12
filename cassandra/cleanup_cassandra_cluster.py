@@ -28,7 +28,7 @@ def cleanup_cassandra_cluster():
     cities = []
     try:
         import csv
-        with open('latencies.csv', newline='') as csvfile:
+        with open(infra.locations_file(), newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 cities.append(row['loc'].strip().strip('"'))

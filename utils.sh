@@ -48,40 +48,68 @@ clean_logdir() {
 DEBUG=$(config debug)
 
 ###############################################################################
-# Registry
+# Locations and deployment state
 #
-# latencies.csv is the single source of truth for both the simulated geography
-# (lat,lon,loc) and the real machines backing each DC (region,host,ssh_user,
-# net_device).  An empty `host` column means simulated mode.  See
-# infra/README.md.
+# Each provider owns the map of the locations it deploys to: the simulation
+# mimics a set of cities, while a cloud provider derives its locations from the
+# regions it runs in.  ${LOCATIONS_FILE} always exposes that map in the same
+# shape -- lat,lon,loc, one row per DC, in order -- and is set below, once the
+# provider has been sourced.
+#
+# Anything discovered at provisioning time (addresses, ssh users, interface
+# names) is deployment state, not configuration: it lives per node in
+# ${STATE_FILE}, under a gitignored directory, and never touches a tracked
+# file.  See infra/README.md.
 ###############################################################################
 
-REGISTRY_FILE="${DIR}/latencies.csv"
+STATE_FILE="${DIR}/.deployment/$(config infra).csv"
+STATE_COLUMNS="node,zone,host,ssh_host,ssh_user,net_device"
 
-registry_field() {
+state_get() {
     if [ $# -ne 2 ]; then
-        error "usage: registry_field <dc_index> <column>"
+        error "usage: state_get <node_idx> <column>"
         return 2
     fi
-    local dc=$1 col=$2
-    awk -F',' -v n=$((dc + 1)) -v c="$col" '
-        NR==1 { for (i = 1; i <= NF; i++) { gsub(/\r|^[ \t]+|[ \t]+$/, "", $i); if ($i == c) k = i } next }
-        NR==n { if (k) { gsub(/\r|^[ \t]+|[ \t]+$/, "", $k); print $k } }
-    ' "${REGISTRY_FILE}"
+    [ -f "${STATE_FILE}" ] || return 0
+    awk -F',' -v n="$1" -v c="$2" '
+        NR==1 { for (i = 1; i <= NF; i++) { h = $i; gsub(/\r|^[ \t]+|[ \t]+$/, "", h)
+                                            if (h == c) k = i; if (h == "node") nk = i } next }
+        nk && k && $nk == n { gsub(/\r|^[ \t]+|[ \t]+$/, "", $k); print $k; exit }
+    ' "${STATE_FILE}"
 }
 
-registry_set() {
+state_set() {
     if [ $# -ne 3 ]; then
-        error "usage: registry_set <dc_index> <column> <value>"
+        error "usage: state_set <node_idx> <column> <value>"
         return 2
     fi
-    local dc=$1 col=$2 val=$3 tmp
-    tmp=$(mktemp)
-    awk -F',' -v OFS=',' -v n=$((dc + 1)) -v c="$col" -v v="$val" '
-        NR==1 { for (i = 1; i <= NF; i++) { h = $i; gsub(/\r|^[ \t]+|[ \t]+$/, "", h); if (h == c) k = i } }
-        NR==n && k { $k = v }
-        { sub(/\r$/, ""); print }
-    ' "${REGISTRY_FILE}" > "${tmp}" && mv "${tmp}" "${REGISTRY_FILE}"
+    local node=$1 col=$2 val=$3 tmp
+    mkdir -p "$(dirname "${STATE_FILE}")"
+    # Provisioning updates several nodes at once, and this is a
+    # read-modify-write of one shared file, so writers are serialised.
+    (
+        flock 9
+        [ -f "${STATE_FILE}" ] || echo "${STATE_COLUMNS}" > "${STATE_FILE}"
+        grep -q "^${node}," "${STATE_FILE}" || \
+            echo "${node}$(printf ',%.0s' $(seq 2 $(echo "${STATE_COLUMNS}" | tr ',' '\n' | wc -l)))" >> "${STATE_FILE}"
+        tmp=$(mktemp)
+        awk -F',' -v OFS=',' -v n="${node}" -v c="${col}" -v v="${val}" '
+            NR==1 { for (i = 1; i <= NF; i++) { h = $i; gsub(/\r|^[ \t]+|[ \t]+$/, "", h)
+                                                if (h == c) k = i; if (h == "node") nk = i }
+                    sub(/\r$/, ""); print; next }
+            { sub(/\r$/, ""); if (nk && k && $nk == n) $k = v; print }
+        ' "${STATE_FILE}" > "${tmp}" && mv "${tmp}" "${STATE_FILE}"
+    ) 9>"${STATE_FILE}.lock"
+}
+
+# Every node recorded by a provisioning run, in order.
+state_nodes() {
+    [ -f "${STATE_FILE}" ] || return 0
+    awk -F',' 'NR > 1 && $1 ~ /^[0-9]+$/ { print $1 }' "${STATE_FILE}" | sort -n
+}
+
+state_clear() {
+    rm -f "${STATE_FILE}"
 }
 
 # node_index_of <container_name> -> 1..N, or 0 for the orchestrator.
@@ -116,7 +144,7 @@ node_index_of() {
     [[ "$k" =~ ^[0-9]+$ ]] || k=1
     if [ -n "${city}" ]; then
         local i=1 loc
-        while loc=$(get_location $i "${REGISTRY_FILE}" 2>/dev/null) && [ -n "$loc" ]; do
+        while loc=$(get_location $i "${LOCATIONS_FILE}" 2>/dev/null) && [ -n "$loc" ]; do
             if [ "$loc" = "$city" ]; then
                 echo $(( (i - 1) * nodes_per_dc + k ))
                 return 0
@@ -130,18 +158,23 @@ node_index_of() {
     return 1
 }
 
-# Every provisioned node index (registry rows carrying a host).
+# Every node a provisioning run has recorded.
 infra_all_indices() {
-    local nodes_per_dc i host k
-    nodes_per_dc=$(config nodesperdc)
-    nodes_per_dc=${nodes_per_dc:-1}
-    i=1
-    while host=$(registry_field $i host 2>/dev/null); [ -n "$host" ]; do
-        for k in $(seq 1 "${nodes_per_dc}"); do
-            echo $(( (i - 1) * nodes_per_dc + k ))
-        done
+    state_nodes
+}
+
+# The first <count> location names of the active provider (all of them when
+# <count> is omitted), space separated.
+locations_list() {
+    local count=${1:-0} i=1 loc out=""
+    while :; do
+        [ "${count}" -gt 0 ] && [ "${i}" -gt "${count}" ] && break
+        loc=$(get_location ${i} "${LOCATIONS_FILE}" 2>/dev/null) || break
+        [ -z "${loc}" ] && break
+        out="${out}${out:+ }${loc}"
         i=$((i + 1))
     done
+    echo "${out}"
 }
 
 # --add-host entries for every container of the deployment, for providers that
@@ -151,7 +184,7 @@ host_aliases() {
     nodes_per_dc=$(config nodesperdc)
     nodes_per_dc=${nodes_per_dc:-1}
     i=1
-    while loc=$(get_location $i "${REGISTRY_FILE}" 2>/dev/null) && [ -n "$loc" ]; do
+    while loc=$(get_location $i "${LOCATIONS_FILE}" 2>/dev/null) && [ -n "$loc" ]; do
         for k in $(seq 1 "${nodes_per_dc}"); do
             local ip
             ip=$(infra_host_ip $(( (i - 1) * nodes_per_dc + k )))
@@ -164,11 +197,13 @@ host_aliases() {
     [ -n "$first" ] && printf -- '--add-host swiftpaxos-master:%s ' "$first"
 }
 
+# Images are deliberately not pulled here: every experiment script pulls them
+# itself, so doing it now would only fetch versions that may be superseded
+# before the first run.
 infra_bootstrap() {
     local num_nodes=$1
     infra_provision "${num_nodes}" || return 1
-    infra_open_ports 7000 7087 8080 9042 10000 26257 || return 1
-    pull_images
+    infra_open_ports 7000 7087 8080 9042 10000 26257
 }
 
 ###############################################################################
@@ -468,6 +503,14 @@ get_resource_limits() {
 compute_test_machine() {
     local num_dcs=$1
     local nodes_per_dc=${2:-$(config nodesperdc)}
+
+    # Right-sizing containers to the local box is meaningless once every node
+    # owns a machine, and rewriting machine= would desynchronise exp.config
+    # from the shapes already provisioned.
+    if infra_is_real; then
+        log "Test mode: keeping machine spec '$(config machine)' (provisioned by $(config infra))"
+        return 0
+    fi
     if [ -z "$num_dcs" ] || ! [[ "$num_dcs" =~ ^[0-9]+$ ]] || [ "$num_dcs" -le 0 ]; then
         error "compute_test_machine: num_dcs must be a positive integer"
         return 1
@@ -520,37 +563,64 @@ compute_test_machine() {
 pull_images() {
     log "Pulling all Docker images from ${CONFIG_FILE}..."
 
-    # Simulated mode has a single daemon (index 1 resolves to the local one);
-    # a real provider needs every image on every machine.
-    local -a indices=(1)
-    if infra_is_real; then
-        indices=($(infra_all_indices))
-    fi
+    local -a images=()
+    local key value
+    while IFS='=' read -r key value; do
+        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ "$key" =~ _image$ ]] || continue
+        images+=("$(echo "$value" | xargs)")
+    done < "${CONFIG_FILE}"
 
-    local idx
-    for idx in "${indices[@]}"; do
-        while IFS='=' read -r key value; do
-            [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-            [[ "$key" =~ _image$ ]] || continue
-            value=$(echo "$value" | xargs)
-            if infra_is_real; then
-                log "Pulling image: ${value} (node ${idx})"
-            else
-                log "Pulling image: ${value}"
-            fi
-            dpull "${idx}" "${value}"
+    # One local daemon: pull in sequence, as this has always done.
+    if ! infra_is_real; then
+        local image
+        for image in "${images[@]}"; do
+            log "Pulling image: ${image}"
+            dpull 1 "${image}"
             if [ $? -ne 0 ]; then
-                log "ERROR: Failed to pull image '${value}'. Aborting."
+                log "ERROR: Failed to pull image '${image}'. Aborting."
                 exit 1
             fi
-        done < "${CONFIG_FILE}"
+        done
+        log "All Docker images pulled successfully."
+        return 0
+    fi
+
+    # Every machine needs every image, and each pull crosses a WAN, so the
+    # machines are done concurrently.  Images stay sequential *within* a
+    # machine, to avoid one daemon fighting itself over shared layers.
+    local -a pids=() nodes=()
+    local idx image
+    for idx in $(infra_all_indices); do
+        log "Pulling ${#images[@]} image(s) onto node ${idx}..."
+        (
+            for image in "${images[@]}"; do
+                dpull "${idx}" "${image}" >/dev/null || exit 1
+            done
+        ) &
+        pids+=($!)
+        nodes+=("${idx}")
     done
+
+    local i rc=0
+    for i in "${!pids[@]}"; do
+        if wait "${pids[$i]}"; then
+            log "Images ready on node ${nodes[$i]}"
+        else
+            error "Failed to pull images on node ${nodes[$i]}"
+            rc=1
+        fi
+    done
+    if [ ${rc} -ne 0 ]; then
+        log "ERROR: image pull failed. Aborting."
+        exit 1
+    fi
     log "All Docker images pulled successfully."
 }
 
 get_location() {
   local k="$1"
-  local file="${2:-latencies.csv}"
+  local file="${2:-${LOCATIONS_FILE}}"
 
   # Validate arguments
   if [ -z "$k" ]; then
@@ -609,8 +679,16 @@ get_location() {
 
 INFRA=$(config infra)
 INFRA=${INFRA:-simulation}
-if [ ! -r "${DIR}/infra/${INFRA}.sh" ]; then
-    error "Unknown infra provider '${INFRA}' (no ${DIR}/infra/${INFRA}.sh)"
+if [ ! -r "${DIR}/infra/${INFRA}/provider.sh" ]; then
+    error "Unknown infra provider '${INFRA}' (no ${DIR}/infra/${INFRA}/provider.sh)"
     exit 1
 fi
-source "${DIR}/infra/${INFRA}.sh"
+INFRA_DIR="${DIR}/infra/${INFRA}"
+source "${INFRA_DIR}/provider.sh"
+
+# The map of locations this provider deploys to: lat,lon,loc, one row per DC.
+LOCATIONS_FILE=$(infra_locations_file)
+if [ ! -r "${LOCATIONS_FILE}" ]; then
+    error "Provider '${INFRA}' produced no locations file (${LOCATIONS_FILE})"
+    exit 1
+fi

@@ -15,8 +15,10 @@ start_network() {
     local network_name=$(config "network_name")
 
     # A real provider gives every node its own machine and its own network
-    # namespace; there is no shared bridge to create.
+    # namespace, so there is no shared bridge to create -- but shaping left on
+    # a machine by an interrupted run would silently distort this one.
     if infra_is_real; then
+        infra_reset_network
         return 0
     fi
 
@@ -312,7 +314,7 @@ run_benchmark() {
 		exit 1
 	fi
 
-	first_dc=$(get_location 1 ${DIR}/latencies.csv)
+	first_dc=$(get_location 1 ${LOCATIONS_FILE})
 	nearby_database="${first_dc}1"
 	run_ycsb "load" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}.load" "$nthreads" "ycsb" "${nearby_database}" "${EXTRA_YCSB_OPTS[@]}"
 	wait_container "ycsb"
@@ -332,7 +334,7 @@ run_benchmark() {
 
     for i in $(seq 1 1 ${num_dcs});
     do
-        location=$(get_location $i ${DIR}/latencies.csv)
+        location=$(get_location $i ${LOCATIONS_FILE})
         nearby_database="${location}1"
         log ${location}
 
@@ -360,7 +362,7 @@ run_benchmark() {
     local ratio_count=0
 
     for i in $(seq 1 1 ${num_dcs}); do
-        location=$(get_location $i ${DIR}/latencies.csv)
+        location=$(get_location $i ${LOCATIONS_FILE})
         container_name="${location}1"
         fp_output=$("${fast_path_script}" "${container_name}" 2>/dev/null) || true
 
