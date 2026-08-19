@@ -146,6 +146,74 @@ file. Because containers then share the VM's network namespace, `tc` rules from
 the fault-tolerance experiment shape the VM's own interface and outlive the
 container — `restore_tc.py` stops being cosmetic.
 
+### `aws`
+
+One EC2 instance per node, in the availability zones (AZs) listed by
+`infra/aws/locations.csv`, reached through SSH-backed Docker contexts.
+Provisioning uses each region's existing **default VPC** and subnets; this
+provider owns a security group, not a VPC lifecycle.
+
+```bash
+aws configure                           # once; see docs/aws-deployment.md §7
+                                         # for full one-time account setup
+# exp.config: infra=aws, latency_simulation=0
+./deploy.sh bootstrap 3                 # create 3 instances and open the protocol ports
+./deploy.sh status
+./cdf.sh --protocols=cassandra-paxos
+./deploy.sh teardown                    # instances bill by the second — do not skip
+```
+
+Five things specific to this provider are worth knowing; the full design,
+findings and a step-by-step operator setup guide (IAM policy, CLI install,
+SSH key, per-region quotas, default VPC, budget alert) live in
+[`docs/aws-deployment.md`](../docs/aws-deployment.md).
+
+**Two addresses per machine.** Peers talk over the private VPC IP — that is
+what `infra_host_ip` returns and what lands in the containers' `/etc/hosts`.
+The orchestrator reaches each instance over its *public* IP. Both are
+recorded per node in the state file, as `host` and `ssh_host`.
+
+**SSH is open by design.** A fresh account's default VPC allows no inbound
+traffic from outside itself, so the security group this provider manages
+opens `tcp:22` from `0.0.0.0/0` at creation time, before `infra_open_ports`
+(called later, from `infra_bootstrap`) ever runs. This is a conscious
+tradeoff for a benchmark harness running short-lived, disposable machines,
+not an oversight — see `docs/aws-deployment.md` §2.2.
+
+**Nothing is written to `~/.ssh/config`.** EC2 has no metadata-driven key
+injection the way some other clouds' guest agents provide, so the operator's
+public key (`$BENCH_SSH_KEY`, defaulting to the first of `~/.ssh/id_ed25519`,
+`id_rsa`, `id_ecdsa`) is spliced into `install-docker.sh` and delivered
+through `run-instances --user-data` at creation — the only hook that runs
+before an operator can reach an instance at all. The suite's own remote calls
+state the key and address explicitly (`ssh -i … user@ip`), and Docker
+contexts point at `ssh://user@<public-ip>`. The Ubuntu AMI has one fixed
+login account, `ubuntu`; override it with `$BENCH_SSH_USER` if a custom AMI
+needs a different one.
+
+The same two consequences as any provider that embeds an address in a Docker
+context apply here: the key must be one `ssh` offers by default, since
+Docker's SSH transport accepts no `-i` flag, and a restarted instance gets a
+new address — `./deploy.sh sync` re-reads it and rebuilds the contexts.
+
+**Locations are derived from the AZs; one region per DC.** `locations.csv`
+lists the AZs this deployment uses, in order; `regions.csv` says where each
+of AWS's regions physically is (metro-level, like GCP's table). Joining them
+produces the `lat,lon,loc` map, materialised at
+`.deployment/aws.locations.csv`. Every AWS CLI call is region-scoped, so a
+node's region is derived from its AZ by stripping the trailing letter
+(`us-east-1a` → `us-east-1`), and provisioning resolves the VPC, subnet,
+security group and AMI once per distinct region in use. A shape temporarily
+unavailable in one AZ is retried against a sibling AZ of the same region
+before failing.
+
+**Host networking.** `infra_rewrite_docker_args` swaps the bridge for
+`--network host`, drops `-p` publishing, and injects `--add-host` for every
+container of the deployment, exactly as any real provider must. Because
+containers then share the instance's network namespace, `tc` rules from the
+fault-tolerance experiment shape the instance's own interface and outlive the
+container — `restore_tc.py` stops being cosmetic.
+
 ## The contract
 
 Every provider must define all of the following.

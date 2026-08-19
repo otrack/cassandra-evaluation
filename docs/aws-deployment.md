@@ -182,18 +182,34 @@ _aws_default_subnet_id() {
         --query 'Subnets[0].SubnetId' --output text
 }
 
+# Lookup only -- never creates.  Used by teardown and infra_open_ports, which
+# must not conjure a security group into existence out of a stale state file.
+_aws_find_security_group_id() {
+    local region=$1 vpc
+    vpc=$(aws ec2 describe-vpcs --region "${region}" --filters Name=isDefault,Values=true \
+        --query 'Vpcs[0].VpcId' --output text)
+    [ -z "${vpc}" ] || [ "${vpc}" = "None" ] && return 0
+    aws ec2 describe-security-groups --region "${region}" \
+        --filters "Name=group-name,Values=bench-internal" "Name=vpc-id,Values=${vpc}" \
+        --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null
+}
+
 _aws_security_group_id() {   # one per region, created once, reused after
     local region=$1 vpc sg
     vpc=$(aws ec2 describe-vpcs --region "${region}" --filters Name=isDefault,Values=true \
         --query 'Vpcs[0].VpcId' --output text)
-    sg=$(aws ec2 describe-security-groups --region "${region}" \
-        --filters "Name=group-name,Values=bench-internal" "Name=vpc-id,Values=${vpc}" \
-        --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null)
+    sg=$(_aws_find_security_group_id "${region}")
     [ -n "${sg}" ] && [ "${sg}" != "None" ] && { echo "${sg}"; return 0; }
 
     sg=$(aws ec2 create-security-group --region "${region}" --group-name bench-internal \
         --description "cassandra-evaluation inter-node traffic" --vpc-id "${vpc}" \
-        --query 'GroupId' --output text) || return 1
+        --query 'GroupId' --output text 2>&1) || {
+        # Lost a race with a sibling node's instance creation in the same
+        # region -- reuse the group the winner just created.
+        sg=$(_aws_find_security_group_id "${region}")
+        [ -n "${sg}" ] && [ "${sg}" != "None" ] && { echo "${sg}"; return 0; }
+        return 1
+    }
     aws ec2 authorize-security-group-ingress --region "${region}" --group-id "${sg}" \
         --protocol tcp --port 22 --cidr 0.0.0.0/0 >/dev/null
     aws ec2 authorize-security-group-ingress --region "${region}" --group-id "${sg}" \
@@ -206,6 +222,14 @@ _aws_ami_for_region() {   # cached per region for the life of the process
     aws ssm get-parameters --region "${region}" \
         --names /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id \
         --query 'Parameters[0].Value' --output text
+}
+
+# The AMI's root device name (typically /dev/sda1), needed to override its
+# default 8GB volume -- too small for the Docker images this suite pulls.
+_aws_root_device_for_ami() {   # cached per AMI for the life of the process
+    local region=$1 ami=$2
+    aws ec2 describe-images --region "${region}" --image-ids "${ami}" \
+        --query 'Images[0].RootDeviceName' --output text
 }
 ```
 
@@ -227,7 +251,7 @@ infra_provision() {
 }
 
 _aws_create_instance() {
-    local idx=$1 shape=$2 planned az region subnet sg ami name existing user_data
+    local idx=$1 shape=$2 planned az region subnet sg ami root_device name existing user_data
     planned=$(_aws_planned_az "${idx}") || return 1
     name=$(_aws_instance "${idx}")
     user_data=$(_aws_render_user_data)
@@ -236,7 +260,7 @@ _aws_create_instance() {
         region=$(_aws_region_of "${az}")
         existing=$(aws ec2 describe-instances --region "${region}" \
             --filters "Name=tag:Name,Values=${name}" "Name=instance-state-name,Values=pending,running" \
-            --query 'Reservations[].Instances[0].InstanceId' --output text)
+            --query 'Reservations[0].Instances[0].InstanceId' --output text)
         if [ -n "${existing}" ] && [ "${existing}" != "None" ]; then
             state_set "${idx}" zone "${az}"; return 0
         fi
@@ -244,9 +268,12 @@ _aws_create_instance() {
         subnet=$(_aws_default_subnet_id "${region}" "${az}")
         sg=$(_aws_security_group_id "${region}") || return 1
         ami=$(_aws_ami_for_region "${region}")
+        root_device=$(_aws_root_device_for_ami "${region}" "${ami}")
         out=$(aws ec2 run-instances --region "${region}" \
             --image-id "${ami}" --instance-type "${shape}" \
             --subnet-id "${subnet}" --security-group-ids "${sg}" \
+            --associate-public-ip-address \
+            --block-device-mappings "[{\"DeviceName\":\"${root_device}\",\"Ebs\":{\"VolumeSize\":50,\"VolumeType\":\"gp3\"}}]" \
             --user-data "${user_data}" \
             --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${name}}]" 2>&1)
         if [ $? -eq 0 ]; then
@@ -262,11 +289,20 @@ _aws_create_instance() {
 }
 ```
 
+`--associate-public-ip-address` is what gives the orchestrator an address to SSH
+to at all (§2.3's `ssh_host`); the default subnet's own setting is not relied
+on. The block-device override exists because the Ubuntu AMI's default root
+volume (8GB) is too small for the Docker images this suite pulls.
+
 `_aws_preflight` checks `aws`/`scp` on `PATH`, `aws sts get-caller-identity`,
-`infra_machine_shape` non-empty, and that `infra_locations_file` builds.
-`_aws_record_addresses` loops `describe-instances` per node
-(`--query 'Reservations[].Instances[].[PrivateIpAddress,PublicIpAddress]'`)
-and calls `state_set … host/ssh_host/ssh_user`. `_aws_wait_ready` fans
+`infra_machine_shape` non-empty, that `infra_locations_file` builds, and that
+every distinct region the run will touch still has a default VPC — an
+operator who deleted theirs (§7, step 7) hears about it before any billing
+starts, not partway through. `_aws_record_addresses` polls `describe-instances`
+per node (`--query 'Reservations[0].Instances[0].[PrivateIpAddress,PublicIpAddress]'`,
+up to 60s) rather than reading once, since the public IP can lag instance
+creation by a few seconds, and calls `state_set … host/ssh_host/ssh_user`.
+`_aws_wait_ready` fans
 `_aws_prepare_node` out across nodes: poll SSH for `/var/lib/bench-node-ready`
 (written by `install-docker.sh`, Step 9), add the SSH user to the `docker`
 group, and record the real primary interface
@@ -309,7 +345,8 @@ infra_machine_shape() {
 infra_open_ports() {
     local region p sg
     for region in $(state_nodes | while read -r n; do _aws_region_of "$(state_get "${n}" zone)"; done | sort -u); do
-        sg=$(_aws_security_group_id "${region}") || return 1
+        sg=$(_aws_find_security_group_id "${region}")
+        [ -n "${sg}" ] && [ "${sg}" != "None" ] || { error "aws: no security group in ${region}"; return 1; }
         for p in "$@"; do
             aws ec2 authorize-security-group-ingress --region "${region}" --group-id "${sg}" \
                 --protocol tcp --port "${p}" --source-group "${sg}" >/dev/null 2>&1
@@ -317,6 +354,11 @@ infra_open_ports() {
     done
 }
 ```
+
+`infra_open_ports` uses the lookup-only helper, not the create-capable one: it
+only ever runs right after a successful `infra_provision` (from
+`infra_bootstrap`), so a missing group means something already went wrong, not
+something to paper over by creating one.
 
 ### Step 7 — file staging and Docker args
 
@@ -333,16 +375,23 @@ infra_stage_file() {
 
 infra_rewrite_docker_args() {
     local cname="$1"; shift
-    local args=("$@") out=() host_net=0 i=0
+    local args=("$@") out=() i=0 arg val host_net=0
     while [ ${i} -lt ${#args[@]} ]; do
-        case "${args[$i]}" in
+        arg="${args[$i]}"
+        case "${arg}" in
             --network)
-                if [[ "${args[$((i+1))]}" == container:* ]]; then
-                    out+=(--network "${args[$((i+1))]}")
-                else out+=(--network host); host_net=1; fi
+                val="${args[$((i+1))]}"
+                if [[ "${val}" == container:* ]]; then out+=("--network" "${val}")
+                else out+=("--network" "host"); host_net=1; fi
                 i=$((i+2)); continue ;;
+            --network=*)
+                val="${arg#--network=}"
+                if [[ "${val}" == container:* ]]; then out+=("${arg}")
+                else out+=("--network" "host"); host_net=1; fi
+                i=$((i+1)); continue ;;
             -p|--publish) i=$((i+2)); continue ;;
-            *) out+=("${args[$i]}"); i=$((i+1)) ;;
+            -p*|--publish=*) i=$((i+1)); continue ;;
+            *) out+=("${arg}"); i=$((i+1)) ;;
         esac
     done
     [ ${host_net} -eq 1 ] && out+=($(host_aliases))
@@ -351,8 +400,11 @@ infra_rewrite_docker_args() {
 ```
 
 `host_aliases` is shared, provider-agnostic code already in `utils.sh:182-198`
-— it walks `LOCATIONS_FILE` and calls `infra_host_ip` per node, so nothing
-AWS-specific is needed beyond the two calls above.
+— it walks `LOCATIONS_FILE` and calls `infra_host_ip` per node. The four
+`--network`/`-p` cases (bare flag, `=`-form, short flag, and the passthrough
+default) mirror what GCP's own `infra_rewrite_docker_args` already handles —
+genuinely provider-agnostic argument parsing, not something to reinvent
+less completely just because this is a different provider.
 
 ### Step 8 — sync, ssh, network reset, teardown
 
@@ -365,13 +417,16 @@ infra_sync() {
 
 infra_ssh() {
     local idx=${1:?usage: infra_ssh <node_idx> [command...]}; shift
-    if [ $# -gt 0 ]; then
-        ssh -i "$(_aws_ssh_key)" "$(_aws_ssh_target "${idx}")" "$@"
-    else
-        ssh -i "$(_aws_ssh_key)" "$(_aws_ssh_target "${idx}")"
-    fi
+    _aws_ssh "${idx}" "$@"
 }
+```
 
+Plain `ssh` needs no command/no-command split the way `gcloud compute ssh`
+does (GCP's version needs `--command` for one case and not the other):
+`ssh ... target` with no trailing arguments already opens an interactive
+shell, so `infra_ssh` is just `_aws_ssh` with the leading index consumed.
+
+```bash
 infra_reset_network() {
     local idx dev
     for idx in $(infra_all_indices); do
@@ -381,19 +436,54 @@ infra_reset_network() {
     wait
 }
 
+# The union of state-derived regions and locations.csv-derived regions.
+# Every AWS call is region-scoped, so unlike GCE's project-global instance
+# list, there is no "what does this account have running anywhere" query --
+# teardown has to be told which regions to check.  Relying on the state file
+# alone means a lost or stale state file (deleted to "start fresh", teardown
+# run from another machine before a sync, ...) would make teardown check zero
+# regions and silently leave real instances running and billing.
+# locations.csv is the fallback: even with no state at all, it names the
+# regions the deployment would have used.
+_aws_configured_regions() {
+    {
+        state_nodes | while read -r n; do _aws_region_of "$(state_get "${n}" zone)"; done
+        awk -F',' 'NR > 1 { gsub(/\r|[ \t]/, ""); if ($1 != "") print $1 }' "${INFRA_DIR}/locations.csv" \
+            | while read -r az; do _aws_region_of "${az}"; done
+    } | sort -u
+}
+
+# A security group can't be deleted while a member instance's ENI is still
+# releasing, which lags a few seconds behind terminate-instances returning
+# (Finding above) -- so deletion is retried briefly rather than treated as a
+# hard failure.
+_aws_delete_security_group() {
+    local region=$1 sg attempt
+    sg=$(_aws_find_security_group_id "${region}")
+    [ -z "${sg}" ] || [ "${sg}" = "None" ] && return 0
+    for attempt in 1 2 3 4 5; do
+        aws ec2 delete-security-group --region "${region}" --group-id "${sg}" >/dev/null 2>&1 && return 0
+        sleep 3
+    done
+    error "aws: could not delete security group ${sg} in ${region} (an ENI may still be releasing)"
+    return 1
+}
+
 infra_teardown() {
     local region
-    for region in $(state_nodes | while read -r n; do _aws_region_of "$(state_get "${n}" zone)"; done | sort -u); do
+    for region in $(_aws_configured_regions); do
         (
-            local ids; ids=$(aws ec2 describe-instances --region "${region}" \
-                --filters "Name=tag:Name,Values=bench-node*" "Name=instance-state-name,Values=pending,running" \
+            local ids; local -a id_list
+            ids=$(aws ec2 describe-instances --region "${region}" \
+                --filters "Name=tag:Name,Values=bench-node*" \
+                          "Name=instance-state-name,Values=pending,running,stopping,stopped" \
                 --query 'Reservations[].Instances[].InstanceId' --output text)
             if [ -n "${ids}" ] && [ "${ids}" != "None" ]; then
-                aws ec2 terminate-instances --region "${region}" --instance-ids ${ids} >/dev/null
-                aws ec2 wait instance-terminated --region "${region}" --instance-ids ${ids}
+                read -ra id_list <<< "${ids}"
+                aws ec2 terminate-instances --region "${region}" --instance-ids "${id_list[@]}" >/dev/null
+                aws ec2 wait instance-terminated --region "${region}" --instance-ids "${id_list[@]}"
             fi
-            local sg; sg=$(_aws_security_group_id "${region}" 2>/dev/null)
-            [ -n "${sg}" ] && aws ec2 delete-security-group --region "${region}" --group-id "${sg}" >/dev/null 2>&1
+            _aws_delete_security_group "${region}"
         ) &
     done
     wait
@@ -411,17 +501,17 @@ set -e
 MARKER=/var/lib/bench-node-ready
 [ -f "${MARKER}" ] && exit 0
 
+mkdir -p /home/ubuntu/.ssh
+echo "__SSH_PUBLIC_KEY__" >> /home/ubuntu/.ssh/authorized_keys
+chown -R ubuntu:ubuntu /home/ubuntu/.ssh
+chmod 700 /home/ubuntu/.ssh && chmod 600 /home/ubuntu/.ssh/authorized_keys
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y ca-certificates curl iproute2
 command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh
 groupadd -f docker
 systemctl enable --now docker
-
-mkdir -p /home/ubuntu/.ssh
-echo "__SSH_PUBLIC_KEY__" >> /home/ubuntu/.ssh/authorized_keys
-chown -R ubuntu:ubuntu /home/ubuntu/.ssh
-chmod 700 /home/ubuntu/.ssh && chmod 600 /home/ubuntu/.ssh/authorized_keys
 
 cat > /etc/security/limits.d/99-bench.conf <<'EOF'
 *  soft  nofile  1048576
@@ -435,9 +525,17 @@ echo "vm.max_map_count=1048575" > /etc/sysctl.d/99-bench.conf
 touch "${MARKER}"
 ```
 
+The SSH key is injected *before* the Docker install rather than after: if
+`apt-get`/Docker install fails partway (a transient mirror hiccup, e.g.), the
+operator can still SSH in to see why, rather than the instance being
+unreachable and indistinguishable from one still installing.
+
 `_aws_render_user_data` substitutes `__SSH_PUBLIC_KEY__` with the contents of
 `$(_aws_ssh_key).pub` before base64-encoding the script for `run-instances
---user-data`.
+--user-data`, using bash's `//` (all-occurrences) substitution rather than
+`/` (first-occurrence) — the real `install-docker.sh` also names the
+placeholder in its header comment, and a first-occurrence replace would
+splice the key into the comment instead of the `authorized_keys` line.
 
 ## 4. Files touched
 
