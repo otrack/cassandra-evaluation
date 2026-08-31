@@ -96,7 +96,30 @@ current IP would break the moment that IP changes (a laptop moving networks,
 a team member on a different connection), and this is a benchmark harness
 running short-lived, disposable machines, not a production fleet.
 
-### 2.3 Locations and state
+### 2.3 Spot instances (optional)
+
+`aws.spot` in `exp.config` (default `0`) opts a deployment into spot
+capacity: `_aws_create_instance` adds `--instance-market-options
+MarketType=spot` to `run-instances` when it's set to `1`, nothing otherwise.
+It is a plain toggle, not a mode this provider otherwise treats specially —
+the existing per-AZ retry loop already handles `InsufficientInstanceCapacity`
+the same way for both, since a synchronous one-time spot request through
+`run-instances` fails with that same error code when its pool has no
+capacity at the current price.
+
+What spot changes is that AWS can reclaim a *running* instance with about two
+minutes' notice, which on-demand never does. This provider does not try to
+auto-recover from that — a run just fails wherever that node was in use, the
+same as any other node loss — but it does make the cause visible rather than
+leaving an operator staring at a bare SSH timeout. `_aws_diagnose_unreachable`
+(§3, Step 8) reads the unreachable instance's `StateTransitionReason` via
+`describe-instances` and names a spot interruption explicitly when that's
+what happened, distinguishing it from a hung boot, a stale security group, or
+a manually stopped instance. It is wired into the two places an operator
+actually meets an unreachable node: `infra_ssh`, and the readiness poll
+inside `infra_provision`.
+
+### 2.4 Locations and state
 
 `infra/aws/locations.csv` lists the AZs this deployment uses, one per DC row,
 in order — the same shape the contract already expects
@@ -250,11 +273,18 @@ infra_provision() {
     _aws_sync_contexts "${n}"
 }
 
+# Whether to request spot capacity instead of on-demand -- see §2.3.
+_aws_spot_enabled() {
+    [ "$(config "aws.spot")" = "1" ]
+}
+
 _aws_create_instance() {
     local idx=$1 shape=$2 planned az region subnet sg ami root_device name existing user_data
+    local -a market_opts=()
     planned=$(_aws_planned_az "${idx}") || return 1
     name=$(_aws_instance "${idx}")
     user_data=$(_aws_render_user_data)
+    _aws_spot_enabled && market_opts=(--instance-market-options 'MarketType=spot')
 
     for az in $(_aws_az_candidates "${planned}"); do
         region=$(_aws_region_of "${az}")
@@ -275,6 +305,7 @@ _aws_create_instance() {
             --associate-public-ip-address \
             --block-device-mappings "[{\"DeviceName\":\"${root_device}\",\"Ebs\":{\"VolumeSize\":50,\"VolumeType\":\"gp3\"}}]" \
             --user-data "${user_data}" \
+            "${market_opts[@]}" \
             --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${name}}]" 2>&1)
         if [ $? -eq 0 ]; then
             state_set "${idx}" zone "${az}"; return 0
@@ -285,14 +316,17 @@ _aws_create_instance() {
         log "aws: ${shape} unavailable in ${az}, retrying sibling AZ"
     done
     error "aws: no AZ of $(_aws_region_of "${planned}") can provide a ${shape} right now"
+    _aws_spot_enabled && error "     aws.spot=1 -- a spot capacity shortage, not a hard limit; retry later"
     return 1
 }
 ```
 
 `--associate-public-ip-address` is what gives the orchestrator an address to SSH
-to at all (§2.3's `ssh_host`); the default subnet's own setting is not relied
+to at all (§2.4's `ssh_host`); the default subnet's own setting is not relied
 on. The block-device override exists because the Ubuntu AMI's default root
-volume (8GB) is too small for the Docker images this suite pulls.
+volume (8GB) is too small for the Docker images this suite pulls. `market_opts`
+is empty unless `aws.spot=1` (§2.3), so on-demand's `run-instances` call is
+byte-for-byte what it always was — the array just expands to nothing.
 
 `_aws_preflight` checks `aws`/`scp` on `PATH`, `aws sts get-caller-identity`,
 `infra_machine_shape` non-empty, that `infra_locations_file` builds, and that
@@ -417,14 +451,63 @@ infra_sync() {
 
 infra_ssh() {
     local idx=${1:?usage: infra_ssh <node_idx> [command...]}; shift
-    _aws_ssh "${idx}" "$@"
+    local rc
+    _aws_ssh "${idx}" "$@"; rc=$?
+    [ ${rc} -eq 0 ] || _aws_diagnose_unreachable "${idx}"
+    return ${rc}
 }
 ```
 
 Plain `ssh` needs no command/no-command split the way `gcloud compute ssh`
 does (GCP's version needs `--command` for one case and not the other):
 `ssh ... target` with no trailing arguments already opens an interactive
-shell, so `infra_ssh` is just `_aws_ssh` with the leading index consumed.
+shell, so `infra_ssh` is `_aws_ssh` with the leading index consumed, a
+diagnosis (below) attached on failure, and the exact underlying exit code
+preserved — GCP's `infra_ssh` propagates its command's exit status too, and
+`./deploy.sh ssh <idx> <cmd>` relies on that to surface the remote command's
+own result, not just "it failed."
+
+```bash
+# Explains an unreachable node when the cause is visible on the instance
+# itself, rather than leaving the operator with only an SSH timeout -- a
+# spot reclamation (§2.3) looks identical to a hung boot or a broken security
+# group until this checks StateTransitionReason.  Only needs
+# ec2:DescribeInstances, already required for everything else this provider
+# does.
+_aws_diagnose_unreachable() {
+    local idx=$1 az region name info state reason
+    az=$(_aws_az_of "${idx}") || return 1
+    region=$(_aws_region_of "${az}")
+    name=$(_aws_instance "${idx}")
+    # No instance-state-name filter -- a dead instance is exactly what this is
+    # looking for -- so sort_by(...LaunchTime)[-1] picks the most recent match
+    # rather than an arbitrary one, in case a prior deployment's terminated
+    # instance still shares this node's Name tag.
+    info=$(aws ec2 describe-instances --region "${region}" \
+        --filters "Name=tag:Name,Values=${name}" \
+        --query 'sort_by(Reservations[].Instances[], &LaunchTime)[-1].[State.Name,StateTransitionReason]' \
+        --output text 2>/dev/null)
+    if [ -z "${info}" ] || [ "${info}" = "None" ]; then
+        return 1
+    fi
+    state=$(printf '%s' "${info}" | cut -f1)
+    reason=$(printf '%s' "${info}" | cut -f2-)
+    case "${reason}" in
+        *[Ss]pot*)
+            error "aws: ${name} was reclaimed by AWS (spot interruption) -- ${state}: ${reason}"
+            ;;
+        *)
+            [ "${state}" = "running" ] && return 1
+            error "aws: ${name} is unreachable; instance state is now '${state}' (${reason})"
+            ;;
+    esac
+}
+```
+
+This is also wired into `_aws_prepare_node` (Step 4) at both of its failure
+exits — the readiness-poll timeout and the "docker not usable" check —
+since a spot reclamation during provisioning shows up there first, before an
+operator ever runs `infra_ssh` by hand.
 
 ```bash
 infra_reset_network() {
@@ -617,6 +700,23 @@ before `./deploy.sh` is ever invoked.
      }]
    }
    ```
+   Add this second statement only if `aws.spot=1` (§2.3) will ever be used —
+   an account's *first* spot request creates the
+   `AWSServiceRoleForEC2Spot` service-linked role automatically, but the IAM
+   principal making that first request needs permission to create it:
+   ```json
+   {
+     "Effect": "Allow",
+     "Action": "iam:CreateServiceLinkedRole",
+     "Resource": "arn:aws:iam::*:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot*",
+     "Condition": {"StringEquals": {"iam:AWSServiceName": "spot.amazonaws.com"}}
+   }
+   ```
+   Without it, the first `run-instances --instance-market-options
+   MarketType=spot` fails with an `AccessDenied` on `CreateServiceLinkedRole`
+   — surfaced verbatim by `_aws_create_instance`'s existing catch-all error
+   printing, no special-casing needed. Every request after the role exists
+   works with only the first statement.
 3. **AWS CLI v2.**
    https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
 4. **`aws configure`**, then verify with `aws sts get-caller-identity`.
@@ -631,5 +731,6 @@ before `./deploy.sh` is ever invoked.
    until teardown): https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-create.html
 
 Per-deployment, after the above: pick AZs into `infra/aws/locations.csv`, set
-`infra=aws`/`latency_simulation=0`/`aws.machine=` in `exp.config`,
-`./deploy.sh bootstrap <n>`, run experiments, `./deploy.sh teardown`.
+`infra=aws`/`latency_simulation=0`/`aws.machine=` in `exp.config` (optionally
+`aws.spot=1`, §2.3), `./deploy.sh bootstrap <n>`, run experiments,
+`./deploy.sh teardown`.

@@ -309,15 +309,25 @@ _aws_render_user_data() {
     printf '%s' "${script}" | base64 -w0
 }
 
+# Whether to request spot capacity instead of on-demand.  A benchmark run is
+# short and disposable, so the risk -- AWS can reclaim the instance mid-run
+# with ~2 minutes' notice -- is usually worth 60-90% off; on-demand stays the
+# default so this has to be opted into per exp.config.
+_aws_spot_enabled() {
+    [ "$(config "aws.spot")" = "1" ]
+}
+
 # Create one instance, falling back to another AZ of the same region when the
 # requested shape is temporarily unavailable.  Sibling AZs share the region,
 # so `loc` and the coordinates derived from it are unaffected.
 _aws_create_instance() {
     local idx=$1 shape=$2 planned name user_data az region subnet sg ami root_device out existing
+    local -a market_opts=()
 
     planned=$(_aws_planned_az "${idx}") || return 1
     name=$(_aws_instance "${idx}")
     user_data=$(_aws_render_user_data) || return 1
+    _aws_spot_enabled && market_opts=(--instance-market-options 'MarketType=spot')
 
     for az in $(_aws_az_candidates "${planned}"); do
         region=$(_aws_region_of "${az}")
@@ -347,6 +357,7 @@ _aws_create_instance() {
             --associate-public-ip-address \
             --block-device-mappings "[{\"DeviceName\":\"${root_device}\",\"Ebs\":{\"VolumeSize\":${AWS_BOOT_VOLUME_SIZE},\"VolumeType\":\"${AWS_BOOT_VOLUME_TYPE}\"}}]" \
             --user-data "${user_data}" \
+            "${market_opts[@]}" \
             --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${name}}]" 2>&1)
         if [ $? -eq 0 ]; then
             log "aws: created ${name} in ${az}"
@@ -366,6 +377,11 @@ _aws_create_instance() {
     done
 
     error "aws: no AZ of $(_aws_region_of "${planned}") can provide a ${shape} right now."
+    if _aws_spot_enabled; then
+        error "     aws.spot=1 -- this is a spot capacity shortage, not a hard limit; the"
+        error "     same request often succeeds a few minutes later, or set aws.spot=0 in"
+        error "     exp.config to fall back to on-demand."
+    fi
     error "     Try a different shape via 'aws.machine' in exp.config, another"
     error "     region in ${INFRA_DIR}/locations.csv, or the same request later."
     return 1
@@ -541,7 +557,10 @@ infra_sync() {
 infra_ssh() {
     local idx=${1:?usage: infra_ssh <node_idx> [command...]}
     shift
-    _aws_ssh "${idx}" "$@"
+    local rc
+    _aws_ssh "${idx}" "$@"; rc=$?
+    [ ${rc} -eq 0 ] || _aws_diagnose_unreachable "${idx}"
+    return ${rc}
 }
 
 # Drop any traffic shaping left on the machines.
@@ -702,6 +721,47 @@ _aws_wait_all() {
     return ${rc}
 }
 
+# Explains an unreachable node when the cause is visible on the instance
+# itself, rather than leaving the operator with only an SSH timeout.  A spot
+# reclamation looks identical to a hung boot or a broken security group until
+# this checks StateTransitionReason -- worth calling out by name since
+# aws.spot=1 makes it an expected failure mode, not a bug.  Uses only
+# ec2:DescribeInstances, already required for everything else this provider
+# does, so no extra IAM permission is needed.
+_aws_diagnose_unreachable() {
+    local idx=$1 az region name info state reason
+    az=$(_aws_az_of "${idx}") || return 1
+    region=$(_aws_region_of "${az}")
+    name=$(_aws_instance "${idx}")
+    # No instance-state-name filter -- a dead instance is exactly what this is
+    # looking for -- so sort_by(...LaunchTime)[-1] picks the most recent match
+    # rather than an arbitrary one, in case a prior deployment's terminated
+    # instance still shares this node's Name tag (AWS keeps it visible for a
+    # while after termination).
+    info=$(aws ec2 describe-instances --region "${region}" \
+        --filters "Name=tag:Name,Values=${name}" \
+        --query 'sort_by(Reservations[].Instances[], &LaunchTime)[-1].[State.Name,StateTransitionReason]' \
+        --output text 2>/dev/null)
+    if [ -z "${info}" ] || [ "${info}" = "None" ]; then
+        return 1
+    fi
+    state=$(printf '%s' "${info}" | cut -f1)
+    reason=$(printf '%s' "${info}" | cut -f2-)
+
+    case "${reason}" in
+        *[Ss]pot*)
+            error "aws: ${name} is unreachable because AWS reclaimed it (spot interruption)."
+            error "     Instance state: ${state} -- ${reason}"
+            error "     Expected with aws.spot=1 when demand/price rose; re-provision to"
+            error "     replace it, or set aws.spot=0 in exp.config for guaranteed capacity."
+            ;;
+        *)
+            [ "${state}" = "running" ] && return 1
+            error "aws: ${name} is unreachable; instance state is now '${state}' (${reason})."
+            ;;
+    esac
+}
+
 # Everything a single node needs before it can run containers.  Written as one
 # function so that the nodes can be brought up concurrently: each machine
 # installs Docker on its own schedule and there is nothing to serialise.
@@ -719,6 +779,7 @@ _aws_prepare_node() {
         fi
         if [ "$(date +%s)" -ge "${deadline}" ]; then
             error "aws: ${instance} did not become ready within ${timeout}s"
+            _aws_diagnose_unreachable "${idx}"
             return 1
         fi
         sleep 5
@@ -733,6 +794,7 @@ _aws_prepare_node() {
 
     if ! _aws_ssh "${idx}" "docker info" >/dev/null 2>&1; then
         error "aws: docker is not usable as $(_aws_ssh_user) on ${instance}"
+        _aws_diagnose_unreachable "${idx}"
         return 1
     fi
 

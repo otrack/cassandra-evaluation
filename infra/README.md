@@ -163,7 +163,7 @@ aws configure                           # once; see docs/aws-deployment.md §7
 ./deploy.sh teardown                    # instances bill by the second — do not skip
 ```
 
-Five things specific to this provider are worth knowing; the full design,
+Six things specific to this provider are worth knowing; the full design,
 findings and a step-by-step operator setup guide (IAM policy, CLI install,
 SSH key, per-region quotas, default VPC, budget alert) live in
 [`docs/aws-deployment.md`](../docs/aws-deployment.md).
@@ -213,6 +213,23 @@ container of the deployment, exactly as any real provider must. Because
 containers then share the instance's network namespace, `tc` rules from the
 fault-tolerance experiment shape the instance's own interface and outlive the
 container — `restore_tc.py` stops being cosmetic.
+
+**Spot instances are opt in.** Setting `aws.spot=1` in `exp.config` (default
+`0`) adds `--instance-market-options MarketType=spot` to every
+`run-instances` call — 60–90% cheaper, at the cost of AWS being able to
+reclaim an instance mid-run with about two minutes' notice. Nothing here
+handles that mid-run reclamation automatically; the run just fails wherever
+that node was in use, same as any other node loss. What this provider *does*
+do is make the cause legible instead of leaving a bare SSH timeout: whenever
+`infra_ssh` or the provisioning readiness check hits an unreachable node,
+`_aws_diagnose_unreachable` reads the instance's `StateTransitionReason` and,
+if it names a spot interruption, says so explicitly rather than looking like
+a hung boot or a broken security group. This only reuses
+`ec2:DescribeInstances` (already required), so no extra IAM permission is
+needed for the diagnostic itself — but a brand-new account's *first* spot
+request may need `iam:CreateServiceLinkedRole` to create
+`AWSServiceRoleForEC2Spot`; see `docs/aws-deployment.md` §7 if `aws.spot=1`
+fails on that.
 
 ## The contract
 
