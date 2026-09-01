@@ -24,10 +24,47 @@ existed.
 
 import csv
 import os
+import sys
 
 import docker
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
+
+_SSH_FINALIZER_WARNED = False
+
+
+def _quiet_ssh_transport_finalizer_noise(unraisable):
+    """docker-py's SSH transport (docker/transport/sshconn.py) has a
+    close()-vs-close() race: an HTTP response object finalizing after its
+    underlying ssh subprocess's stdin is already closed elsewhere raises
+    BrokenPipeError/ValueError from a destructor, which Python can only
+    report through this hook -- normally as a full traceback that reads
+    like a crash even though the request had already completed and nothing
+    is actually broken. Reduce it to one warning per process; anything else
+    still gets Python's normal unraisable-exception reporting.
+    """
+    global _SSH_FINALIZER_WARNED
+    frames = []
+    tb = unraisable.exc_traceback
+    while tb is not None:
+        frames.append(tb.tb_frame.f_code.co_filename)
+        tb = tb.tb_next
+    from_ssh_transport = any(
+        "docker/transport/sshconn.py" in f or "http/client.py" in f
+        for f in frames)
+    if (unraisable.exc_type in (BrokenPipeError, ValueError)
+            and from_ssh_transport):
+        if not _SSH_FINALIZER_WARNED:
+            print("warning: a docker SSH connection closed while a request "
+                  "was finalizing (harmless -- the request had already "
+                  "completed; suppressing further occurrences)",
+                  file=sys.stderr)
+            _SSH_FINALIZER_WARNED = True
+        return
+    sys.__unraisablehook__(unraisable)
+
+
+sys.unraisablehook = _quiet_ssh_transport_finalizer_noise
 
 _CONFIG_CACHE = None
 _LOCATIONS_CACHE = None
@@ -192,9 +229,37 @@ def _state_of(name):
 
 
 def host_for(name):
-    """(host, ssh_user) backing *name*, or (None, None) with no deployment."""
+    """(host, ssh_user) backing *name*, or (None, None) with no deployment.
+
+    This is the peer address -- what containers use to reach each other,
+    mirroring the active provider's own infra_host_ip. Reaching the daemon
+    itself, from the orchestrator, needs ssh_host_for instead.
+
+    Which column that is varies by provider: AWS uses the public IP, because
+    each region's default VPC is unroutable from any other region's (they
+    even share one CIDR block, which rules out peering them); a provider
+    whose regions share one private network (GCP's default VPC spans all of
+    them) uses the private one.
+    """
     row = _state_of(name)
-    host = row.get("host")
+    column = "ssh_host" if provider() == "aws" else "host"
+    host = row.get(column)
+    if not host:
+        return None, None
+    return host, (row.get("ssh_user")
+                  or os.environ.get("BENCH_SSH_USER")
+                  or os.environ.get("USER"))
+
+
+def ssh_host_for(name):
+    """(ssh_host, ssh_user) to reach *name*'s daemon from the orchestrator.
+
+    Mirrors _aws_ssh_target/_gcp_*'s use of the ssh_host state column -- the
+    address the operator can actually route to, as opposed to host_for's
+    private peer address.
+    """
+    row = _state_of(name)
+    host = row.get("ssh_host")
     if not host:
         return None, None
     return host, (row.get("ssh_user")
@@ -209,7 +274,7 @@ def net_device(name):
 
 def client_for(name):
     """Docker client for the daemon owning *name*."""
-    host, user = host_for(name)
+    host, user = ssh_host_for(name)
     if not host:
         return docker.from_env()
 
@@ -242,7 +307,11 @@ def all_clients():
         dc = (node - 1) // nodes_per_dc()
         locations = read_locations()
         if dc < len(locations):
-            clients.append(client_for(locations[dc]["loc"] + "1"))
+            name = locations[dc]["loc"] + "1"
+            try:
+                clients.append(client_for(name))
+            except Exception as exc:  # a machine may be unreachable (e.g. reclaimed)
+                print("Warning: could not reach the daemon for {}: {}".format(name, exc))
     return clients
 
 

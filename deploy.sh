@@ -45,9 +45,9 @@ cmd_status() {
     printf '%-5s %-12s %-22s %-16s %-10s %s\n' "NODE" "DC" "REGION" "PEER IP" "DEVICE" "CONTEXT"
     for idx in $(infra_all_indices); do
         dc=$(( (idx - 1) / nodes_per_dc + 1 ))
-        loc=$(get_location "${dc}" "${REGISTRY_FILE}" 2>/dev/null)
+        loc=$(get_location "${dc}" "${LOCATIONS_FILE}" 2>/dev/null)
         printf '%-5s %-12s %-22s %-16s %-10s %s\n' \
-            "${idx}" "${loc}" "$(registry_field "${dc}" region)" \
+            "${idx}" "${loc}" "$(state_get "${idx}" zone)" \
             "$(infra_host_ip "${idx}")" "$(infra_net_device "${idx}")" \
             "$(infra_context "${idx}")"
     done

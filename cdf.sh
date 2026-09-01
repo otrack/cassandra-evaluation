@@ -8,15 +8,17 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST]"
+    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST] [--nodes=N]"
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
+    echo "  --nodes=N        Override the number of DCs/nodes (default 3)."
 }
 
 dry_run=0
 test_run=0
 protocols_override=""
+nodes_override=""
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
@@ -27,6 +29,9 @@ for arg in "$@"; do
             ;;
         --protocols=*)
             protocols_override=$(echo "${arg#*=}" | tr ',' ' ')
+            ;;
+        --nodes=*)
+            nodes_override="${arg#*=}"
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -44,11 +49,7 @@ protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockro
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-nodes=3
-if [ "$test_run" -eq 1 ]; then
-    nodes=3
-    records=1000
-fi
+nodes=${nodes_override:-3}
 replication_factor=${nodes}
 dcs=$(locations_list ${nodes}) # the DCs of the active infra; can be ""
 plot_average=true

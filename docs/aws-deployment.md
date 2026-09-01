@@ -242,8 +242,11 @@ _aws_security_group_id() {   # one per region, created once, reused after
 
 _aws_ami_for_region() {   # cached per region for the life of the process
     local region=$1
+    # Canonical only publishes a gp2-suffixed parameter for 22.04 (gp3 starts
+    # at 23.10); irrelevant here since --block-device-mappings (Step 4) forces
+    # the actual root volume type regardless of which AMI variant this is.
     aws ssm get-parameters --region "${region}" \
-        --names /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id \
+        --names /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id \
         --query 'Parameters[0].Value' --output text
 }
 

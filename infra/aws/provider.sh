@@ -25,7 +25,11 @@
 AWS_INSTANCE_PREFIX="bench-node"
 AWS_CONTEXT_PREFIX="bench-ctx-aws-"
 AWS_SECURITY_GROUP="bench-internal"
-AWS_AMI_SSM_PARAM="/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+# Canonical only publishes a gp2-suffixed parameter for 22.04 (gp3 only
+# starts at 23.10); irrelevant to the actual root volume, which
+# --block-device-mappings below forces to AWS_BOOT_VOLUME_TYPE regardless of
+# which AMI variant this resolves to.
+AWS_AMI_SSM_PARAM="/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id"
 AWS_BOOT_VOLUME_SIZE="50"
 AWS_BOOT_VOLUME_TYPE="gp3"
 # The operator's own key.  Its public half is injected via user-data at
@@ -395,10 +399,15 @@ infra_is_real() {
     return 0
 }
 
+# The public IP, not the private one: every region gets its own default VPC
+# with no connectivity to any other region's (they all even share the same
+# 172.31.0.0/16 CIDR, which rules out peering them even by hand), so a
+# cross-region peer is only reachable over the public address. See
+# docs/aws-deployment.md §2.3.
 infra_host_ip() {
     local idx=${1:-0}
     [ "${idx}" -eq 0 ] 2>/dev/null && { echo ""; return 0; }
-    state_get "${idx}" host
+    state_get "${idx}" ssh_host
 }
 
 # Pure by design: this runs on every Docker operation, so it must not shell
@@ -492,9 +501,28 @@ infra_rewrite_docker_args() {
 }
 
 infra_open_ports() {
-    local region regions p sg
+    local region regions p sg peer_ip peer_ips ranges
 
     regions=$(state_nodes | while read -r n; do _aws_region_of "$(state_get "${n}" zone)"; done | sort -u)
+
+    # Peer traffic travels over the public IP (infra_host_ip -- cross-region
+    # private IPs aren't routable, see docs/aws-deployment.md §2.4), so a
+    # same-region --source-group rule would never actually match it; scope
+    # ingress to the deployment's own peer IPs instead. One combined
+    # --ip-permissions call per (region, port) rather than one per
+    # (region, port, peer), so this stays cheap as node count grows.
+    peer_ips=$(state_nodes | while read -r n; do state_get "${n}" ssh_host; done | sort -u)
+    ranges=""
+    for peer_ip in ${peer_ips}; do
+        [ -z "${peer_ip}" ] && continue
+        [ -n "${ranges}" ] && ranges="${ranges},"
+        ranges="${ranges}{CidrIp=${peer_ip}/32}"
+    done
+    if [ -z "${ranges}" ]; then
+        error "aws: no peer addresses recorded; run './deploy.sh provision' first"
+        return 1
+    fi
+
     for region in ${regions}; do
         sg=$(_aws_find_security_group_id "${region}")
         if [ -z "${sg}" ] || [ "${sg}" = "None" ]; then
@@ -503,7 +531,8 @@ infra_open_ports() {
         fi
         for p in "$@"; do
             aws ec2 authorize-security-group-ingress --region "${region}" --group-id "${sg}" \
-                --protocol tcp --port "${p}" --source-group "${sg}" >/dev/null 2>&1
+                --ip-permissions "IpProtocol=tcp,FromPort=${p},ToPort=${p},IpRanges=[${ranges}]" \
+                >/dev/null 2>&1
         done
     done
 }

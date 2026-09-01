@@ -48,8 +48,24 @@ def wait_for_nodetool_status(containers, expected_count, timeout=120):
     debug(f"Timeout waiting for all {expected_count} nodes to become UN.")
     return False
 
+def build_extra_hosts(nodes_per_dc):
+    """--add-host equivalent of utils.sh:host_aliases(), for real deployments
+    where every node owns its own machine and network namespace: containers
+    join with --network host instead of a shared bridge, so they lose
+    Docker's embedded per-network DNS and need names resolved this way
+    instead."""
+    aliases = {}
+    for _, _, dc_name in locations:
+        for k in range(1, nodes_per_dc + 1):
+            ip, _ = infra.host_for(f"{dc_name}{k}")
+            if ip:
+                aliases[f"{dc_name}{k}"] = ip
+    return aliases
+
 def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     network_name = config["network_name"]
+    is_real = infra.is_real()
+    extra_hosts = build_extra_hosts(nodes_per_dc) if is_real else None
 
     nano_cpus = None
     mem_limit = None
@@ -92,7 +108,6 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                 run_kwargs = dict(
                     image=cassandra_image,
                     name=container_name,
-                    network=network_name,
                     auto_remove=True,
                     security_opt=[
                         "seccomp=unconfined",
@@ -124,14 +139,36 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                     run_kwargs['nano_cpus'] = nano_cpus
                 if mem_limit is not None:
                     run_kwargs['mem_limit'] = mem_limit
+                if is_real:
+                    # One machine per node already gives each container its
+                    # own network namespace; join the host's instead of a
+                    # bridge that only exists (if at all) on this one daemon.
+                    run_kwargs['network_mode'] = 'host'
+                    run_kwargs['extra_hosts'] = extra_hosts
+                    # Left unset, the image's entrypoint defaults
+                    # broadcast_address to listen_address, i.e. the address
+                    # Cassandra auto-detects from the host interface -- the
+                    # private IP. Peers gossip back to whatever a node
+                    # broadcasts, so an unset broadcast_address is why a
+                    # cross-region node never rejoins the ring even once the
+                    # security group and --add-host aliases correctly route
+                    # traffic *to* it: every peer is told to reply to a
+                    # private address it cannot reach.
+                    broadcast_ip, _ = infra.host_for(container_name)
+                    if broadcast_ip:
+                        run_kwargs['environment']['CASSANDRA_BROADCAST_ADDRESS'] = broadcast_ip
+                        run_kwargs['environment']['CASSANDRA_BROADCAST_RPC_ADDRESS'] = broadcast_ip
+                else:
+                    run_kwargs['network'] = network_name
                 container = infra.client_for(container_name).containers.run(**run_kwargs)
-                containers.append(container)            
+                containers.append(container)
                 debug(f"Starting container '{container_name}' in DC '{dc_name}', rack 'RAC{k}'.")
                 if not wait_for_log(container, log_pattern):
                     debug(f"Failed to start container '{container_name}' within timeout.")
                     exit(-1)
             except docker.errors.APIError as e:
-                debug(f"Error starting container '{container_name}': {e}")
+                print(f"ERROR: failed to start container '{container_name}': {e}", file=sys.stderr)
+                sys.exit(1)
 
     debug(f"Started {len(containers)} Cassandra nodes across {num_dcs} DCs ({nodes_per_dc} nodes/DC).")
     if containers:

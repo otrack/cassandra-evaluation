@@ -32,8 +32,13 @@ cassandra_cleanup_cluster() {
     log "Cleaning up Cassandra cluster..."
     python3 ${CASSANDRA_DIR}/cleanup_cassandra_cluster.py
     if [ $? -ne 0 ]; then
-        error "Failed to clean up Cassandra cluster."
-        exit 1
+        # Not fatal: a node going away (a spot reclamation, say) mid-run
+        # shouldn't take the whole benchmark down with it -- whatever data
+        # was already collected is still worth parsing and plotting.  `exit`
+        # here would kill the whole process outright, bypassing any `|| true`
+        # a caller wraps this call in, since exit never returns to the caller.
+        log "WARNING: cleanup did not finish cleanly (a node may be unreachable); continuing."
+        return 1
     fi
 }
 

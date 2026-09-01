@@ -20,7 +20,11 @@ The `pull_images` step of every experiment fetches them, so the build instructio
 ## Requirements
 
 - Docker (the scripts run `docker` without `sudo`; containers are started with `NET_ADMIN`/`NET_RAW` so that latency can be emulated)
-- Python 3 with `docker`, `pandas`, `numpy`, `matplotlib` and `pyyaml`
+- Python 3 with `docker`, `pandas`, `numpy`, `matplotlib`, `pyyaml` and `paramiko`
+  (`pip install docker pandas numpy matplotlib pyyaml paramiko`; `paramiko` is
+  only exercised on a real deployment, not simulation — `docker`'s SSH
+  transport imports it internally for `ssh://` Docker contexts, even though
+  nothing in this repo imports it directly)
 - A LaTeX distribution providing `pdflatex` and `pgfplots` (the plots are compiled from generated TikZ code)
 - Java 11+, only if you want to rebuild the artifacts yourself
 
