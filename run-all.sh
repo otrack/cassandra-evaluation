@@ -16,7 +16,7 @@ usage() {
 
 dry_run=0
 test_flag="--test"
-protocols_flag=""
+protocols_flag="accord,cockroachdb-opt,tiga,swiftpaxos-paxos"
 for arg in "$@"; do
     case "$arg" in
 	--dry-run)
