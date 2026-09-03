@@ -13,6 +13,7 @@ usage() {
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
+    echo "  --dcs=N          Override the number of DCs (default 3)."
 }
 
 dry_run=0
@@ -29,6 +30,9 @@ for arg in "$@"; do
         --protocols=*)
             protocols_override=$(echo "${arg#*=}" | tr ',' ' ')
             ;;
+	--dcs=*)
+            dcs_override="${arg#*=}"
+            ;;
         *)
             echo "Unknown parameter: $arg"
             usage
@@ -41,14 +45,14 @@ mkdir -p ${LOGDIR}/conflict
 mkdir -p ${RESULTSDIR}/conflict
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
-thetas=$(seq -f "%.2f" 0 0.1 1.0)
+thetas=$(seq -f "%.2f" 0 0.5 1.0)
 workload="a" # this does not matter
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockroachdb-opt | grep -v cockroachdb-bad | grep -v accord-cmt | paste -sd' ')
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-nodes=5
-replication_factor=${nodes}
+dcs=${dcs_override:-3}
+replication_factor=${dcs}
 threads=$(config threads)
 records=10000 # at least one per thread * DC plus one
 ops_per_thread=0
@@ -61,9 +65,9 @@ if [ "$test_run" -eq 1 ]; then
         sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
     }
     trap restore_test_settings EXIT
-    nodes=3
+    dcs=3
     records=1000
-    compute_test_machine "${nodes}"
+    compute_test_machine "${dcs}"
     sed -i "s/^maxexecutiontime=.*/maxexecutiontime=10/" "${CONFIG_FILE}"
 fi
 maxexecutiontime=$(config maxexecutiontime)
@@ -87,17 +91,17 @@ if [ "$dry_run" -eq 0 ]; then
                 for c in ${threads}
                 do
                     ts=$(date +%Y%m%d%H%M%S%N)
-                    output_file="${LOGDIR}/conflict/${p}_${nodes}_a_${ts}.dat"
+                    output_file="${LOGDIR}/conflict/${p}_${dcs}_a_${ts}.dat"
                     # Pass do_clean_up=0 so we can query the cluster for breakdown before stopping
-                    run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0 -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=${maxexecutiontime}
+                    run_benchmark ${p} ${c} ${dcs} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0 -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=${maxexecutiontime}
                     do_create_and_load=0
                 done
 
                 # Collect Accord commit latency breakdown while the server is still running
-                compute_breakdown ${nodes} accord > ${RESULTSDIR}/conflict/accord_cmt_${t}.txt
+                compute_breakdown ${dcs} accord > ${RESULTSDIR}/conflict/accord_cmt_${t}.txt
 
                 # Stop the cluster before the next theta
-                stop_benchmark accord ${nodes}
+                stop_benchmark accord ${dcs}
             done
         else
             do_create_and_load=1
@@ -109,8 +113,8 @@ if [ "$dry_run" -eq 0 ]; then
 	        do
 	            do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	            ts=$(date +%Y%m%d%H%M%S%N)
-	            output_file="${LOGDIR}/conflict/${p}_${nodes}_a_${ts}.dat"
-	            run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=${maxexecutiontime}
+	            output_file="${LOGDIR}/conflict/${p}_${dcs}_a_${ts}.dat"
+	            run_benchmark ${p} ${c} ${dcs} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=${maxexecutiontime}
 	            do_create_and_load=0
 	            count=$((count+1))
 	        done
@@ -127,7 +131,7 @@ for t in ${thetas}
 do
     cmt_file="${RESULTSDIR}/conflict/accord_cmt_${t}.txt"
     if [ -f "${cmt_file}" ]; then
-        awk -F',' -v t="${t}" -v n="${nodes}" '
+        awk -F',' -v t="${t}" -v n="${dcs}" '
         NF >= 4 {
             dc = $1
             commit_us = $4
@@ -146,7 +150,7 @@ do
 done
 
 debug "Plotting..."
-python3 ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv ${workload} ${nodes} ${LOCATIONS_FILE} ${RESULTSDIR}/conflict.tex
+python3 ${DIR}/conflict.py ${RESULTSDIR}/conflict.csv ${workload} ${dcs} ${LOCATIONS_FILE} ${RESULTSDIR}/conflict.tex
 
 pdflatex -interaction nonstopmode -jobname=conflict -output-directory=${RESULTSDIR} \
 "\documentclass{article}\
