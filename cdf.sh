@@ -8,17 +8,17 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST] [--nodes=N]"
+    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST] [--dcs=N]"
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
-    echo "  --nodes=N        Override the number of DCs/nodes (default 3)."
+    echo "  --dcs=N          Override the number of DCs (default 3)."
 }
 
 dry_run=0
 test_run=0
 protocols_override=""
-nodes_override=""
+dcs_override=""
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
@@ -30,8 +30,8 @@ for arg in "$@"; do
         --protocols=*)
             protocols_override=$(echo "${arg#*=}" | tr ',' ' ')
             ;;
-        --nodes=*)
-            nodes_override="${arg#*=}"
+        --dcs=*)
+            dcs_override="${arg#*=}"
             ;;
         *)
             echo "Unknown parameter: $arg"
@@ -49,9 +49,9 @@ protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockro
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-nodes=${nodes_override:-3}
-replication_factor=${nodes}
-dcs=$(locations_list ${nodes}) # the DCs of the active infra; can be ""
+num_dcs=${dcs_override:-3}
+replication_factor=${num_dcs}
+dcs=$(locations_list ${num_dcs}) # the DCs of the active infra; can be ""
 plot_average=true
 records=$(config records)
 threads=$(config threads)
@@ -68,7 +68,7 @@ if [ "$test_run" -eq 1 ]; then
         sed -i "s/^maxexecutiontime=.*/maxexecutiontime=${original_maxexecutiontime}/" "${CONFIG_FILE}"
     }
     trap restore_test_settings EXIT
-    compute_test_machine "${nodes}"
+    compute_test_machine "${num_dcs}"
     sed -i "s/^maxexecutiontime=.*/maxexecutiontime=10/" "${CONFIG_FILE}"
 fi
 maxexecutiontime=$(config maxexecutiontime)
@@ -95,8 +95,8 @@ if [ "$dry_run" -eq 0 ]; then
 	    do
 	        do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	        ts=$(date +%Y%m%d%H%M%S%N)
-	        output_file="${LOGDIR}/cdf/${p}_${nodes}_${w}_${ts}.dat"
-	        run_benchmark ${p} ${c} ${nodes} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing} -p maxexecutiontime=${maxexecutiontime} -p warmupexecutiontime=${warmexecutiontime}
+	        output_file="${LOGDIR}/cdf/${p}_${num_dcs}_${w}_${ts}.dat"
+	        run_benchmark ${p} ${c} ${num_dcs} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing} -p maxexecutiontime=${maxexecutiontime} -p warmupexecutiontime=${warmexecutiontime}
 	        do_create_and_load=0
 	        count=$((count+1))
 	    done
@@ -109,9 +109,9 @@ ${DIR}/parse_ycsb_to_csv.sh ${LOGDIR}/cdf/* > ${RESULTSDIR}/cdf.csv
 
 debug "Plotting..."
 if [ "$plot_average" = true ]; then
-    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${dcs} ${LOCATIONS_FILE} ${RESULTSDIR}/cdf.tex --average
+    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${num_dcs} ${dcs} ${LOCATIONS_FILE} ${RESULTSDIR}/cdf.tex --average
 else
-    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${nodes} ${dcs} ${LOCATIONS_FILE} ${RESULTSDIR}/cdf.tex
+    python3 ${DIR}/cdf.py ${RESULTSDIR}/cdf.csv ${workloads} ${num_dcs} ${dcs} ${LOCATIONS_FILE} ${RESULTSDIR}/cdf.tex
 fi
 
 pdflatex -interaction nonstopmode -jobname=cdf -output-directory=${RESULTSDIR} \
