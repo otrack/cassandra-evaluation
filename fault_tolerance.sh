@@ -119,8 +119,8 @@ if [ "$dry_run" -eq 0 ]; then
         start_network
         ${pref}_start_cluster "${nodes}" "${protocol}"
 
-        node_count=$(${pref}_get_node_count)
-        hosts=$(${pref}_get_hosts "${node_count}")
+        num_dcs=$(${pref}_get_num_dcs)
+        hosts=$(${pref}_get_hosts "${num_dcs}")
         port=$(${pref}_get_port)
 
         if [ -z "$hosts" ]; then
@@ -138,11 +138,11 @@ if [ "$dry_run" -eq 0 ]; then
         wait_container "ycsb"
 
         # Emulate WAN latency
-        log "Emulating latency for ${node_count} node(s)..."
-        emulate_latency "${node_count}"
+        log "Emulating latency for ${num_dcs} node(s)..."
+        emulate_latency "${num_dcs}"
 
         # Start YCSB run clients from each node (time-bounded via maxexecutiontime)
-        for i in $(seq 1 ${node_count}); do
+        for i in $(seq 1 ${num_dcs}); do
             location=$(get_location $i ${LOCATIONS_FILE})
             nearby_database="${location}1"
             run_ycsb "run" "${workload_type}" "${workload}" "${hosts}" "${port}" \
@@ -150,7 +150,7 @@ if [ "$dry_run" -eq 0 ]; then
                 "${output_file%.dat}_${location}.dat" "${threads}" "ycsb-${i}" "${nearby_database}" \
                 -p maxexecutiontime=${duration_s} \
                 -p status.interval=${status_interval} \
-		-p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0 -p conflict.shift=$(( (records / node_count) * (i - 1) ))\
+		-p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0 -p conflict.shift=$(( (records / num_dcs) * (i - 1) ))\
 		-p warmupexecutiontime=10 &
         done
 
@@ -191,7 +191,7 @@ if [ "$dry_run" -eq 0 ]; then
         dkill ${leader} --signal=19
 
         # Wait for all YCSB clients to complete
-        for i in $(seq 1 ${node_count}); do
+        for i in $(seq 1 ${num_dcs}); do
             wait_container "ycsb-${i}"
         done
 

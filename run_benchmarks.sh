@@ -159,15 +159,15 @@ run_ycsb() {
 	    true
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
 	then
-	    cockroachdb_create_usertable 10 "$replication_factor" "${node_count:-3}" "$workload_type"
+	    cockroachdb_create_usertable 10 "$replication_factor" "${num_dcs:-3}" "$workload_type"
 	else
 	    local transaction_mode="bruh"
 	    if [ "$protocol" == "accord" ]; then 
 		transaction_mode="full"
 	    fi
 	    local nodes_per_dc=$(config nodesperdc)
-	    cassandra_create_keyspace 3600 "${node_count:-3}" "$replication_factor" "${nodes_per_dc}"
-	    cassandra_create_usertable 3600 "$transaction_mode" "${node_count:-3}" "$workload_type"
+	    cassandra_create_keyspace 3600 "${num_dcs:-3}" "$replication_factor" "${nodes_per_dc}"
+	    cassandra_create_usertable 3600 "$transaction_mode" "${num_dcs:-3}" "$workload_type"
 	fi
     fi
 
@@ -258,7 +258,7 @@ YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldl
 
 run_benchmark() {    
     if [ $# -lt 11 ]; then
-	echo "Usage: $0 <protocol> <number_of_threads> <node_count> <replication_factor> <workload_type> <workload> <record_count> <operation_count> <output_file> <do_create_and_load> <do_clean_up> [EXTRA_YCSB_OPTS...]"
+	echo "Usage: $0 <protocol> <number_of_threads> <num_dcs> <replication_factor> <workload_type> <workload> <record_count> <operation_count> <output_file> <do_create_and_load> <do_clean_up> [EXTRA_YCSB_OPTS...]"
 	exit 1
     fi
 
@@ -305,7 +305,7 @@ run_benchmark() {
 	start_network
 	${pref}_start_cluster "${dc_count}" "$protocol" "${nodes_per_dc}"
 
-	num_dcs=$(${pref}_get_node_count)
+	num_dcs=$(${pref}_get_num_dcs)
 	hosts=$(${pref}_get_hosts "${num_dcs}" "${nodes_per_dc}")
 	port=$(${pref}_get_port)
 
@@ -323,7 +323,7 @@ run_benchmark() {
 	emulate_latency "${num_dcs}" "${nodes_per_dc}"
     fi
 
-    num_dcs=$(${pref}_get_node_count)
+    num_dcs=$(${pref}_get_num_dcs)
     hosts=$(${pref}_get_hosts "${num_dcs}" "${nodes_per_dc}")
     port=$(${pref}_get_port)
 

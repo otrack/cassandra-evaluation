@@ -168,7 +168,7 @@ Please be careful that any new invocation of a benchmark cleans up the logs of t
 
 Each system lives in its own directory (`cassandra/`, `cockroachdb/`, `swiftpaxos/`, `tiga/`) and
 exposes the same interface to `run_benchmarks.sh`, namely a `cluster.sh` defining
-`<system>_start_cluster`, `<system>_get_hosts`, `<system>_get_port`, `<system>_get_node_count` and
+`<system>_start_cluster`, `<system>_get_hosts`, `<system>_get_port`, `<system>_get_num_dcs` and
 `<system>_cleanup_cluster`, plus a `<system>_fast_path.sh` script reporting the ratio of operations
 that took the fast, medium and slow paths.
 Adding a system amounts to providing these, then registering its protocols in `protocols.csv`.

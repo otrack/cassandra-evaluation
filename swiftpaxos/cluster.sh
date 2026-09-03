@@ -4,7 +4,7 @@ SWIFTPAXOS_DIR=$(dirname "${BASH_SOURCE[0]}")
 
 swiftpaxos_start_cluster() {
     if [ $# -lt 2 ]; then
-        echo "usage: node_count protocol [nodes_per_dc]"
+        echo "usage: num_dcs protocol [nodes_per_dc]"
         exit -1
     fi
     local nodes_per_dc=${3:-$(config nodesperdc)}
@@ -12,27 +12,27 @@ swiftpaxos_start_cluster() {
         error "swiftpaxos protocol does not support nodesperdc > 1 (current nodesperdc=${nodes_per_dc})."
         exit 1
     fi
-    local node_count=$1
+    local num_dcs=$1
     local protocol=$(echo "$2" | awk -F- '{print $2}')
     image=$(config swiftpaxos_image)
     local resource_limits
     resource_limits=$(get_resource_limits)
     # Start master
-    start_container ${image} "swiftpaxos-master" "waiting for ${node_count} replicas" ${LOGDIR}/swiftpaxos_master.log --rm -d --network $(config "network_name") ${resource_limits} -e NSERVERS=${node_count} -e TYPE=master || {
+    start_container ${image} "swiftpaxos-master" "waiting for ${num_dcs} replicas" ${LOGDIR}/swiftpaxos_master.log --rm -d --network $(config "network_name") ${resource_limits} -e NSERVERS=${num_dcs} -e TYPE=master || {
         error "Failed to start master"
         return 1
     }
     maddr=$(get_container_ip swiftpaxos-master)
     # Start remaining nodes
-    for i in $(seq 1 $node_count); do
-	if [[ "$i" == "$node_count" ]]; then
+    for i in $(seq 1 $num_dcs); do
+	if [[ "$i" == "$num_dcs" ]]; then
 	    message="Node list"
 	else
 	    message="Server starting"
 	fi
         location=$(get_location $i ${LOCATIONS_FILE})
         container_name="${location}1"
-	start_container ${image} ${container_name} "${message}" ${LOGDIR}/${protocol}_node${i}.log --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} -e PROTOCOL=${protocol} -e NSERVERS=${node_count} -e TYPE=server -e THRIFTY=false -e MADDR=${maddr} || {
+	start_container ${image} ${container_name} "${message}" ${LOGDIR}/${protocol}_node${i}.log --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} -e PROTOCOL=${protocol} -e NSERVERS=${num_dcs} -e TYPE=server -e THRIFTY=false -e MADDR=${maddr} || {
             error "Failed to start server $i"
             return 2
 	}
@@ -42,9 +42,9 @@ swiftpaxos_start_cluster() {
 swiftpaxos_cleanup_cluster() {
     log "Cleaning up Swiftpaxos cluster..."    
     stop_container "swiftpaxos-master" || true
-    local node_count=${1:-$(swiftpaxos_get_node_count)}
-    [ -z "$node_count" ] || [ "$node_count" -eq 0 ] && node_count=5
-    for i in $(seq 1 $node_count); do
+    local num_dcs=${1:-$(swiftpaxos_get_num_dcs)}
+    [ -z "$num_dcs" ] || [ "$num_dcs" -eq 0 ] && num_dcs=5
+    for i in $(seq 1 $num_dcs); do
         location=$(get_location $i ${LOCATIONS_FILE})
         container_name="${location}1"
         if container_exists "$container_name"; then
@@ -67,7 +67,7 @@ swiftpaxos_get_hosts() {
     echo $(get_container_ip "$container_name")
 }
 
-swiftpaxos_get_node_count() {
+swiftpaxos_get_num_dcs() {
     i=1
     while true; do
         location=$(get_location $i ${LOCATIONS_FILE})
@@ -94,9 +94,9 @@ swiftpaxos_get_leaders() {
     # there is no single leader; fall back to nearest DC node.
     local sub_protocol
     sub_protocol=$(echo "$1" | awk -F- '{print $2}')
-    local node_count=$(swiftpaxos_get_node_count)
+    local num_dcs=$(swiftpaxos_get_num_dcs)
     if [ "${sub_protocol}" = "paxos" ]; then
-        for i in $(seq 1 "${node_count}"); do
+        for i in $(seq 1 "${num_dcs}"); do
             location=$(get_location $i ${LOCATIONS_FILE})
             container_name="${location}1"
             if dlogs "${container_name}" --tail 1000 2>&1 | grep -q "I am the leader"; then

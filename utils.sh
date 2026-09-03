@@ -471,7 +471,7 @@ container_exists() {
 # True when the node backing *container* is part of the running deployment.
 #
 # Simulated mode infers this from the presence of a bridge IP, which is how the
-# ${pref}_get_node_count functions have always counted nodes.  That inference
+# ${pref}_get_num_dcs functions have always counted nodes.  That inference
 # does not survive a real provider, where get_container_ip answers from the
 # registry whether or not the container is up, so liveness is probed directly.
 node_is_up() {

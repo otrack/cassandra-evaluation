@@ -6,11 +6,11 @@ source ${CASSANDRA_DIR}/../utils.sh
 
 compute_breakdown() {
 
-   local node_count=$1
+   local num_dcs=$1
    local protocol=$2
 
     if [ $# -lt 2 ]; then
-	echo "Usage: $0 <node_count> accord"
+	echo "Usage: $0 <num_dcs> accord"
 	exit 1
     fi
    
@@ -20,7 +20,7 @@ compute_breakdown() {
        exit 1
    fi
    
-   for i in $(seq 1 $node_count); do
+   for i in $(seq 1 $num_dcs); do
        location=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
        if [ -n "$location" ] && container_exists "${location}1"; then
            CONTAINER_ID="${location}1"

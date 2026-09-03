@@ -60,7 +60,7 @@ cassandra_get_hosts() {
     echo "$ips"
 }
 
-cassandra_get_node_count() {
+cassandra_get_num_dcs() {
     local num_dcs=0
     for i in $(seq 1 15); do
         local city=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
