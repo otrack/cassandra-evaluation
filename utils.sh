@@ -254,6 +254,7 @@ dlogs()    { local name="$1"; shift; d "${name}" logs    "$@" "${name}"; }
 dinspect() { local name="$1"; shift; d "${name}" inspect "$@" "${name}"; }
 dstop()    { local name="$1"; shift; d "${name}" stop    "$@" "${name}"; }
 dkill()    { local name="$1"; shift; d "${name}" kill    "$@" "${name}"; }
+drm()      { local name="$1"; shift; d "${name}" rm -f   "$@" "${name}"; }
 
 # dpull <node_idx> <image>
 dpull() {
@@ -414,7 +415,15 @@ stop_container() {
     }
 
     if [ "$running" != "true" ]; then
-        log "Container '${cname}' is already stopped"
+        # Not running, but still present: a normal --rm exit would already
+        # have removed it, so this is a container stuck in a state --rm
+        # never fires for (e.g. "Created" -- creation succeeded but it never
+        # started, which happens when a run command's client disconnects
+        # mid-flight over a laggy SSH-tunneled Docker API). Left alone, it
+        # blocks the next `docker run --name` for this container with a
+        # "Conflict... already in use" error.
+        log "Container '${cname}' is present but not running; removing it"
+        drm "$cname" >/dev/null 2>&1 || true
         return 0
     fi
 
@@ -435,6 +444,11 @@ stop_container() {
         }
         if [ "$running" != "true" ]; then
             log "Container '${cname}' stopped"
+            # --rm removes it on its own exit event, but that can race this
+            # check (or not apply at all for a container started without
+            # --rm); force removal so a lingering, name-conflicting container
+            # never survives a stop_container call.
+            drm "$cname" >/dev/null 2>&1 || true
             return 0
         fi
 
