@@ -55,7 +55,7 @@ host-local and break the moment containers land on different machines:
 
 1. `get_container_ip` (`utils.sh:225`) returns a Docker bridge IP
    (`172.x.y.z`), which is meaningless off-host. It feeds `${pref}_get_hosts`,
-   `${pref}_get_node_count` and the YCSB connection strings.
+   `${pref}_get_num_dcs` and the YCSB connection strings.
 2. Bare container names are used as hostnames and rely on Docker's embedded
    DNS: `--join=${first_node}` and `--host=${first_node}`
    (`cockroachdb/cluster.sh:20-33`), `MADDR=` (`swiftpaxos/cluster.sh:25`),
@@ -340,7 +340,7 @@ get_container_ip() {
 }
 ```
 
-Note the consequence for `${pref}_get_node_count`
+Note the consequence for `${pref}_get_num_dcs`
 (`cassandra/cluster.sh:67`, and its peers), which today counts *how many
 containers answer* by probing `get_container_ip "${city}1"`. In real mode that
 returns a registry value regardless of whether the container is up, so those
@@ -529,7 +529,7 @@ through the injected `/etc/hosts` entries, so the generator needs no change.
 | `exp.config` | Add `infra=`; set `latency_simulation=0` in real mode (flag already exists). The SSH identity comes from `$BENCH_SSH_KEY`/`$BENCH_SSH_USER` instead, since `exp.config` is tracked. |
 | `utils.sh` | Add `node_index_of`, `d`/`drun`/`dexec`/`dinspect`/`dlogs`/`dstop`/`dkill`, `registry_field`, `registry_set`, `host_aliases`, `infra_bootstrap`, `infra_all_contexts`; make `get_container_ip` and `start_container` mode-aware; move `get_resource_limits` body into `infra/simulation.sh`; `pull_images` loops over hosts. |
 | `run_benchmarks.sh` | `start_network`/`stop_network` become mode-aware; YCSB context resolved from `${nearby_database}`; `infra_stage_file` before the `-v` at line 134. |
-| `cassandra/cluster.sh`, `cockroachdb/cluster.sh`, `swiftpaxos/cluster.sh`, `tiga/cluster.sh` | Raw `docker` → `d*` wrappers; `${pref}_get_node_count` probes liveness rather than IP presence. |
+| `cassandra/cluster.sh`, `cockroachdb/cluster.sh`, `swiftpaxos/cluster.sh`, `tiga/cluster.sh` | Raw `docker` → `d*` wrappers; `${pref}_get_num_dcs` probes liveness rather than IP presence. |
 | `cassandra/ycsb.sh`, `cockroachdb/ycsb.sh` | `docker exec` → `dexec` (6 sites). |
 | `cassandra/cassandra_fast_path.sh`, `cassandra/cassandra_breakdown.sh`, `swiftpaxos/swiftpaxos_fast_path.sh` | `docker exec`/`docker logs` → `dexec`/`dlogs` (7 sites). |
 | `fault_tolerance.sh`, `restore_tc.py` | `d*`/`client_for`; `eth0` → `infra_net_device`. |

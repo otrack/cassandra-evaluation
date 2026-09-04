@@ -89,7 +89,7 @@ cockroachdb_get_hosts() {
     echo "$ips"
 }
 
-cockroachdb_get_node_count() {
+cockroachdb_get_num_dcs() {
     local num_dcs=0
     for i in $(seq 1 15); do
         local city=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)

@@ -4,7 +4,7 @@ TIGA_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
 
 tiga_start_cluster() {
     if [ $# -lt 2 ]; then
-        echo "usage: node_count protocol [nodes_per_dc]"
+        echo "usage: num_dcs protocol [nodes_per_dc]"
         exit -1
     fi
     local num_dcs=$1
@@ -163,7 +163,7 @@ tiga_get_hosts() {
     echo "$ips"
 }
 
-tiga_get_node_count() {
+tiga_get_num_dcs() {
     local num_dcs=0
     for i in $(seq 1 15); do
         local city=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
@@ -180,7 +180,7 @@ tiga_get_port() {
 }
 
 tiga_get_leaders() {
-    local num_dcs=$(tiga_get_node_count)
+    local num_dcs=$(tiga_get_num_dcs)
     [ -z "$num_dcs" ] || [ "$num_dcs" -eq 0 ] && num_dcs=3
     local best_city=$(python3 -c "
 import sys, csv, math
