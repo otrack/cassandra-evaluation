@@ -20,6 +20,8 @@ Generates a grouped bar chart:
 import sys
 import pandas as pd
 
+from utils import drop_unsound_rows
+
 from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_legend, sort_protocols_for_plotting
 
 
@@ -49,6 +51,7 @@ def main():
     workloads = [w.upper() for w in workloads_lower]
 
     df = pd.read_csv(results_csv)
+    df = drop_unsound_rows(df, label='ycsb')
 
     # Filter by node count
     def safe_int(x):

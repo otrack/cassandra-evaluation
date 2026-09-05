@@ -17,6 +17,8 @@ Generates a LaTeX table showing, for each YCSB workload A–D:
 import sys
 import pandas as pd
 
+from utils import drop_unsound_rows
+
 PROTO_EPHEM_ON  = "accord"
 PROTO_EPHEM_OFF = "accord-noephem"
 
@@ -47,6 +49,7 @@ def main():
     workloads = [w.upper() for w in workloads_lower]
 
     df = pd.read_csv(results_csv)
+    df = drop_unsound_rows(df, label='ephemeral')
 
     def safe_int(x):
         try:

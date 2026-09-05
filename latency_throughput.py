@@ -12,6 +12,8 @@ This script generates a classical latency vs throughput graph showing:
 
 import sys
 import pandas as pd
+
+from utils import drop_unsound_rows
 import numpy as np
 
 from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_legend, sort_protocols_for_plotting
@@ -47,6 +49,7 @@ def main():
     output_tikz = sys.argv[2]
 
     df = pd.read_csv(results_csv)
+    df = drop_unsound_rows(df, label='latency_throughput')
 
     # Parse numeric values
     def safe_float(x):
