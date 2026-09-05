@@ -94,6 +94,7 @@ that are defined in the file `exp.config`:
 | Parameter | Meaning |
 | --- | --- |
 | `debug` | Print the debug traces of the scripts. |
+| `ycsb_debug_logger` | Raise one YCSB client logger to `debug`, e.g. `site.ycsb.db.CassandraCQLClient`, so that exceptions the client swallows are printed with their stack trace. Empty disables it; `YCSB_DEBUG_LOGGER=<logger>` overrides it for a single run. |
 | `*_image` | The Docker image used for each system; all of them are pulled before an experiment starts. |
 | `network_name` | The Docker bridge network the containers are attached to. |
 | `latency_simulation` | Enable the emulation of the WAN delays with tc. |
