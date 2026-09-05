@@ -233,6 +233,17 @@ run_ycsb() {
     fi
 
     local java_opts="-Dorg.slf4j.simpleLogger.defaultLogLevel=info"
+
+    # Raise one logger to debug without rebuilding the client, e.g.
+    #   YCSB_DEBUG_LOGGER=site.ycsb.db.CassandraCQLClient ./swap.sh --protocols=accord
+    # The YCSB clients bind slf4j-simple, which reads a per-logger level from
+    # org.slf4j.simpleLogger.log.<logger>.  Failures the client swallows behind
+    # `if (logger.isDebugEnabled())` -- the exception from a swap, in
+    # particular -- then appear in the run log with their stack trace.
+    if [ -n "${YCSB_DEBUG_LOGGER}" ]; then
+        java_opts+=" -Dorg.slf4j.simpleLogger.log.${YCSB_DEBUG_LOGGER}=debug"
+    fi
+
     if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
         java_opts+=" -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms"
     fi
