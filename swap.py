@@ -320,7 +320,7 @@ def main():
         f.write("      grid=both,\n")
         f.write("      xlabel={Number of swapped items ($S$)},\n")
         f.write("      ylabel={latency (ms)},\n")
-        # f.write("      ymode=log,\n")
+        f.write("      ymode=log,\n")
         f.write(f"      xmin={min(s_values) - 0.5:.1f}, xmax={max(s_values) + 0.5:.1f},\n")
         f.write(f"      ymin={ymin:.2f}, ymax={ymax:.2f},\n")
         f.write("      xtick={" + ",".join(str(s) for s in s_values) + "},\n")
