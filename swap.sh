@@ -59,7 +59,7 @@ fi
 nodes=3
 replication_factor=3
 records=$(config records)
-client_counts="1 10"
+client_counts="1 50"
 ops_per_thread=0
 s_values=$(seq 3 8)
 
