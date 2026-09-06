@@ -24,12 +24,14 @@ say "cgroup"        "$(stat -fc %T /sys/fs/cgroup 2>/dev/null)"
 
 echo "bridged traffic"
 if lsmod 2>/dev/null | grep -q '^br_netfilter'; then
-    v=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null)
-    if [ "${v}" = "1" ]; then
-        flag "br_netfilter" "loaded, call-iptables=1" "container traffic traverses netfilter+conntrack"
-    else
-        say "br_netfilter" "loaded, call-iptables=${v:-?}"
-    fi
+    # Read /proc directly: the sysctl binary lives in /sbin and is often absent
+    # from a non-root PATH, which would silently report "unknown" as if fine.
+    v=$(cat /proc/sys/net/bridge/bridge-nf-call-iptables 2>/dev/null)
+    case "${v}" in
+        1) flag "br_netfilter" "loaded, call-iptables=1" "container traffic traverses netfilter+conntrack" ;;
+        0) say  "br_netfilter" "loaded, call-iptables=0" ;;
+        *) flag "br_netfilter" "loaded, call-iptables=unreadable" "cannot tell; check as root" ;;
+    esac
 else
     say "br_netfilter" "not loaded (bridged traffic bypasses netfilter)"
 fi
@@ -62,13 +64,26 @@ for svc in k3s k3s-agent kubelet docker; do
 done
 if command -v docker >/dev/null 2>&1; then
     total=$(docker ps -q 2>/dev/null | wc -l)
-    say "running containers" "${total}"
+    say "docker containers" "${total}"
+fi
+# Pods outlive `systemctl stop`: systemd stops the supervisor and leaves the
+# containerd shims running, so they are invisible to both `systemctl is-active`
+# and `docker ps`.
+shims=$(pgrep -fc 'containerd-shim' 2>/dev/null || echo 0)
+if [ "${shims}" -gt 0 ]; then
+    flag "containerd shims" "${shims} running" "pods still executing, whatever their supervisor says"
+else
+    say "containerd shims" "0"
 fi
 used=$(awk '/SwapTotal/{t=$2} /SwapFree/{f=$2} END{printf "%.1f", (t-f)/1048576}' /proc/meminfo)
 awk -v u="$used" 'BEGIN{exit !(u > 0.1)}' && flag "swap in use" "${used} GB" "stalls land in the latency tail" \
                                           || say "swap in use" "${used} GB"
 
 echo
+if [ "${total:-0}" -eq 0 ]; then
+    echo "  note: taken with no benchmark running -- conntrack figures say nothing"
+    echo "        about behaviour under load; re-run during a failing experiment."
+fi
 if [ ${warn} -eq 0 ]; then
     echo "  no confounds detected"
 else
