@@ -59,9 +59,9 @@ fi
 nodes=3
 replication_factor=3
 records=$(config records)
-client_counts="50"
+client_counts="1 50"
 ops_per_thread=0
-s_values=$(seq 6 8)
+s_values=$(seq 3 8)
 
 original_machine=$(config machine)
 original_maxexecutiontime=$(config maxexecutiontime)
