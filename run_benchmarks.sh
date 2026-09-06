@@ -141,9 +141,26 @@ run_ycsb() {
     fi
     log ${extra_opts_str[@]}
 
+    # Cap the load generator.
+    #
+    # The replicas are sized from `machine`, but the YCSB containers used to run
+    # unbounded, so the client JVM saw every core of the host.  That is not just
+    # untidy: the Cassandra binding sizes its connection pools from
+    # Runtime.availableProcessors(), for local *and* remote datacentres alike, so
+    # on a 96-core machine each client opened ~96 channels per node -- a few
+    # hundred of them across the emulated WAN -- and their handshakes timed out
+    # against the driver's 500ms init-query budget.  The same run on a 12-core
+    # box was healthy.  Capping the container keeps the client identical
+    # whatever the host is.
+    local ycsb_cpus=$(config ycsb_cpus)
+    local cpu_limit=""
+    if [ -n "${ycsb_cpus}" ]; then
+        cpu_limit=" --cpus ${ycsb_cpus}"
+    fi
+
     # --env-file is read by the Docker client, so it needs no staging even when
     # the daemon lives on another machine.
-    local docker_args="--rm -d --security-opt apparmor=unconfined --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
+    local docker_args="--rm -d --security-opt apparmor=unconfined${cpu_limit} --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
     if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
         # Bind-mounts, on the other hand, resolve on the daemon's filesystem.
         local staged_config
@@ -233,6 +250,13 @@ run_ycsb() {
     fi
 
     local java_opts="-Dorg.slf4j.simpleLogger.defaultLogLevel=info"
+
+    # --cpus alone should be enough (the JVM derives availableProcessors() from
+    # the cgroup quota), but state it outright so that the pool sizing cannot
+    # depend on container-detection quirks.
+    if [ -n "${ycsb_cpus}" ]; then
+        java_opts+=" -XX:ActiveProcessorCount=${ycsb_cpus}"
+    fi
 
     # Raise one logger to debug without rebuilding the client.  Set
     # ycsb_debug_logger in exp.config (it survives across runs and is visible
