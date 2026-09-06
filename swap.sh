@@ -17,7 +17,7 @@ usage() {
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
-    echo "  --nodesperdc=N   Override number of nodes per DC (default from exp.config)."
+    echo "  --nodesperdc=N   Nodes per DC (default: 3)."
 }
 
 dry_run=0
@@ -74,9 +74,12 @@ restore_test_settings() {
 }
 trap restore_test_settings EXIT
 
-if [ -n "$nodesperdc_override" ]; then
-    sed -i "s/^nodesperdc=.*/nodesperdc=${nodesperdc_override}/" "${CONFIG_FILE}"
-fi
+# This experiment runs a realistic multi-node datacentre by default rather than
+# the single replica per DC used elsewhere; --nodesperdc overrides it.  Applied
+# before compute_test_machine below so that --test sizes the containers for the
+# real node count, and undone by restore_test_settings on exit.
+nodesperdc=${nodesperdc_override:-3}
+sed -i "s/^nodesperdc=.*/nodesperdc=${nodesperdc}/" "${CONFIG_FILE}"
 
 if [ "$test_run" -eq 1 ]; then
     nodes=3

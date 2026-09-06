@@ -147,7 +147,7 @@ the results into a plot or a table.
 | `ycsb.sh` | Compares the average latency of each protocol over the YCSB workloads A to D, as a grouped bar chart. |
 | `conflict.sh` | Plots the average latency across all clients when changing a fixed conflict rate for updates. |
 | `closed_economy.sh` | Runs a closed economy workload (banking transactions) on transaction-supporting protocols, varying the number of nodes. |
-| `swap.sh` | Runs a workload that atomically swaps S items per transaction, with S varying from 1 to 8, for 1 and 50 clients per site. |
+| `swap.sh` | Runs a workload that atomically swaps S items per transaction, with S varying from 3 to 8. Unlike the other experiments it deploys **3 nodes per datacentre** by default (`--nodesperdc=N` to change), so the replica set spans a realistic multi-node DC. |
 | `latency_throughput.sh` | Generates a classical latency vs throughput graph by increasing the number of clients by a factor of 2 (1, 2, 4, 8, ..., up to 128) to demonstrate the hockey stick effect (where latency increases and throughput plateaus/degrades as the system saturates). |
 | `fault_tolerance.sh` | Injects a 400ms slowdown then a crash on the first replica, and plots the throughput over time (mimics Figure 6 of the CockroachDB SIGMOD'20 paper). |
 | `ephemeral.sh` | Illustrates the benefit of activating ephemeral reads in Accord, as a LaTeX table of the speed-up over workloads A to D. |
