@@ -188,6 +188,13 @@ run_ycsb() {
 	fi
     fi
 
+    # Bytes per record.  The swap workload moves S of these in each direction,
+    # so S varies the coordination cost and the data volume together; changing
+    # this separates them.  Note it also changes the dataset size, and with it
+    # the memory pressure on the replicas.
+    local fieldlength=$(config fieldlength)
+    fieldlength=${fieldlength:-4000}
+
     local ycsb_image=$(config ycsb_image)
     local ycsb_client="swiftpaxos"
 
@@ -284,7 +291,7 @@ YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
 YCSB_RECORDCOUNT=${recordcount}\n\
 YCSB_OPERATIONCOUNT=${operationcount}\n\
 YCSB_THREADS=${ycsb_threads}\n\
-YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldlength=4000 -p workload=${workload_type} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
+YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldlength=${fieldlength} -p workload=${workload_type} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
     
     start_container ${ycsb_image} ${container_name} "Starting" ${output_file} ${docker_args}
 

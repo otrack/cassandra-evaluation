@@ -101,6 +101,7 @@ that are defined in the file `exp.config`:
 | `latency_simulation` | Enable the emulation of the WAN delays with tc. |
 | `infra` | Where the containers run: `simulation` (the local Docker daemon, the default) or a cloud provider such as `gcp`. See [infra/README.md](infra/README.md). |
 | `machine` | The GCP machine type whose CPU/memory limits are applied to each container (see `gcp.csv`). |
+| `fieldlength` | Bytes per record (default 4000). The swap workload moves `S` of these in each direction, so varying `S` changes coordination cost and data volume together; this separates them. Changing it also changes the dataset size, and so the memory pressure on the replicas. |
 | `records` / `threads` / `maxexecutiontime` | The YCSB record count, client threads and duration of a run (in seconds). |
 | `nodesperdc` | The number of replicas per datacenter. |
 | `accord.*` / `cockroachdb.*` | Per-system tuning knobs (e.g., ephemeral reads, lease holder placement). |
