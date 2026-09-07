@@ -38,9 +38,6 @@ for arg in "$@"; do
         --nodesperdc=*)
             nodesperdc_override="${arg#*=}"
             ;;
-        --nodes-per-dc=*)
-            nodesperdc_override="${arg#*=}"
-            ;;
         *)
             echo "Unknown parameter: $arg"
             usage
@@ -58,7 +55,8 @@ protocols="accord cockroachdb"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-nodes=7
+
+nodes=3
 replication_factor=3
 records=$(config records)
 client_counts="1 50"
