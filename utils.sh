@@ -203,7 +203,15 @@ host_aliases() {
 infra_bootstrap() {
     local num_nodes=$1
     infra_provision "${num_nodes}" || return 1
-    infra_open_ports 7000 7087 8080 9042 10000 26257
+    # 7000: Cassandra inter-node. 7087: swiftpaxos master. 7070: swiftpaxos
+    # replica-to-replica (defaultPort in config.go -- every replica dials
+    # its lower-indexed peers on this port after registering with master).
+    # 8070: swiftpaxos replica port+1000 -- master dials every replica here
+    # for leader election (master.go's BeTheLeader RPC); GetReplicaList
+    # blocks forever until that round completes, so without this port every
+    # client hangs. 8080: CockroachDB admin. 9042: Cassandra CQL. 10000:
+    # Tiga. 26257: CockroachDB.
+    infra_open_ports 7000 7070 7087 8070 8080 9042 10000 26257
 }
 
 ###############################################################################

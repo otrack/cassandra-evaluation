@@ -535,28 +535,74 @@ infra_open_ports() {
             # the diff in one shot rather than one CLI call per port -- text
             # output renders a port and its CIDRs as separate rows with no
             # reliable way to pair them back up.
+            #
+            # Also revoke CIDRs that are no longer peers (e.g. a reclaimed
+            # spot instance's old IP): a reclaim-and-replace cycle otherwise
+            # leaves the old rule in place forever, and each cycle adds a
+            # full new set of per-port rules on top -- a handful of cycles
+            # is enough to hit AWS's default 60-rules-per-group quota, after
+            # which *every* future authorize call fails outright (for every
+            # region, since they all run the same diff) and every
+            # subsequently replaced node is left unreachable with no
+            # visible error.
             existing=$(aws ec2 describe-security-groups --region "${region}" --group-ids "${sg}" \
                 --query 'SecurityGroups[0].IpPermissions' --output json 2>/dev/null)
-            perms_str=$(python3 -c '
+            local add_str revoke_str
+            { read -r add_str; read -r revoke_str; } < <(python3 -c '
 import json, sys
 existing = json.loads(sys.argv[1] or "[]")
-ports, peers = sys.argv[2].split(), sys.argv[3].split()
-have = {(perm.get("FromPort"), r.get("CidrIp"))
+ports, peers = sys.argv[2].split(), set(sys.argv[3].split())
+have_tcp = {(perm.get("FromPort"), r.get("CidrIp"))
         for perm in existing if perm.get("IpProtocol") == "tcp"
         for r in perm.get("IpRanges", [])}
-blocks = []
+have_icmp = {r.get("CidrIp")
+        for perm in existing if perm.get("IpProtocol") == "icmp"
+        for r in perm.get("IpRanges", [])}
+add_blocks, revoke_blocks = [], []
 for p in ports:
-    missing = [ip for ip in peers if (int(p), ip + "/32") not in have]
+    have_ips = {ip for (fp, ip) in have_tcp if fp == int(p)}
+    missing = [ip for ip in peers if ip + "/32" not in have_ips]
     if missing:
         ranges = ",".join("{CidrIp=%s/32}" % ip for ip in missing)
-        blocks.append("IpProtocol=tcp,FromPort=%s,ToPort=%s,IpRanges=[%s]" % (p, p, ranges))
-print(" ".join(blocks))
+        add_blocks.append("IpProtocol=tcp,FromPort=%s,ToPort=%s,IpRanges=[%s]" % (p, p, ranges))
+    stale = [ip[:-3] for ip in have_ips if ip[:-3] not in peers]
+    if stale:
+        ranges = ",".join("{CidrIp=%s/32}" % ip for ip in stale)
+        revoke_blocks.append("IpProtocol=tcp,FromPort=%s,ToPort=%s,IpRanges=[%s]" % (p, p, ranges))
+# swiftpaxos master pings every replica it registers as a liveness check
+# (see swiftpaxos/cluster.sh) -- allow ICMP between peers too, not just the
+# TCP protocol ports. -1/-1 means all ICMP types/codes.
+missing_icmp = [ip for ip in peers if ip + "/32" not in have_icmp]
+if missing_icmp:
+    ranges = ",".join("{CidrIp=%s/32}" % ip for ip in missing_icmp)
+    add_blocks.append("IpProtocol=icmp,FromPort=-1,ToPort=-1,IpRanges=[%s]" % ranges)
+stale_icmp = [ip[:-3] for ip in have_icmp if ip[:-3] not in peers]
+if stale_icmp:
+    ranges = ",".join("{CidrIp=%s/32}" % ip for ip in stale_icmp)
+    revoke_blocks.append("IpProtocol=icmp,FromPort=-1,ToPort=-1,IpRanges=[%s]" % ranges)
+print(" ".join(add_blocks))
+print(" ".join(revoke_blocks))
 ' "${existing}" "$*" "${peer_ips}")
 
-            if [ -n "${perms_str}" ]; then
+            # Revoke stale rules before adding new ones -- a group already
+            # sitting at AWS's rule quota (see above) has no room for the
+            # add call to succeed until the stale ones are cleared first.
+            local out
+            if [ -n "${revoke_str}" ]; then
                 # shellcheck disable=SC2086
-                aws ec2 authorize-security-group-ingress --region "${region}" --group-id "${sg}" \
-                    --ip-permissions ${perms_str} >/dev/null 2>&1
+                if ! out=$(aws ec2 revoke-security-group-ingress --region "${region}" --group-id "${sg}" \
+                    --ip-permissions ${revoke_str} 2>&1); then
+                    error "aws: failed to revoke stale rules in ${region}: ${out}"
+                    exit 1
+                fi
+            fi
+            if [ -n "${add_str}" ]; then
+                # shellcheck disable=SC2086
+                if ! out=$(aws ec2 authorize-security-group-ingress --region "${region}" --group-id "${sg}" \
+                    --ip-permissions ${add_str} 2>&1); then
+                    error "aws: failed to open ports in ${region}: ${out}"
+                    exit 1
+                fi
             fi
         ) &
         pids+=($!)

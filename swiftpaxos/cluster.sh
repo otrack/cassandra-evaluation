@@ -33,11 +33,26 @@ swiftpaxos_start_cluster() {
 	fi
         location=$(get_location $i ${LOCATIONS_FILE})
         container_name="${location}1"
-	start_container ${image} ${container_name} "${message}" ${LOGDIR}/${protocol}_node${i}.log --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} -e PROTOCOL=${protocol} -e NSERVERS=${num_dcs} -e TYPE=server -e THRIFTY=false -e MADDR=${maddr} || {
+        local extra_args=() container_cmd=()
+        if infra_is_real; then
+            # The image's default entrypoint (bin/run.sh) self-detects its
+            # advertise address from the host's default-route interface,
+            # which under --network host (used for every real provider) is
+            # always the instance's private IP -- e.g. on AWS the public IP
+            # is NAT'd at the Internet Gateway and never locally bound, so
+            # that address is unreachable from another region/host. Bypass
+            # run.sh and invoke the binary directly with the real,
+            # peer-reachable address instead.
+            local server_addr
+            server_addr=$(infra_host_ip "$(node_index_of "${container_name}")")
+            extra_args=(--entrypoint /swiftpaxos/bin/swiftpaxos)
+            container_cmd=(-- -run server -config base.conf -protocol "${protocol}" -thrifty false -nservers "${num_dcs}" -maddr "${maddr}" -addr "${server_addr}" -alias "${server_addr}")
+        fi
+	start_container ${image} ${container_name} "${message}" ${LOGDIR}/${protocol}_node${i}.log --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} "${extra_args[@]}" -e PROTOCOL=${protocol} -e NSERVERS=${num_dcs} -e TYPE=server -e THRIFTY=false -e MADDR=${maddr} "${container_cmd[@]}" || {
             error "Failed to start server $i"
             return 2
 	}
-    done        
+    done
 }
 
 swiftpaxos_cleanup_cluster() {
