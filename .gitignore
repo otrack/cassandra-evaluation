@@ -105,5 +105,7 @@ venv.bak/
 *.swo
 *~
 
-Docker/results/
-Docker/logs/
+results/
+logs/
+# generated deployment state (host addresses, ssh users, devices)
+.deployment/
