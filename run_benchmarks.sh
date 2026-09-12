@@ -395,10 +395,23 @@ run_benchmark() {
         run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}"
     done
     
+    # A run is bounded by maxexecutiontime, so a client still alive well past
+    # that is stuck, not slow.  Cap the wait so one wedged client cannot hang
+    # the whole sweep; the others keep their results and the parser drops the
+    # missing one.  The load phase above is deliberately left unbounded: it is
+    # single-threaded over recordcount rows and legitimately takes far longer.
+    local client_timeout
+    client_timeout=$(config ycsb.client.timeout)
+    client_timeout=${client_timeout:-300}
+
+    local stuck=0
     for i in $(seq 1 1 ${num_dcs});
     do
-        wait_container "ycsb-${i}"
+        wait_container "ycsb-${i}" "${client_timeout}" || stuck=$((stuck + 1))
     done
+    if [ ${stuck} -gt 0 ]; then
+        error "${stuck} YCSB client(s) had to be stopped after ${client_timeout}s"
+    fi
 
     local fast_path_script="${DIR}/${pref}/${pref}_fast_path.sh"
 

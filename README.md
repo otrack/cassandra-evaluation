@@ -94,6 +94,7 @@ that are defined in the file `exp.config`:
 | Parameter | Meaning |
 | --- | --- |
 | `debug` | Print the debug traces of the scripts. |
+| `ycsb.client.timeout` | Seconds to wait for a YCSB client container to terminate before stopping it (default 300). A run is bounded by `maxexecutiontime`, so a client alive well past it is wedged, not slow; without this one stuck client hangs the whole sweep. The load phase is not bounded by it. |
 | `ycsb_cpus` | CPUs granted to each YCSB client container, and the value the client JVM reports as `availableProcessors()`. The Cassandra binding sizes its connection pools from that number, so leaving it unbounded makes a run on a 96-core host behave differently from one on a laptop. Empty = unbounded. |
 | `ycsb_debug_logger` | Raise one YCSB client logger to `debug`, e.g. `site.ycsb.db.CassandraCQLClient`, so that exceptions the client swallows are printed with their stack trace. Empty disables it; `YCSB_DEBUG_LOGGER=<logger>` overrides it for a single run. |
 | `*_image` | The Docker image used for each system; all of them are pulled before an experiment starts. |
