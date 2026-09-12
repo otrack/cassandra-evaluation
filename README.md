@@ -153,6 +153,17 @@ the results into a plot or a table.
 | `ephemeral.sh` | Illustrates the benefit of activating ephemeral reads in Accord, as a LaTeX table of the speed-up over workloads A to D. |
 
 `run-all.sh` executes all of them in sequence and stops at the first failure.
+It selects the protocols per experiment, since not all of them apply everywhere:
+
+| experiments | protocols |
+| --- | --- |
+| default | `accord`, `cockroachdb-opt`, `swiftpaxos-paxos`, `swiftpaxos-epaxos`, `swiftpaxos-curp`, `cassandra-paxos`, `tiga` |
+| `closed_economy.sh`, `swap.sh` | `accord`, `cockroachdb-opt`, `tiga` — the transactional workloads need multi-key atomicity |
+| `fault_tolerance.sh` | `accord`, `cockroachdb-opt` |
+
+`--protocols=LIST` on `run-all.sh` overrides all of them. `ephemeral.sh` ignores
+the flag entirely: it always compares Accord against itself with ephemeral reads
+on and off.
 
 Each experiment accepts the following flags:
 - `--test` shortens the run and right-sizes the containers so that the experiment fits on the local machine.
