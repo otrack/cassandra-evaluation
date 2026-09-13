@@ -45,7 +45,7 @@ mkdir -p ${LOGDIR}/conflict
 mkdir -p ${RESULTSDIR}/conflict
 
 workload_type="site.ycsb.workloads.ConflictWorkload"
-thetas=$(seq -f "%.2f" 0 0.5 1.0)
+thetas=$(seq -f "%.2f" 0 0.1 1.0)
 workload="a" # this does not matter
 protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockroachdb-opt | grep -v cockroachdb-bad | grep -v accord-cmt | paste -sd' ')
 if [ -n "$protocols_override" ]; then

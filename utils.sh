@@ -358,16 +358,31 @@ start_container() {
     done
 }
 
+# wait_container <name> [timeout_seconds]
+#
+# Waits for a container to terminate.  With a timeout, a container that never
+# terminates -- a client whose native library core-dumps without exiting, say --
+# is stopped rather than hanging the experiment for ever; the run continues and
+# the caller is told, via a non-zero return, that this one produced no result.
+# Omitting the timeout, or passing 0, waits indefinitely.
 wait_container() {
     if [ $# -lt 1 ]; then
-        error "usage: wait_container <name>"
+        error "usage: wait_container <name> [timeout_seconds]"
         return 2
     fi
 
     local cname="$1"
+    local timeout="${2:-0}"
+    local start_time
+    start_time=$(date +%s)
+
+    if [ "${timeout}" -gt 0 ] 2>/dev/null; then
+        log "Waiting container '${cname}' to terminate (at most ${timeout}s)"
+    else
+        log "Waiting container '${cname}' to terminate"
+    fi
 
     # Wait until container is no longer running (or inspect disappears)
-    log "Waiting container '${cname}' to terminate"
     while true; do
         running=$(dinspect "$cname" -f '{{.State.Running}}' 2>/dev/null) || {
             # Inspect failing -> container removed or no longer present; treat as stopped
@@ -380,8 +395,15 @@ wait_container() {
             return 0
         fi
 
+        if [ "${timeout}" -gt 0 ] 2>/dev/null && (( $(date +%s) - start_time >= timeout )); then
+            error "Container '${cname}' still running after ${timeout}s; stopping it. Its results are lost."
+            fetch_logs_container "$cname" | tail -20 >&2
+            stop_container "$cname"
+            return 5
+        fi
+
         sleep 0.5
-    done    
+    done
 }
 
 fetch_logs_container() {

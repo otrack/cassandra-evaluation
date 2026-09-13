@@ -141,9 +141,26 @@ run_ycsb() {
     fi
     log ${extra_opts_str[@]}
 
+    # Cap the load generator.
+    #
+    # The replicas are sized from `machine`, but the YCSB containers used to run
+    # unbounded, so the client JVM saw every core of the host.  That is not just
+    # untidy: the Cassandra binding sizes its connection pools from
+    # Runtime.availableProcessors(), for local *and* remote datacentres alike, so
+    # on a 96-core machine each client opened ~96 channels per node -- a few
+    # hundred of them across the emulated WAN -- and their handshakes timed out
+    # against the driver's 500ms init-query budget.  The same run on a 12-core
+    # box was healthy.  Capping the container keeps the client identical
+    # whatever the host is.
+    local ycsb_cpus=$(config ycsb_cpus)
+    local cpu_limit=""
+    if [ -n "${ycsb_cpus}" ]; then
+        cpu_limit=" --cpus ${ycsb_cpus}"
+    fi
+
     # --env-file is read by the Docker client, so it needs no staging even when
     # the daemon lives on another machine.
-    local docker_args="--rm -d --security-opt apparmor=unconfined --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
+    local docker_args="--rm -d --security-opt apparmor=unconfined${cpu_limit} --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
     if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
         # Bind-mounts, on the other hand, resolve on the daemon's filesystem.
         local staged_config
@@ -170,6 +187,13 @@ run_ycsb() {
 	    cassandra_create_usertable 3600 "$transaction_mode" "${num_dcs:-3}" "$workload_type"
 	fi
     fi
+
+    # Bytes per record.  The swap workload moves S of these in each direction,
+    # so S varies the coordination cost and the data volume together; changing
+    # this separates them.  Note it also changes the dataset size, and with it
+    # the memory pressure on the replicas.
+    local fieldlength=$(config fieldlength)
+    fieldlength=${fieldlength:-4000}
 
     local ycsb_image=$(config ycsb_image)
     local ycsb_client="swiftpaxos"
@@ -234,14 +258,26 @@ run_ycsb() {
 
     local java_opts="-Dorg.slf4j.simpleLogger.defaultLogLevel=info"
 
-    # Raise one logger to debug without rebuilding the client, e.g.
+    # --cpus alone should be enough (the JVM derives availableProcessors() from
+    # the cgroup quota), but state it outright so that the pool sizing cannot
+    # depend on container-detection quirks.
+    if [ -n "${ycsb_cpus}" ]; then
+        java_opts+=" -XX:ActiveProcessorCount=${ycsb_cpus}"
+    fi
+
+    # Raise one logger to debug without rebuilding the client.  Set
+    # ycsb_debug_logger in exp.config (it survives across runs and is visible
+    # where the other knobs are), or override it for a single run with
     #   YCSB_DEBUG_LOGGER=site.ycsb.db.CassandraCQLClient ./swap.sh --protocols=accord
+    #
     # The YCSB clients bind slf4j-simple, which reads a per-logger level from
     # org.slf4j.simpleLogger.log.<logger>.  Failures the client swallows behind
     # `if (logger.isDebugEnabled())` -- the exception from a swap, in
     # particular -- then appear in the run log with their stack trace.
-    if [ -n "${YCSB_DEBUG_LOGGER}" ]; then
-        java_opts+=" -Dorg.slf4j.simpleLogger.log.${YCSB_DEBUG_LOGGER}=debug"
+    local debug_logger="${YCSB_DEBUG_LOGGER:-$(config ycsb_debug_logger)}"
+    if [ -n "${debug_logger}" ]; then
+        java_opts+=" -Dorg.slf4j.simpleLogger.log.${debug_logger}=debug"
+        log "YCSB debug logging enabled for ${debug_logger}"
     fi
 
     if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
@@ -255,7 +291,7 @@ YCSB_WORKLOAD=/ycsb/workloads/workload${workload}\n\
 YCSB_RECORDCOUNT=${recordcount}\n\
 YCSB_OPERATIONCOUNT=${operationcount}\n\
 YCSB_THREADS=${ycsb_threads}\n\
-YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldlength=4000 -p workload=${workload_type} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
+YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldlength=${fieldlength} -p workload=${workload_type} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
     
     start_container ${ycsb_image} ${container_name} "Starting" ${output_file} ${docker_args}
 
@@ -359,10 +395,23 @@ run_benchmark() {
         run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}"
     done
     
+    # A run is bounded by maxexecutiontime, so a client still alive well past
+    # that is stuck, not slow.  Cap the wait so one wedged client cannot hang
+    # the whole sweep; the others keep their results and the parser drops the
+    # missing one.  The load phase above is deliberately left unbounded: it is
+    # single-threaded over recordcount rows and legitimately takes far longer.
+    local client_timeout
+    client_timeout=$(config ycsb.client.timeout)
+    client_timeout=${client_timeout:-300}
+
+    local stuck=0
     for i in $(seq 1 1 ${num_dcs});
     do
-        wait_container "ycsb-${i}"
+        wait_container "ycsb-${i}" "${client_timeout}" || stuck=$((stuck + 1))
     done
+    if [ ${stuck} -gt 0 ]; then
+        error "${stuck} YCSB client(s) had to be stopped after ${client_timeout}s"
+    fi
 
     local fast_path_script="${DIR}/${pref}/${pref}_fast_path.sh"
 
