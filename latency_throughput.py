@@ -148,6 +148,16 @@ def main():
         ymin = 0
         ymax = 100
 
+    # Display ceiling on the latency axis.
+    display_ymax = 500
+    # Data ceiling far above the displayed axis.  A point whose raw latency
+    # really overshoots the chart must still be representable on the canvas:
+    # projected values larger than ~16384pt make pgfplots fail with
+    # "Dimension too large".  Clamping to a value well above `display_ymax`
+    # keeps the curve shooting off the top of the chart (the marker itself is
+    # clipped away), so no fake value is implied.
+    plot_cap = display_ymax * 20
+
     # Generate TikZ/pgfplots code
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[t]\n")
@@ -161,7 +171,7 @@ def main():
         f.write("      xlabel={Throughput (kops/sec)},\n")
         f.write("      ylabel={Median Latency (ms)},\n")
         f.write(f"      xmin={xmin:.2f}, xmax={xmax:.2f},\n")
-        f.write(f"      ymin={ymin:.2f}, ymax={500},\n")
+        f.write(f"      ymin={ymin:.2f}, ymax={display_ymax},\n")
         f.write("      cycle list name=color list,\n")
         f.write("      tick label style={font=\\small},\n")
         f.write("      label style={font=\\small},\n")
@@ -174,7 +184,7 @@ def main():
             f.write(f"      \\addplot+[{col}, mark=*, thick] table {{\n")
             for tput, lat in zip(data['throughputs'], data['latencies']):
                 if tput is not None and tput != 0 and lat != 0 and lat is not None:
-                    f.write(f"        {tput:.2f} {lat:.2f}\n")
+                    f.write(f"        {tput:.2f} {min(lat, plot_cap):.2f}\n")
             f.write("      };\n\n")
 
         f.write("    \\end{axis}\n")
