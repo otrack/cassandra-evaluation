@@ -16,7 +16,7 @@ def read_locations(file_path):
         for row in reader:
             locations.append((float(row['lat']), float(row['lon']), row['loc'].strip().strip('"')))
     return locations
-        
+
 def wait_for_log(container, log_pattern, timeout=300):
     log_stream = container.logs(stream=True)
     start_time = time.time()
@@ -71,7 +71,7 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     mem_limit = None
     cassandra_xmx = "4g"
     machine = infra.machine_shape()
-    ephemeral_read_enabled = config.get("accord.ephemeral_read_enabled", "true")
+    ephemeral_read_enabled = config.get("accord.ephemeral_read", "true")
     if machine:
         try:
             with open(os.path.join(os.path.dirname(__file__), '..', 'gcp.csv'), 'r') as gcp_file:
@@ -104,7 +104,7 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     if 'cassandra_xms' not in locals():
         cassandra_xms = "2g"
         cassandra_xmx = "4g"
-    
+
     containers = []
     log_pattern = r"Startup complete"
     seeds_str = ",".join([f"{locations[idx][2]}1" for idx in range(num_dcs)])
@@ -192,7 +192,7 @@ if __name__ == "__main__":
         print("Usage: python3 start_cassandra_data_centers.py <num_dcs> <protocol> [nodes_per_dc]")
         sys.exit(1)
 
-    try:        
+    try:
         num_dcs = int(sys.argv[1])
         protocol = sys.argv[2]
         if protocol not in ["accord", "paxos", "quorum", "one"]:
@@ -202,7 +202,7 @@ if __name__ == "__main__":
 
         latencies_file = infra.locations_file()
         locations = read_locations(latencies_file)
-        
+
         config = {}
         config_path = os.path.join(os.path.dirname(__file__), '..', 'exp.config')
         with open(config_path, 'r') as f:
