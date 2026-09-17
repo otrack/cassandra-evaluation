@@ -94,11 +94,15 @@ that are defined in the file `exp.config`:
 | Parameter | Meaning |
 | --- | --- |
 | `debug` | Print the debug traces of the scripts. |
+| `ycsb.client.timeout` | Seconds to wait for a YCSB client container to terminate before stopping it (default 300). A run is bounded by `maxexecutiontime`, so a client alive well past it is wedged, not slow; without this one stuck client hangs the whole sweep. The load phase is not bounded by it. |
+| `ycsb_cpus` | CPUs granted to each YCSB client container, and the value the client JVM reports as `availableProcessors()`. The Cassandra binding sizes its connection pools from that number, so leaving it unbounded makes a run on a 96-core host behave differently from one on a laptop. Empty = unbounded. |
+| `ycsb_debug_logger` | Raise one YCSB client logger to `debug`, e.g. `site.ycsb.db.CassandraCQLClient`, so that exceptions the client swallows are printed with their stack trace. Empty disables it; `YCSB_DEBUG_LOGGER=<logger>` overrides it for a single run. |
 | `*_image` | The Docker image used for each system; all of them are pulled before an experiment starts. |
 | `network_name` | The Docker bridge network the containers are attached to. |
 | `latency_simulation` | Enable the emulation of the WAN delays with tc. |
 | `infra` | Where the containers run: `simulation` (the local Docker daemon, the default) or a cloud provider such as `gcp`. See [infra/README.md](infra/README.md). |
 | `machine` | The GCP machine type whose CPU/memory limits are applied to each container (see `gcp.csv`). |
+| `fieldlength` | Bytes per record (default 4000). The swap workload moves `S` of these in each direction, so varying `S` changes coordination cost and data volume together; this separates them. Changing it also changes the dataset size, and so the memory pressure on the replicas. |
 | `records` / `threads` / `maxexecutiontime` | The YCSB record count, client threads and duration of a run (in seconds). |
 | `nodesperdc` | The number of replicas per datacenter. |
 | `accord.*` / `cockroachdb.*` | Per-system tuning knobs (e.g., ephemeral reads, lease holder placement). |
@@ -144,12 +148,23 @@ the results into a plot or a table.
 | `ycsb.sh` | Compares the average latency of each protocol over the YCSB workloads A to D, as a grouped bar chart. |
 | `conflict.sh` | Plots the average latency across all clients when changing a fixed conflict rate for updates. |
 | `closed_economy.sh` | Runs a closed economy workload (banking transactions) on transaction-supporting protocols, varying the number of nodes. |
-| `swap.sh` | Runs a workload that atomically swaps S items per transaction, with S varying from 1 to 8, for 1 and 50 clients per site. |
+| `swap.sh` | Runs a workload that atomically swaps S items per transaction, with S varying from 3 to 8. Unlike the other experiments it deploys **3 nodes per datacentre** by default (`--nodesperdc=N` to change), so the replica set spans a realistic multi-node DC. |
 | `latency_throughput.sh` | Generates a classical latency vs throughput graph by increasing the number of clients by a factor of 2 (1, 2, 4, 8, ..., up to 128) to demonstrate the hockey stick effect (where latency increases and throughput plateaus/degrades as the system saturates). |
 | `fault_tolerance.sh` | Injects a 400ms slowdown then a crash on the first replica, and plots the throughput over time (mimics Figure 6 of the CockroachDB SIGMOD'20 paper). |
 | `ephemeral.sh` | Illustrates the benefit of activating ephemeral reads in Accord, as a LaTeX table of the speed-up over workloads A to D. |
 
 `run-all.sh` executes all of them in sequence and stops at the first failure.
+It selects the protocols per experiment, since not all of them apply everywhere:
+
+| experiments | protocols |
+| --- | --- |
+| default | `accord`, `cockroachdb-opt`, `swiftpaxos-paxos`, `swiftpaxos-epaxos`, `swiftpaxos-curp`, `cassandra-paxos`, `tiga` |
+| `closed_economy.sh`, `swap.sh` | `accord`, `cockroachdb-opt`, `tiga` — the transactional workloads need multi-key atomicity |
+| `fault_tolerance.sh` | `accord`, `cockroachdb-opt` |
+
+`--protocols=LIST` on `run-all.sh` overrides all of them. `ephemeral.sh` ignores
+the flag entirely: it always compares Accord against itself with ephemeral reads
+on and off.
 
 Each experiment accepts the following flags:
 - `--test` shortens the run and right-sizes the containers so that the experiment fits on the local machine.

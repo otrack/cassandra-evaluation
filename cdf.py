@@ -2,6 +2,8 @@ import sys
 import math
 import pandas as pd
 
+from utils import drop_unsound_rows
+
 from emulate_latency import haversine, estimate_latency
 from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_plotting
 
@@ -132,6 +134,46 @@ def compute_average_latencies_across_dcs(df, workload, op, num_nodes):
 
     return averages
 
+def write_tail_zoom_inset(f, avg_latencies_dict, protocol_order, protocol_colors,
+                          tail_min_lat, tail_max_lat, anchor):
+    """
+    Write a small inset axis zooming on the tail latencies of an 'All sites' CDF,
+    anchored at the bottom-right corner of the corresponding groupplot axis.
+    Unlike the main plot (which spans percentiles 0..1), the inset zooms the
+    vertical axis to the top percentiles (p99..p100) and the horizontal axis to
+    the latencies observed there.
+    """
+    mid_lat = (tail_min_lat + tail_max_lat) / 2
+    f.write("        \\begin{axis}[\n")
+    f.write("          width=3.4cm, height=2.3cm,\n")
+    f.write(f"          at={{({anchor}.south east)}},\n")
+    f.write("          anchor=south east,\n")
+    f.write("          xshift=-0.7cm, yshift=0.4cm,\n")
+    f.write(f"          xmin={tail_min_lat:.2f}, xmax={tail_max_lat:.2f},\n")
+    f.write("          ymin=0.99, ymax=1.0,\n")
+    f.write("          ytick={0.99,1},\n")
+    f.write(f"          xtick={{{tail_min_lat:.0f},{mid_lat:.0f},{tail_max_lat:.0f}}},\n")
+    f.write("          tick label style={font=\\tiny},\n")
+    f.write("          tick style={black},\n")
+    f.write("          axis background/.style={fill=white},\n")
+    f.write("          every x tick scale label/.style={at={(1,0)}, xshift=0.05cm, anchor=south west, inner sep=0pt, font=\\tiny},\n")
+    f.write("        ]\n")
+    for proto_idx, proto in enumerate(protocol_order):
+        if proto not in avg_latencies_dict:
+            continue
+        latencies = avg_latencies_dict[proto]
+        if not latencies:
+            continue
+        col = get_protocol_color(proto, protocol_colors, proto_idx)
+        f.write("          \\addplot["+col+", mark=none] table {\n")
+        for i, val in enumerate(latencies):
+            if val is None:
+                continue
+            pct = (i+1)/100
+            f.write(f"          {val} {pct}\n")
+        f.write("          };\n")
+    f.write("        \\end{axis}\n")
+
 def main():
     if len(sys.argv) < 7:
         print(
@@ -180,6 +222,7 @@ def main():
 
     # Load data
     df_unfiltered = pd.read_csv(results_csv)
+    df_unfiltered = drop_unsound_rows(df_unfiltered, label='cdf')
     df = df_unfiltered.copy()
     no_dcs = False
 
@@ -310,7 +353,7 @@ def main():
         f.write("    \\begin{tikzpicture}[scale=.75]\n")
 
         f.write("      \\begin{groupplot}[\n")
-        f.write(f"        group style={{group size={n_ops} by {total_rows}, horizontal sep=1.2cm, vertical sep=0.8cm}},\n")
+        f.write(f"        group style={{group name=groupplot, group size={n_ops} by {total_rows}, horizontal sep=1.2cm, vertical sep=0.8cm}},\n")
         f.write("        width=7cm, height=5cm,\n")
         f.write("        grid=both,\n")
         f.write("        ymajorgrids=true,\n")
@@ -410,6 +453,19 @@ def main():
                         f.write("          \\fi\n")
 
         f.write("      \\end{groupplot}\n")
+
+        # --- Tail-zoom insets, one per operation in the 'All sites' row ---
+        if include_average and tail_min_lat != float('inf') and tail_max_lat != float('-inf'):
+            for wl_index, workload in enumerate(workloads):
+                for op_index, op in enumerate(all_ops):
+                    anchor = f"groupplot c{op_index + 1}r{wl_index + 1}"
+                    avg_latencies_dict = compute_average_latencies_across_dcs(df_unfiltered, workload, op, num_nodes)
+                    if not avg_latencies_dict:
+                        continue
+                    write_tail_zoom_inset(f, avg_latencies_dict, protocol_order,
+                                          protocol_colors, tail_min_lat, tail_max_lat,
+                                          anchor)
+
         f.write("    \\end{tikzpicture}\n")
 
         # --- Caption (no color swatches; legend is at the top of the figure) ---

@@ -48,7 +48,7 @@ protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockro
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-nodes=5
+nodes=3
 replication_factor=${nodes}
 records=$(config records)
 ops_per_thread=0

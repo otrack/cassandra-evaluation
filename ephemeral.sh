@@ -3,8 +3,8 @@
 # Ephemeral reads experiment.
 # Illustrates the benefit of activating ephemeral reads in Accord.
 # Runs YCSB workloads A to D with Accord only, comparing:
-#   - accord.ephemeral_read_enabled=true  (ephemeral reads ON)
-#   - accord.ephemeral_read_enabled=false (ephemeral reads OFF)
+#   - accord.ephemeral_read=true  (ephemeral reads ON)
+#   - accord.ephemeral_read=false (ephemeral reads OFF)
 # Outputs a LaTeX table with the speed-up when ephemeral reads are enabled.
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
@@ -44,20 +44,20 @@ mkdir -p ${LOGDIR}/ephemeral
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
 protocol="accord"
-nodes=5
+nodes=3
 replication_factor=${nodes}
 records=1000
 threads=50
 ops_per_thread=0
 
-# Helper to update accord.ephemeral_read_enabled in exp.config
+# Helper to update accord.ephemeral_read in exp.config
 set_ephemeral_read() {
     local value=$1
-    sed -i "s/^accord\.ephemeral_read_enabled=.*/accord.ephemeral_read_enabled=${value}/" ${CONFIG_FILE}
+    sed -i "s/^accord\.ephemeral_read=.*/accord.ephemeral_read=${value}/" ${CONFIG_FILE}
 }
 
 # Save original ephemeral setting, machine, and maxexecutiontime; restore all on exit
-original_ephemeral=$(config "accord.ephemeral_read_enabled")
+original_ephemeral=$(config "accord.ephemeral_read")
 original_machine=$(config machine)
 original_maxexecutiontime=$(config maxexecutiontime)
 restore_config() {
