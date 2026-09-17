@@ -81,7 +81,19 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                         nano_cpus = int(float(gcp_row['vcpus']) * 1e9)
                         memory_gb = float(gcp_row['memory'])
                         mem_limit = int(memory_gb * 1024 * 1024 * 1024 * 4/5)
-                        xmx_gb = max(1, math.floor(memory_gb))
+
+                        # The heap has to fit *inside* the container, with room
+                        # to spare: the cgroup also has to hold off-heap
+                        # structures, direct buffers, thread stacks, metaspace
+                        # and page cache, and none of that is charged to the
+                        # heap.  Sizing it from memory_gb rather than from the
+                        # container's own limit put -Xmx8g inside a 6.4 GiB
+                        # cgroup, so the JVM was entitled to more than the
+                        # kernel would give it: GC pauses reached 20.7s
+                        # (nodetool gcstats) and the containers were eventually
+                        # SIGKILLed with exit 137.
+                        container_gb = memory_gb * 4/5
+                        xmx_gb = max(1, round(container_gb * 0.6))
                         xms_gb = min(2, xmx_gb)
                         cassandra_xms = f"{xms_gb}g"
                         cassandra_xmx = f"{xmx_gb}g"

@@ -14,6 +14,8 @@ This script generates a two-subplot figure:
 
 import sys
 import pandas as pd
+
+from utils import drop_unsound_rows
 import numpy as np
 
 from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, sort_protocols_for_plotting, make_protocol_legend
@@ -136,6 +138,12 @@ def main():
 
     if df.empty:
         print("No valid swap workload data found in results CSV.")
+        sys.exit(1)
+
+    df = drop_unsound_rows(df, label='swap')
+
+    if df.empty:
+        print("No sound swap workload data left in results CSV.")
         sys.exit(1)
 
     # Compute median latency per row from p50 percentile

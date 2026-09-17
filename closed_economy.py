@@ -17,6 +17,8 @@ import sys
 
 import infra
 import pandas as pd
+
+from utils import drop_unsound_rows
 import numpy as np
 
 from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_legend, sort_protocols_for_plotting
@@ -316,6 +318,7 @@ def main():
         multi_client_threads = None
 
     df = pd.read_csv(results_csv)
+    df = drop_unsound_rows(df, label='closed_economy')
 
     # Filter for tx-readmodifywrite operations (the transaction operation in closed economy)
     df_rmw = df[df['op'] == 'tx-readmodifywrite'].copy()

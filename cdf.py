@@ -2,6 +2,8 @@ import sys
 import math
 import pandas as pd
 
+from utils import drop_unsound_rows
+
 from emulate_latency import haversine, estimate_latency
 from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_plotting
 
@@ -180,6 +182,7 @@ def main():
 
     # Load data
     df_unfiltered = pd.read_csv(results_csv)
+    df_unfiltered = drop_unsound_rows(df_unfiltered, label='cdf')
     df = df_unfiltered.copy()
     no_dcs = False
 

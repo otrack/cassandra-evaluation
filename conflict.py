@@ -3,6 +3,8 @@ import sys
 import csv
 import math
 import pandas as pd
+
+from utils import drop_unsound_rows
 import numpy as np
 
 from emulate_latency import haversine, estimate_latency
@@ -81,6 +83,7 @@ def main():
     output_tikz = sys.argv[-1]
 
     df = pd.read_csv(results_csv)
+    df = drop_unsound_rows(df, label='conflict')
 
     # Ensure columns exist
     if 'conflict_rate' not in df.columns:
