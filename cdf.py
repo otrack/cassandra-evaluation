@@ -148,7 +148,7 @@ def write_tail_zoom_inset(f, avg_latencies_dict, protocol_order, protocol_colors
     f.write("          width=3.4cm, height=2.3cm,\n")
     f.write(f"          at={{({anchor}.south east)}},\n")
     f.write("          anchor=south east,\n")
-    f.write("          xshift=-0.35cm, yshift=0.4cm,\n")
+    f.write("          xshift=-0.7cm, yshift=0.4cm,\n")
     f.write(f"          xmin={tail_min_lat:.2f}, xmax={tail_max_lat:.2f},\n")
     f.write("          ymin=0.99, ymax=1.0,\n")
     f.write("          ytick={0.99,1},\n")
@@ -156,6 +156,7 @@ def write_tail_zoom_inset(f, avg_latencies_dict, protocol_order, protocol_colors
     f.write("          tick label style={font=\\tiny},\n")
     f.write("          tick style={black},\n")
     f.write("          axis background/.style={fill=white},\n")
+    f.write("          every x tick scale label/.style={at={(1,0)}, xshift=0.05cm, anchor=south west, inner sep=0pt, font=\\tiny},\n")
     f.write("        ]\n")
     for proto_idx, proto in enumerate(protocol_order):
         if proto not in avg_latencies_dict:
