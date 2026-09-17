@@ -49,7 +49,7 @@ protocols="accord cockroachdb-opt"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-nodes=5
+nodes=3
 replication_factor=$nodes
 workload_type="site.ycsb.workloads.ConflictWorkload"
 workload="a" # this does not matter

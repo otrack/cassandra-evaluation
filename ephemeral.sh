@@ -44,7 +44,7 @@ mkdir -p ${LOGDIR}/ephemeral
 workload_type="site.ycsb.workloads.CoreWorkload"
 workloads="a b c d"
 protocol="accord"
-nodes=5
+nodes=3
 replication_factor=${nodes}
 records=1000
 threads=50
