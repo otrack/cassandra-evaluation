@@ -72,7 +72,7 @@ if [ "$test_run" -eq 1 ]; then
     rates=${rates_override:-"200 300"}
 else
     seconds=${seconds_override:-60}
-    rates=${rates_override:-"120 200 267 400 800"}
+    rates=${rates_override:-"1000 8000"}
 fi
 s=${s_override:-3}
 
