@@ -10,6 +10,10 @@ tiga_start_cluster() {
     local num_dcs=$1
     local protocol=$2
     local nodes_per_dc=${3:-$(config nodesperdc)}
+    local probe_lateness=$(config probe_lateness)
+    local probe_trace_cap=$(config probe_lateness_trace_cap)
+    [ -z "$probe_lateness" ] && probe_lateness=0
+    [ -z "$probe_trace_cap" ] && probe_trace_cap=500
 
     if [[ "$protocol" == tiga-* ]]; then
         protocol="${protocol#tiga-}"
@@ -98,12 +102,14 @@ config['server_initial_bound'] = initial_bounds
 config['server_bound_cap'] = bound_caps
 config['designate_replica_id'] = designate_replica
 config['preventive'] = True
+config['probe_lateness'] = int(sys.argv[5])
+config['probe_lateness_trace_cap'] = int(sys.argv[6])
 
 with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
     yaml.dump(config, f, default_flow_style=False)
-" "$num_dcs" "$nodes_per_dc" "${TIGA_DIR}" "${LOCATIONS_FILE}"
+" "$num_dcs" "$nodes_per_dc" "${TIGA_DIR}" "${LOCATIONS_FILE}" "$probe_lateness" "$probe_trace_cap"
 
-    log "Generated dynamic config file in ${TIGA_DIR}/config-ycsb.yml for ${num_dcs} DCs x ${nodes_per_dc} nodes/DC"
+    log "Generated dynamic config file in ${TIGA_DIR}/config-ycsb.yml for ${num_dcs} DCs x ${nodes_per_dc} nodes/DC (probe_lateness=${probe_lateness}, probe_lateness_trace_cap=${probe_trace_cap})"
 
     # 2. Start replica containers
     local global_node_id=1
