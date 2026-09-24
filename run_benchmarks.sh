@@ -109,7 +109,7 @@ run_ycsb() {
         local i=0
         while [ $i -lt ${#extra_opts[@]} ]; do
             if [ "${extra_opts[$i]}" == "-p" ] && [ $((i+1)) -lt ${#extra_opts[@]} ] && \
-               { [[ "${extra_opts[$((i+1))]}" == maxexecutiontime=* ]] || [[ "${extra_opts[$((i+1))]}" == db.tracing=* ]]; }; then
+               { [[ "${extra_opts[$((i+1))]}" == maxexecutiontime=* ]] || [[ "${extra_opts[$((i+1))]}" == db.tracing=* ]] || [[ "${extra_opts[$((i+1))]}" == tiga.openloop.* ]]; }; then
                 i=$((i+2))
             else
                 filtered_opts+=("${extra_opts[$i]}")
