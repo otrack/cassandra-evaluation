@@ -23,7 +23,7 @@ for p in $(seq 1 100); do
     header="$header,p$p"
 done
 header="$header,failed,fast_path,medium_path,slow_path,ephemeral_path"
-header="$header,direct_commit,sync_commit,direct_commit_miss,sync_commit_miss,arrival_seen,arrival_missed,arrival_max_miss_us"
+header="$header,direct_commit,sync_commit,direct_commit_miss,sync_commit_miss,arrival_seen,arrival_missed,arrival_max_miss_us,arrival"
 echo "$header"
 
 # Process a single file, outputting one CSV row
@@ -32,13 +32,16 @@ process_file() {
     local filename
     filename=$(basename "$file")
 
-    # Parse filename: <protocol>_<nodes>_r<rate>_sw_<timestamp>[_<DC>].dat
-    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_r([0-9]+)_sw_([0-9]+)(_([A-Za-z]+))?\.dat$ ]]; then
+    # Parse filename: <protocol>_<nodes>_r<rate>_sw[_<arrival>_]<timestamp>[_<DC>].dat
+    if [[ "$filename" =~ ^([^_]+)_([0-9]+)_r([0-9]+)_sw_([a-z]+_)?([0-9]+)(_([A-Za-z]+))?\.dat$ ]]; then
         local protocol="${BASH_REMATCH[1]}"
         local nodes="${BASH_REMATCH[2]}"
         local rate="${BASH_REMATCH[3]}"
-        local timestamp="${BASH_REMATCH[4]}"
-        local dc="${BASH_REMATCH[6]}"
+        local arrival="${BASH_REMATCH[4]}"
+        arrival="${arrival%_}"
+        arrival="${arrival:-deterministic}"
+        local timestamp="${BASH_REMATCH[5]}"
+        local dc="${BASH_REMATCH[7]}"
     else
         error "Ignoring ${filename}"
         return
@@ -63,7 +66,7 @@ process_file() {
     # other columns from the log file itself.
     awk -v protocol="$protocol" -v nodes="$nodes" \
         -v workload="sw" -v dc="$dc" -v rate="$rate" \
-        -v n_lats="$n_lats" '
+        -v arrival="$arrival" -v n_lats="$n_lats" '
     BEGIN {
         # first pass through lats via FNR == NR file
         n = 0
@@ -134,9 +137,10 @@ process_file() {
             if (rank > n_lats) rank = n_lats
             row = row "," (rank in lat ? lat[rank] : "unknown")
         }
-        row = row ",0,NA,NA,NA,NA," \
+        row = row ",0,NA,NA,NA,NA" \
               "," dc_count "," sc_count "," dcm_count "," scm_count \
-              "," arr_seen "," arr_missed "," arr_max
+              "," arr_seen "," arr_missed "," arr_max \
+              "," arrival
         print row
     }
     ' <(printf '%s\n' "$lats" | sed '/^$/d') "$file"

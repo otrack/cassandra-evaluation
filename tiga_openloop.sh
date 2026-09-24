@@ -75,6 +75,8 @@ else
     rates=${rates_override:-"1000 8000"}
 fi
 s=${s_override:-3}
+arrival=$(config openloop_arrival)
+arrival=${arrival:-deterministic}
 
 mkdir -p ${LOGDIR}/tiga_openloop
 mkdir -p ${RESULTSDIR}
@@ -117,10 +119,10 @@ if [ "$dry_run" -eq 0 ]; then
 
     do_create_and_load=1
     for rate in ${rates}; do
-        log "Open-loop run: rate=${rate} txn/s for ${seconds}s (s=${s}, nodesperdc=$(config nodesperdc), fieldlength=$(config fieldlength))"
+        log "Open-loop run: rate=${rate} txn/s for ${seconds}s (s=${s}, nodesperdc=$(config nodesperdc), fieldlength=$(config fieldlength), arrival=${arrival})"
 
         ts=$(date +%Y%m%d%H%M%S%N)
-        output_file="${LOGDIR}/tiga_openloop/tiga_${nodes}_r${rate}_sw_${ts}.dat"
+        output_file="${LOGDIR}/tiga_openloop/tiga_${nodes}_r${rate}_sw_${arrival}_${ts}.dat"
 
         # nthreads=1: a single YCSB worker per DC.  Its init() (the first to
         # observe tiga.openloop.rate) starts the native pump; swap() then
@@ -132,6 +134,7 @@ if [ "$dry_run" -eq 0 ]; then
             -p tiga.openloop.rate=${rate} \
             -p tiga.openloop.sec=${seconds} \
             -p tiga.openloop.recordCount=${records} \
+            -p tiga.openloop.arrival=${arrival} \
             -p swap.s=${s}
 
         do_create_and_load=0

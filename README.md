@@ -105,6 +105,7 @@ that are defined in the file `exp.config`:
 | `fieldlength` | Bytes per record (default 4000). The swap workload moves `S` of these in each direction, so varying `S` changes coordination cost and data volume together; this separates them. Changing it also changes the dataset size, and so the memory pressure on the replicas. |
 | `records` / `threads` / `maxexecutiontime` | The YCSB record count, client threads and duration of a run (in seconds). |
 | `nodesperdc` | The number of replicas per datacenter. |
+| `openloop_arrival` | Arrival process of the Tiga open-loop pump (`tiga_openloop.sh`): `deterministic` (greedy/regular spacing, the default) or `poisson` (exponential inter-arrival, coefficient of variation 1). Recorded per-run in the `arrival` CSV column of `tiga_openloop.csv`. |
 | `accord.*` / `cockroachdb.*` | Per-system tuning knobs (e.g., ephemeral reads, lease holder placement). |
 
 ### Running on real machines
