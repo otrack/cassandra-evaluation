@@ -10,8 +10,8 @@ tiga_start_cluster() {
     local num_dcs=$1
     local protocol=$2
     local nodes_per_dc=${3:-$(config nodesperdc)}
-    local probe_lateness=$(config probe_lateness)
-    local probe_trace_cap=$(config probe_lateness_trace_cap)
+    local probe_lateness=$(config tiga.probe_lateness)
+    local probe_trace_cap=$(config tiga.probe_lateness_trace_cap)
     [ -z "$probe_lateness" ] && probe_lateness=0
     [ -z "$probe_trace_cap" ] && probe_trace_cap=500
 
