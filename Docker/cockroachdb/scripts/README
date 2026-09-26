@@ -1,0 +1,27 @@
+# CockroachDB Scripts
+
+Those scripts are written to use CockroachDB's internal benchmarks to test the YCSB workload.
+
+They add simulated geo-latencies.
+
+## How to use
+
+You can use them with the main script:
+```
+./cockroach_ycsb.sh -h
+```
+This will write the usage that show every parameters
+
+## Default Settings
+
+By default it launches 3 nodes using docker, called roach1 roach2 and roach3 as well as a docker network called roachnet and a volume per node.
+
+The default workload is workload C that runs for 5 minutes.
+
+To change the latencies just change the configuration file.
+
+
+## Output
+
+The output is captured and put into roach_i.log
+This is to 
