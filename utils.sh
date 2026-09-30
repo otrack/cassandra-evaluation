@@ -270,11 +270,27 @@ dpull() {
     if infra_is_real; then
         ctx=$(infra_context "${idx}")
     fi
-    if [ -n "${ctx}" ]; then
-        docker --context "${ctx}" pull "${image}"
-    else
-        docker pull "${image}"
+    local -a base=(docker)
+    [ -n "${ctx}" ] && base=(docker --context "${ctx}")
+
+    if "${base[@]}" pull "${image}"; then
+        return 0
     fi
+
+    # A custom image distributed via push_local_image lives only on the
+    # node's own daemon -- no registry to pull it from at all, so the pull
+    # above always fails for it. That is fine as long as it is already
+    # there; only an image that is genuinely missing should abort the run.
+    if "${base[@]}" image inspect "${image}" >/dev/null 2>&1; then
+        # log() writes to stdout, which pull_images' caller redirects to
+        # /dev/null to keep parallel pull progress quiet -- send this one to
+        # stderr instead, or the only thing a caller ever sees is Docker's
+        # own scary "pull access denied" line with no explanation that it
+        # was expected and already handled.
+        log "dpull: '${image}' is not pullable, but already present on this daemon -- using it as is" >&2
+        return 0
+    fi
+    return 1
 }
 
 start_container() {
@@ -660,6 +676,74 @@ pull_images() {
         exit 1
     fi
     log "All Docker images pulled successfully."
+}
+
+# push_local_image <local_image> [as <remote_tag>]
+#
+# Distributes a locally built image to every node's Docker daemon directly,
+# without a registry round-trip: `docker save` once to a local tarball, then
+# `docker load` it into each node's daemon over the same SSH-backed context
+# dpull/pull_images already use. Save/load preserve layer IDs, so any layers
+# the custom build shares with an image already pulled there (base OS, JDK,
+# etc.) are recognized and skipped -- only the build's own top layers
+# actually transfer.
+#
+# The remote_tag is what exp.config's *_image keys should be pointed at
+# (see cmd_use_image in deploy.sh); it defaults to local_image itself.
+push_local_image() {
+    if [ $# -lt 1 ] || { [ -n "${2:-}" ] && [ "${2}" != "as" ]; } || { [ "${2:-}" = "as" ] && [ -z "${3:-}" ]; }; then
+        error "usage: push_local_image <local_image> [as <remote_tag>]"
+        return 2
+    fi
+    local local_image=$1
+    local remote_tag=${3:-${1}}
+
+    docker image inspect "${local_image}" >/dev/null 2>&1 || {
+        error "push_local_image: no local image '${local_image}' (build it first)"
+        return 1
+    }
+    if [ "${remote_tag}" != "${local_image}" ]; then
+        docker tag "${local_image}" "${remote_tag}" || return 1
+    fi
+
+    if ! infra_is_real; then
+        log "push_local_image: simulation infra shares this daemon already; '${remote_tag}' is ready to use"
+        return 0
+    fi
+
+    local tarfile
+    tarfile=$(mktemp)
+    # shellcheck disable=SC2064 -- tarfile is fixed now, expand it immediately
+    trap "rm -f '${tarfile}'" RETURN
+    log "Saving '${remote_tag}' to a local tarball..."
+    docker save -o "${tarfile}" "${remote_tag}" || {
+        error "push_local_image: failed to save '${remote_tag}'"
+        return 1
+    }
+
+    log "Pushing '${remote_tag}' to $(infra_all_indices | wc -l) node(s)..."
+    local -a pids=() nodes=()
+    local idx
+    for idx in $(infra_all_indices); do
+        (
+            local ctx
+            ctx=$(infra_context "${idx}")
+            docker --context "${ctx}" load -i "${tarfile}" >/dev/null
+        ) &
+        pids+=($!)
+        nodes+=("${idx}")
+    done
+
+    local i rc=0
+    for i in "${!pids[@]}"; do
+        if wait "${pids[$i]}"; then
+            log "Image ready on node ${nodes[$i]}"
+        else
+            error "Failed to push image to node ${nodes[$i]}"
+            rc=1
+        fi
+    done
+    return ${rc}
 }
 
 get_location() {

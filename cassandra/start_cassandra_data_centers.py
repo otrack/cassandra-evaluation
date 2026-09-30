@@ -94,7 +94,7 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                         # SIGKILLed with exit 137.
                         container_gb = memory_gb * 4/5
                         xmx_gb = max(1, round(container_gb * 0.6))
-                        xms_gb = min(2, xmx_gb)
+                        xms_gb = xmx_gb  # FOR TESTING: pin xms to xmx instead of min(2, xmx_gb)
                         cassandra_xms = f"{xms_gb}g"
                         cassandra_xmx = f"{xmx_gb}g"
                         break
