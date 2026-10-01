@@ -42,6 +42,7 @@ scripts=(
     "latency_throughput.sh"
     "cdf.sh"
     "closed_economy.sh"
+    "calvin_ubench.sh"
     "conflict.sh"
     "swap.sh"
     "ycsb.sh"
@@ -57,7 +58,7 @@ FAULT_TOLERANCE_PROTOCOLS="accord cockroachdb-opt"
 
 protocols_for() {
     case "$1" in
-        closed_economy.sh|swap.sh) echo "${TRANSACTIONAL_PROTOCOLS}" ;;
+        closed_economy.sh|calvin_ubench.sh|swap.sh) echo "${TRANSACTIONAL_PROTOCOLS}" ;;
         fault_tolerance.sh)        echo "${FAULT_TOLERANCE_PROTOCOLS}" ;;
         *)                         echo "${DEFAULT_PROTOCOLS}" ;;
     esac
