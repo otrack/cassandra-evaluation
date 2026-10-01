@@ -48,7 +48,9 @@ cassandra_create_usertable() {
     local container="${first_city}1"
 
     local create_table_command=""
-    if [ "$workload_type" == "site.ycsb.workloads.ClosedEconomyWorkload" ]; then
+    if [ "$workload_type" == "site.ycsb.workloads.ClosedEconomyWorkload" ] || \
+       [ "$workload_type" == "site.ycsb.workloads.CalvinWorkload" ]; then
+        # Numeric counters (the transactions update them with += 1)
         create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 INT)"
     elif [ "$workload_type" == "site.ycsb.workloads.ConflictWorkload" ]; then
         create_table_command="CREATE TABLE IF NOT EXISTS ycsb.usertable (y_id VARCHAR PRIMARY KEY, field0 VARCHAR)"
