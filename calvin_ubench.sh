@@ -73,7 +73,7 @@ mkdir -p ${RESULTSDIR}/calvin_ubench
 workload_type="site.ycsb.workloads.CalvinWorkload"
 workload="calvin"
 # The transactional systems whose YCSB client implements checkAndIncrement
-protocols="accord cockroachdb tiga"
+protocols="accord cockroachdb-opt tiga"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi

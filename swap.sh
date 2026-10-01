@@ -51,7 +51,7 @@ mkdir -p ${RESULTSDIR}/swap
 
 workload_type="site.ycsb.workloads.SwapWorkload"
 workload="sw"
-protocols="accord cockroachdb"
+protocols="accord cockroachdb-opt tiga"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
