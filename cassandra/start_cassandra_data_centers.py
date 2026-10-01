@@ -35,7 +35,7 @@ def wait_for_nodetool_status(containers, expected_count, timeout=120):
     while time.time() - start_time < timeout:
         for c in container_list:
             try:
-                res = c.exec_run("env JVM_OPTS='' nodetool status")
+                res = c.exec_run("nodetool status")
                 if res.exit_code == 0:
                     output = res.output.decode('utf-8', errors='ignore')
                     un_count = sum(1 for line in output.splitlines() if re.match(r'^\s*UN\b', line))
@@ -69,41 +69,79 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
 
     nano_cpus = None
     mem_limit = None
+    vcpus = None
+    cassandra_xms = "2g"
     cassandra_xmx = "4g"
+    cassandra_direct = None
     machine = infra.machine_shape()
     ephemeral_read_enabled = config.get("accord.ephemeral_read", "true")
     if machine:
+        vm_csv = os.path.join(os.path.dirname(__file__), '..', 'vm.csv')
+        shape = None
         try:
-            with open(os.path.join(os.path.dirname(__file__), '..', 'gcp.csv'), 'r') as gcp_file:
-                gcp_reader = csv.DictReader(gcp_file)
-                for gcp_row in gcp_reader:
-                    if gcp_row['name'] == machine:
-                        nano_cpus = int(float(gcp_row['vcpus']) * 1e9)
-                        memory_gb = float(gcp_row['memory'])
-                        mem_limit = int(memory_gb * 1024 * 1024 * 1024 * 4/5)
-
-                        # The heap has to fit *inside* the container, with room
-                        # to spare: the cgroup also has to hold off-heap
-                        # structures, direct buffers, thread stacks, metaspace
-                        # and page cache, and none of that is charged to the
-                        # heap.  Sizing it from memory_gb rather than from the
-                        # container's own limit put -Xmx8g inside a 6.4 GiB
-                        # cgroup, so the JVM was entitled to more than the
-                        # kernel would give it: GC pauses reached 20.7s
-                        # (nodetool gcstats) and the containers were eventually
-                        # SIGKILLed with exit 137.
-                        container_gb = memory_gb * 4/5
-                        xmx_gb = max(1, round(container_gb * 0.6))
-                        xms_gb = min(2, xmx_gb)
-                        cassandra_xms = f"{xms_gb}g"
-                        cassandra_xmx = f"{xmx_gb}g"
+            with open(vm_csv, 'r') as vm_file:
+                for row in csv.DictReader(vm_file):
+                    if row['name'] == machine:
+                        shape = row
                         break
         except FileNotFoundError:
-            debug(f"gcp.csv not found, no resource limits applied for machine '{machine}'")
+            debug(f"vm.csv not found: {vm_csv}")
+            exit(-1)
 
-    if 'cassandra_xms' not in locals():
-        cassandra_xms = "2g"
-        cassandra_xmx = "4g"
+        # infra/simulation/provider.sh:infra_resource_limits() treats an unknown
+        # machine as a hard error, so this path has to as well.  Carrying on
+        # with a guess is how the loop variable used to leak: a `machine` absent
+        # from vm.csv left the last row bound, and its vcpus were handed to
+        # -XX:ActiveProcessorCount while the heap fell back to its default.
+        if shape is None:
+            debug(f"Machine type '{machine}' not found in {vm_csv}")
+            exit(-1)
+
+        vcpus = shape['vcpus']
+        nano_cpus = int(float(vcpus) * 1e9)
+        memory_gb = float(shape['memory'])
+        mem_limit = int(memory_gb * 1024 * 1024 * 1024 * 4/5)
+
+        # The heap has to fit *inside* the container, with room to spare: the
+        # cgroup also has to hold off-heap structures, direct buffers, thread
+        # stacks, metaspace and page cache, and none of that is charged to the
+        # heap.  Sizing it from memory_gb rather than from the container's own
+        # limit put -Xmx8g inside a 6.4 GiB cgroup, so the JVM was entitled to
+        # more than the kernel would give it: GC pauses reached 20.7s (nodetool
+        # gcstats) and the containers were eventually SIGKILLed with exit 137.
+        container_gb = memory_gb * 4/5
+        xmx_gb = max(1, round(container_gb * 0.6))
+
+        # -Xms == -Xmx.  conf/jvm-server.options carries -XX:+AlwaysPreTouch, so
+        # the heap is committed and faulted in while the node starts -- which we
+        # already wait out, see log_pattern below -- instead of growing from 2g
+        # across the measurement window, which maxexecutiontime keeps short
+        # enough that the growth would land inside it.
+        cassandra_xms = f"{xmx_gb}g"
+        cassandra_xmx = f"{xmx_gb}g"
+
+        # cassandra-env.sh sizes MaxDirectMemorySize in calculate_heap_sizes()
+        # from `free -m`, which is not cgroup-aware: it reads the *host's* RAM
+        # and, on anything above ~62 GiB, saturates at its hardcoded 15872M cap
+        # no matter what this container's limit is.  Heap plus that ceiling then
+        # sits within a few GiB of mem_limit, leaving nothing for metaspace,
+        # thread stacks, Netty and page cache.  Pin it to a share of the
+        # container instead; the env var wins over the calculated value.
+        cassandra_direct = f"{max(1, round(container_gb * 0.15))}g"
+
+    # Cassandra's own channel for extra JVM flags: cassandra-env.sh appends
+    # JVM_EXTRA_OPTS on its last line, so these win over the -Xms/-Xmx that
+    # script derives for itself.  JVM_OPTS must NOT be set here: bin/cassandra.in.sh
+    # appends the jvm*.options files to whatever JVM_OPTS already holds rather
+    # than resetting it, and bin/nodetool runs `java $JVM_OPTS -Xmx128m`, so an
+    # inherited -Xms larger than 128m makes every nodetool invocation die with
+    # "Initial heap size set to a larger value than the maximum heap size".
+    jvm_env = {
+        "JVM_EXTRA_OPTS": " -Xms" + cassandra_xms + " -Xmx" + cassandra_xmx +
+                          (" -XX:ActiveProcessorCount=" + vcpus if vcpus else ""),
+    }
+    if cassandra_direct:
+        jvm_env["MAX_DIRECT_MEMORY_SIZE"] = cassandra_direct
 
     containers = []
     log_pattern = r"Startup complete"
@@ -135,8 +173,7 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                     tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
                     ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                     environment={
-                        "JVM_EXTRA_OPTS" : " -Xms"+cassandra_xms+" -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else ""),
-                        "JVM_OPTS" : " -Xms"+cassandra_xms+" -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else ""),
+                        **jvm_env,
                         "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
                         "CASSANDRA_SEEDS": "" if is_first_node else seeds_str,
                         "CASSANDRA_CLUSTER_NAME": "TestCluster",
