@@ -2,36 +2,30 @@
 """
 Plotting script for the Calvin micro-benchmark (Thomson et al., SIGMOD 2012, Figure 5).
 
-This script generates a latency chart in the style of the closed economy one:
-- X-axis: the protocols, in two sections separated by a dashed line, one per contention
-  index (high contention, CI=0.01, then low contention, CI=0.0001)
-- Y-axis: latency in milliseconds (log scale)
-- For each protocol and contention index, a vertical range from the best to the worst
-  latency, with markers for the median and the P90, P95 and P99 percentiles
-
-Only the runs with the given number of clients per site are shown (by default, the largest
-one in the results).  The latencies are averaged across the data centers.
+This script generates one latency vs throughput graph per contention index (high
+contention, CI=0.01, then low contention, CI=0.0001), side by side:
+- X-axis: throughput (transactions/sec), summed over the data centers
+- Y-axis: median latency (milliseconds), averaged over the data centers
+- One line per protocol, one point per number of clients per site, showing the
+  "hockey stick" effect where latency increases sharply and throughput
+  plateaus/degrades as the system saturates
 """
 
 import sys
 
-import numpy as np
 import pandas as pd
 
-from closed_economy import (LATENCY_METRICS, MARKER_METRICS, METRIC_COLUMNS, METRIC_MARKS,
-                            estimate_row_latency, get_row_best_worst_latency, percentile_value)
 from colors import (get_protocol_color, load_protocol_aliases, load_protocol_colors,
-                    make_protocol_legend, sort_protocols_for_plotting)
+                    make_protocol_legend, sort_protocols_for_legend, sort_protocols_for_plotting)
 from utils import drop_unsound_rows
 
 # Contention indexes of Figure 5, from high to low contention
 DEFAULT_CI_ORDER = [0.01, 0.0001]
-CI_LABELS = {0.01: "high contention (CI=0.01)", 0.0001: "low contention (CI=0.0001)"}
-SECTION_GAP = 1.0  # gap between two sections (holds the dashed separator)
+CI_LABELS = {0.01: "High contention (CI=0.01)", 0.0001: "Low contention (CI=0.0001)"}
 
 
 def usage_and_exit():
-    print("Usage: python calvin_ubench.py results.csv output.tex [threads]")
+    print("Usage: python calvin_ubench.py results.csv output.tex")
     sys.exit(1)
 
 
@@ -59,128 +53,92 @@ def main():
 
     results_csv = sys.argv[1]
     output_tikz = sys.argv[2]
-    try:
-        threads = int(sys.argv[3]) if len(sys.argv) >= 4 else None
-    except ValueError:
-        threads = None
 
     df = pd.read_csv(results_csv)
     df = drop_unsound_rows(df, label='calvin_ubench')
 
     # The transaction of the micro-benchmark
     df = df[df['op'] == 'tx-readmodifywrite'].copy()
+
+    df['clients_int'] = df['clients'].apply(safe_int)
+    df['tput_f'] = df['tput'].apply(safe_float)
+    df['median_latency_ms'] = df['p50'].apply(safe_float)
+    # The contention index is stored in the conflict_rate column
+    df['ci'] = df['conflict_rate'].apply(safe_float)
+    df = df[df['ci'].notnull() & df['clients_int'].notnull()
+            & df['tput_f'].notnull() & df['median_latency_ms'].notnull()]
     if df.empty:
         print("Invalid data")
         sys.exit(1)
 
-    df['clients_int'] = df['clients'].apply(safe_int)
-    # The contention index is stored in the conflict_rate column
-    df['ci'] = df['conflict_rate'].apply(safe_float)
-    df = df[df['ci'].notnull()]
-    if threads is None:
-        threads = int(df['clients_int'].dropna().max())
-    df = df[df['clients_int'] == threads].copy()
-    if df.empty:
-        print(f"No data for {threads} clients per site")
-        sys.exit(1)
-
-    df['median_latency_ms'] = df.apply(estimate_row_latency, axis=1)
-    df[['best_latency_ms', 'worst_latency_ms']] = df.apply(
-        get_row_best_worst_latency, axis=1, result_type='expand'
-    )
-    for percentile in (90, 95, 99):
-        df[f"p{percentile}_ms"] = df.apply(
-            lambda row, p=percentile: percentile_value(row, p), axis=1
-        )
-
-    protocols = sort_protocols_for_plotting(df['protocol'].unique().tolist())
+    raw_protocols = list(dict.fromkeys(df['protocol'].tolist()))
+    protocol_order = sort_protocols_for_legend(raw_protocols)
+    # For plotting, Accord is drawn last so its curve overwrites others.
+    plot_order = sort_protocols_for_plotting(raw_protocols)
     present = sorted(df['ci'].unique().tolist(), reverse=True)
     ci_values = [ci for ci in DEFAULT_CI_ORDER if ci in present] + \
                 [ci for ci in present if ci not in DEFAULT_CI_ORDER]
 
-    # Average each metric across the data centers, per protocol and contention index
+    # For each contention index and protocol, one (throughput, latency) point per
+    # number of clients: the throughput is summed over the data centers and the
+    # latency averaged over them.
     data = {}
     for ci in ci_values:
-        for proto in protocols:
+        for proto in raw_protocols:
             subset = df[(df['protocol'] == proto) & (df['ci'] == ci)]
-            metrics = {}
-            for metric in LATENCY_METRICS:
-                vals = subset[METRIC_COLUMNS[metric]].dropna()
-                metrics[metric] = float(np.mean(vals)) if not vals.empty else None
-            data[(ci, proto)] = metrics
-
-    vals = [v for m in data.values() for v in m.values() if v is not None and v > 0]
-    ymin = min(vals) / 1.5 if vals else 1
-    ymax = max(vals) * 1.5 if vals else 100
+            points = []
+            for clients in sorted(subset['clients_int'].unique().tolist()):
+                rows = subset[subset['clients_int'] == clients]
+                tput = rows['tput_f'].sum()
+                lat = rows['median_latency_ms'].mean()
+                if tput > 0 and lat > 0:
+                    points.append((tput, lat))
+            data[(ci, proto)] = points
 
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
 
-    n = len(protocols)
-    section_width = n + SECTION_GAP
-    xmin = -0.5
-    xmax = (len(ci_values) - 1) * section_width + n - 0.5
-
     with open(output_tikz, 'w') as f:
         f.write("\\begin{figure}[t]\n")
         f.write("  \\centering\n")
-        f.write(make_protocol_legend(protocols, protocol_colors,
+        f.write(make_protocol_legend(protocol_order, protocol_colors,
                                      protocol_aliases=protocol_aliases))
-        f.write("  \\begin{tikzpicture}[scale=.6]\n")
-        f.write("    \\begin{axis}[\n")
+        f.write("  \\vspace{1mm}\\begin{tikzpicture}[scale=.7]\n")
+        f.write("    \\begin{groupplot}[\n")
+        f.write(f"      group style={{group size={len(ci_values)} by 1, horizontal sep=1.5cm}},\n")
         f.write("      width=7cm, height=5.5cm,\n")
-        f.write("      grid=major,\n")
-        f.write("      ymajorgrids=true,\n")
-        f.write("      ymode=log,\n")
-        f.write("      ylabel={Latency (ms)},\n")
-        f.write(f"      ymin={ymin:.2f}, ymax={ymax:.2f},\n")
-        f.write(f"      xmin={xmin:.2f}, xmax={xmax:.2f},\n")
-        f.write("      xtick=\\empty,\n")
-        f.write("      clip=false\n")
+        f.write("      grid=both,\n")
+        f.write("      xlabel={Throughput (tx/sec)},\n")
+        f.write("      tick label style={font=\\small},\n")
+        f.write("      label style={font=\\small},\n")
+        f.write("      title style={font=\\small},\n")
+        f.write("      scaled x ticks=false,\n")
         f.write("    ]\n\n")
 
         for section, ci in enumerate(ci_values):
-            base = section * section_width
-            for proto_idx, proto in enumerate(protocols):
-                col = get_protocol_color(proto, protocol_colors, proto_idx)
-                metrics = data[(ci, proto)]
-                avg_val = metrics.get("avg")
-                if avg_val is None:
+            points = [p for proto in raw_protocols for p in data[(ci, proto)]]
+            xmax = max((t for t, _ in points), default=1000) * 1.1
+            ymax = max((l for _, l in points), default=100) * 1.2
+            f.write("      \\nextgroupplot[\n")
+            f.write(f"        title={{{ci_label(ci)}}},\n")
+            if section == 0:
+                f.write("        ylabel={Median Latency (ms)},\n")
+            f.write(f"        xmin=0, xmax={xmax:.2f},\n")
+            f.write(f"        ymin=0, ymax={ymax:.2f},\n")
+            f.write("      ]\n")
+            for idx, proto in enumerate(plot_order):
+                if not data[(ci, proto)]:
                     continue
-                x = base + proto_idx
-                best_val = metrics.get("best")
-                worst_val = metrics.get("worst")
-                if best_val is not None and worst_val is not None and best_val <= avg_val <= worst_val:
-                    f.write(f"      \\addplot+[mark=-, color={col}, solid, forget plot] coordinates {{\n")
-                    f.write(f"        ({x:.2f}, {best_val:.2f})\n")
-                    f.write(f"        ({x:.2f}, {worst_val:.2f})\n")
-                    f.write("      };\n\n")
-                for metric in MARKER_METRICS:
-                    val = metrics.get(metric)
-                    if val is None:
-                        continue
-                    f.write(f"      \\addplot+[only marks, mark={METRIC_MARKS[metric]}, color={col},"
-                            f" mark options=fill={col}, forget plot] coordinates {{\n")
-                    f.write(f"        ({x:.2f}, {val:.2f})\n")
-                    f.write("      };\n\n")
+                col = get_protocol_color(proto, protocol_colors, idx)
+                f.write(f"      \\addplot+[{col}, mark=*, mark options=fill={col}, thick] table {{\n")
+                for tput, lat in data[(ci, proto)]:
+                    f.write(f"        {tput:.2f} {lat:.2f}\n")
+                f.write("      };\n\n")
 
-            # Section label below the axis
-            label_x = base + (n - 1) / 2.0
-            f.write(f"      \\node[font=\\tiny, anchor=north] at (axis cs:{label_x:.2f}, {ymin:.2f})"
-                    f" {{{ci_label(ci)}}};\n")
-
-            # Dashed separator between two sections
-            if section + 1 < len(ci_values):
-                sep_x = base + n - 0.5 + SECTION_GAP / 2.0
-                f.write(f"      \\draw[dashed, gray] (axis cs:{sep_x:.2f}, {ymin:.2f})"
-                        f" -- (axis cs:{sep_x:.2f}, {ymax:.2f});\n")
-
-        f.write("    \\end{axis}\n")
+        f.write("    \\end{groupplot}\n")
         f.write("  \\end{tikzpicture}\n")
-        f.write(f"  \\caption{{\\label{{fig:calvin-ubench-latency}} Calvin micro-benchmark"
-                f" ({threads} cl/site)."
-                " The markers indicate the median ($\\CIRCLE$), P90 ($\\blacktriangle$),"
-                " P95 ($\\blacksquare$), and P99 ($\\blacklozenge$) percentiles.}\n")
+        f.write("  \\caption{\\label{fig:calvin-ubench-latency} Calvin micro-benchmark:"
+                " latency vs throughput, increasing the number of clients per site.}\n")
         f.write("\\end{figure}\n")
 
     print(f"Generated {output_tikz}")
