@@ -79,20 +79,31 @@ def profiler_jvm_opts():
     - async_profiler.unsafe_mode allows `nodetool profile execute`, the only
       entry point that accepts arbitrary async-profiler options.
     - accord.debug_execution creates the DebugExecutor/DebugTask hooks that
-      emit the AccordExecutorCriticalSection and Run_<store> spans.  Its
-      slow-task/slow-lock warnings (accord.debug_execution_report) end up in
-      the node logs; they cost two thread-CPU-time reads per task.
+      emit the executor critical-section, queued and per-task run spans.
+      accord.debug_execution_report additionally logs slow-task/slow-lock
+      warnings and keeps latency histograms; it is off unless exp.config asks
+      for it, because it reads the thread CPU clock around every task and
+      lock hold, partly while the executor lock is held.  The spans do not
+      depend on it.
     - DebugNonSafepoints makes async-profiler's stack traces accurate for
       inlined frames.
     """
     if not profiler_enabled():
         return ""
-    report = str(config.get("accord.debug_execution_report", "true")).strip().lower()
+    report = str(config.get("accord.debug_execution_report", "false")).strip().lower()
     return (" -Dcassandra.async_profiler.enabled=true"
             " -Dcassandra.async_profiler.unsafe_mode=true"
             " -Daccord.debug_execution=true"
             f" -Daccord.debug_execution_report={report}"
             " -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints")
+
+def extra_jvm_opts():
+    """Free-form JVM flags for the Cassandra nodes, e.g. the -D switches that
+    toggle individual optimisations for A/B runs.  CASSANDRA_JVM_OPTS in the
+    environment overrides exp.config for one run."""
+    value = os.environ.get("CASSANDRA_JVM_OPTS", config.get("cassandra.jvm_opts", ""))
+    value = str(value).strip()
+    return " " + value if value else ""
 
 def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     network_name = config["network_name"]
@@ -174,7 +185,7 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     jvm_env = {
         "JVM_EXTRA_OPTS": " -Xms" + cassandra_xms + " -Xmx" + cassandra_xmx +
                           (" -XX:ActiveProcessorCount=" + vcpus if vcpus else "") +
-                          profiler_jvm_opts(),
+                          profiler_jvm_opts() + extra_jvm_opts(),
     }
     if cassandra_direct:
         jvm_env["MAX_DIRECT_MEMORY_SIZE"] = cassandra_direct

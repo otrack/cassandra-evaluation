@@ -109,7 +109,8 @@ that are defined in the file `exp.config`:
 | `accord.*` / `cockroachdb.*` | Per-system tuning knobs (e.g., ephemeral reads, lease holder placement). |
 | `cassandra.profiler` | Record an async-profiler JFR on every Cassandra node during the YCSB run phase, including the spans emitted by Accord's `DebugExecution` (see [Profiling Cassandra nodes](#profiling-cassandra-nodes)). `CASSANDRA_PROFILER=1` overrides it for a single run. |
 | `cassandra.profiler.options` | async-profiler options for that capture (default `event=ctimer,interval=1ms,wall=10ms,lock=1ms`); `jfr` and `file=` are appended. `CASSANDRA_PROFILER_OPTIONS` overrides it. |
-| `accord.debug_execution_report` | While profiling, also log `DebugExecution`'s slow-task and slow-lock warnings to the node logs. |
+| `cassandra.jvm_opts` | Extra JVM flags for the Cassandra nodes, e.g. the `-D` switches that turn individual Accord optimisations off for A/B runs. `CASSANDRA_JVM_OPTS` overrides it for a single run. |
+| `accord.debug_execution_report` | While profiling, also log `DebugExecution`'s slow-task and slow-lock warnings and keep its latency histograms (default `false`). It reads the thread CPU clock around every task and lock hold, which cost ~4% of executor CPU in the conflict runs; the spans are recorded either way. |
 
 ### Running on real machines
 
@@ -198,7 +199,9 @@ Adding a system amounts to providing these, then registering its protocols in `p
 ### Profiling Cassandra nodes
 
 To find the source of latency outliers, the Cassandra replicas can record an
-[async-profiler](https://github.com/async-profiler/async-profiler) JFR of each run:
+[async-profiler](https://github.com/async-profiler/async-profiler) JFR of each run
+(see [docs/accord-profiling.md](docs/accord-profiling.md) for what we have found with it, and for the
+scripts under `cassandra/jfr-analysis` that analyse the recordings):
 
 ``` bash
 CASSANDRA_PROFILER=1 ./cdf.sh --protocols=accord

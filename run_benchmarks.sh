@@ -285,6 +285,19 @@ run_ycsb() {
         java_opts+=" -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms"
     fi
 
+    # By default the Java driver (4.x) completes a PREPARE only once every
+    # node has prepared the statement too, so the first execution of each
+    # statement waits for a round trip to the farthest replica.  The client
+    # opens a fresh session for the measured phase, after warmup, and prepares
+    # lazily, so that round trip lands in the first measured operations: on
+    # AWS it lifted the first-interval maximum by ~225-325ms (Osasco's 709ms
+    # against ~380ms server-side).  The client only routes to its local node,
+    # which prepares the statement itself; any other node re-prepares on an
+    # UNPREPARED response.
+    if [ "${ycsb_client}" == "cassandra-cql" ]; then
+        java_opts+=" -Ddatastax-java-driver.advanced.prepared-statements.prepare-on-all-nodes=false"
+    fi
+
     echo -e "JAVA_OPTS=${java_opts}\n\
 YCSB_COMMAND=${action}\n\
 YCSB_BINDING=${ycsb_client}\n\
