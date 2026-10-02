@@ -249,8 +249,8 @@ Every provider must define all of the following.
 | `infra_net_device <idx>` | Interface name used by `tc` commands on node `idx`. |
 | `infra_open_ports <port>…` | Allow the given TCP ports between the benchmark machines. |
 | `infra_stage_file <idx> <local> <remote>` | Make `<local>` available at `<remote>` on node `idx`'s filesystem and echo the path to use in a `-v` bind-mount. Simulation echoes `<local>` unchanged. |
-| `infra_resource_limits [idx]` | The `--cpus`/`--memory` flags for a container on node `idx`. Simulation derives them from `machine=` and `gcp.csv`; a real provider returns nothing, because the machine *is* the limit. |
-| `infra_machine_shape` | The provider's instance type for `machine=`. This is where `gcp.csv` shape names get translated for other clouds. |
+| `infra_resource_limits [idx]` | The `--cpus`/`--memory` flags for a container on node `idx`. Simulation derives them from `machine=` and `vm.csv`; a real provider returns nothing, because the machine *is* the limit. |
+| `infra_machine_shape` | The provider's instance type for `machine=`. This is where `vm.csv` shape names get translated for other clouds. |
 | `infra_rewrite_docker_args <container> <args…>` | Last chance to alter the `docker run` arguments — where a real provider swaps the bridge network for `--network host` and injects `--add-host` entries. Echoes the arguments back, space-separated. Only called when `infra_is_real` succeeds, so simulation never pays for it. |
 
 `utils.sh` builds three helpers on top of the contract, which providers inherit

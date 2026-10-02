@@ -63,6 +63,7 @@ process_file() {
         tput          = "unknown"
         is_conflict   = 0
         is_swap       = 0
+        is_calvin     = 0
     }
 
     # Extract clients: handle both "-threads 64" and "-threads=64"
@@ -96,6 +97,16 @@ process_file() {
     is_swap && conflict_rate == "NA" && /swap\.s=/ {
         if (match($0, /swap\.s=[0-9]+/)) {
             conflict_rate = substr($0, RSTART + 7, RLENGTH - 7)
+        }
+    }
+
+    # Detect CalvinWorkload
+    /site\.ycsb\.workloads\.CalvinWorkload/ { is_calvin = 1 }
+
+    # Extract calvin.contentionindex (only once)
+    is_calvin && conflict_rate == "NA" && /calvin\.contentionindex=/ {
+        if (match($0, /calvin\.contentionindex=[0-9]+(\.[0-9]+)?([eE]-?[0-9]+)?/)) {
+            conflict_rate = substr($0, RSTART + 23, RLENGTH - 23)
         }
     }
 

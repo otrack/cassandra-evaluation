@@ -101,7 +101,7 @@ that are defined in the file `exp.config`:
 | `network_name` | The Docker bridge network the containers are attached to. |
 | `latency_simulation` | Enable the emulation of the WAN delays with tc. |
 | `infra` | Where the containers run: `simulation` (the local Docker daemon, the default) or a cloud provider such as `gcp`. See [infra/README.md](infra/README.md). |
-| `machine` | The GCP machine type whose CPU/memory limits are applied to each container (see `gcp.csv`). |
+| `machine` | The VM shape whose CPU/memory limits are applied to each container — a GCE machine type or an EC2 instance type, looked up in `vm.csv` (regenerate with `tools/gen_vm_csv.py`). |
 | `fieldlength` | Bytes per record (default 4000). The swap workload moves `S` of these in each direction, so varying `S` changes coordination cost and data volume together; this separates them. Changing it also changes the dataset size, and so the memory pressure on the replicas. |
 | `records` / `threads` / `maxexecutiontime` | The YCSB record count, client threads and duration of a run (in seconds). |
 | `nodesperdc` | The number of replicas per datacenter. |
@@ -153,6 +153,7 @@ the results into a plot or a table.
 | `conflict.sh` | Plots the average latency across all clients when changing a fixed conflict rate for updates. |
 | `closed_economy.sh` | Runs a closed economy workload (banking transactions) on transaction-supporting protocols, varying the number of nodes. |
 | `swap.sh` | Runs a workload that atomically swaps S items per transaction, with S varying from 3 to 8. Unlike the other experiments it deploys **3 nodes per datacentre** by default (`--nodesperdc=N` to change), so the replica set spans a realistic multi-node DC. |
+| `calvin_ubench.sh` | Runs the micro-benchmark of Calvin (SIGMOD'12, Section 6.2, Figure 5) on `accord`, `cockroachdb` and `tiga`: each transaction reads 10 records, one of them from a small pool of hot records, and increments their counters if their sum is non-negative. Under high (contention index 0.01, i.e. 100 hot records) and low (0.0001) contention, with 1M records, it increases the number of clients per site by a factor of 1.5 (16, 24, 36, ..., up to 2048) until both latency and throughput degrade, and plots one latency vs throughput (hockey stick) graph per contention index. `--ci=LIST`, `--clients=LIST`, `--max-clients=N` and `--records=N` change these settings; `--test` uses 20000 records and 2 to 10 clients per site. |
 | `latency_throughput.sh` | Generates a classical latency vs throughput graph by increasing the number of clients by a factor of 2 (1, 2, 4, 8, ..., up to 128) to demonstrate the hockey stick effect (where latency increases and throughput plateaus/degrades as the system saturates). |
 | `fault_tolerance.sh` | Injects a 400ms slowdown then a crash on the first replica, and plots the throughput over time (mimics Figure 6 of the CockroachDB SIGMOD'20 paper). |
 | `ephemeral.sh` | Illustrates the benefit of activating ephemeral reads in Accord, as a LaTeX table of the speed-up over workloads A to D. |
@@ -163,7 +164,7 @@ It selects the protocols per experiment, since not all of them apply everywhere:
 | experiments | protocols |
 | --- | --- |
 | default | `accord`, `cockroachdb-opt`, `swiftpaxos-paxos`, `swiftpaxos-epaxos`, `swiftpaxos-curp`, `cassandra-paxos`, `tiga` |
-| `closed_economy.sh`, `swap.sh` | `accord`, `cockroachdb-opt`, `tiga` — the transactional workloads need multi-key atomicity |
+| `closed_economy.sh`, `calvin_ubench.sh`, `swap.sh` | `accord`, `cockroachdb-opt`, `tiga` — the transactional workloads need multi-key atomicity |
 | `fault_tolerance.sh` | `accord`, `cockroachdb-opt` |
 
 `--protocols=LIST` on `run-all.sh` overrides all of them. `ephemeral.sh` ignores
@@ -177,7 +178,9 @@ Each experiment accepts the following flags:
 
 The protocols are listed in `protocols.csv`, together with the color and the name used for them in
 the plots. Not all of them are meaningful for every experiment: the transactional ones
-(`closed_economy.sh`, `swap.sh`) only run Accord and CockroachDB, and `ephemeral.sh` only runs Accord.
+(`closed_economy.sh`, `swap.sh`) only run Accord and CockroachDB, `calvin_ubench.sh` runs Accord,
+CockroachDB and Tiga (the systems whose YCSB client implements its transaction), and `ephemeral.sh`
+only runs Accord.
 
 The results of the benchmarks are PDF plots created under `results/`.
 The logs of a benchmark execution are created under `logs/<experiment>/`.

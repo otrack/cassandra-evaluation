@@ -590,14 +590,14 @@ compute_test_machine() {
     local actual_mem_gb
     actual_mem_gb=$(awk "BEGIN { printf \"%.6f\", ${actual_mem_kb} / 1048576 }")
 
-    local gcp_csv="${DIR}/gcp.csv"
-    if [ ! -f "$gcp_csv" ]; then
-        error "gcp.csv not found: ${gcp_csv}"
+    local vm_csv="${DIR}/vm.csv"
+    if [ ! -f "$vm_csv" ]; then
+        error "vm.csv not found: ${vm_csv}"
         return 1
     fi
 
     # Find the best spec s where actual_mem_gb <= s.g * total_nodes
-    # gcp.csv columns: $1=name, $2=vcpus, $3=memory(GB)
+    # vm.csv columns: $1=name, $2=vcpus, $3=memory(GB)
     local machine
     machine=$(awk -F',' -v c="$actual_cpus" -v g="$actual_mem_gb" -v k="$total_nodes" '
         NR>1 && ($3+0)*k <= g+0 {
@@ -608,10 +608,10 @@ compute_test_machine() {
             }
         }
         END { print best }
-    ' "$gcp_csv")
+    ' "$vm_csv")
 
     if [ -z "$machine" ]; then
-        error "No suitable machine spec found in gcp.csv for ${actual_cpus} CPUs and ${actual_mem_gb}GB memory with ${total_nodes} nodes (${num_dcs} DCs x ${nodes_per_dc} nodes/DC)"
+        error "No suitable machine spec found in vm.csv for ${actual_cpus} CPUs and ${actual_mem_gb}GB memory with ${total_nodes} nodes (${num_dcs} DCs x ${nodes_per_dc} nodes/DC)"
         return 1
     fi
 

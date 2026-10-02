@@ -80,7 +80,7 @@ infra_stage_file() {
 
 infra_resource_limits() {
     # Several containers share one machine here, so each is capped to the
-    # CPU/memory of the `machine` entry in exp.config, looked up in gcp.csv.
+    # CPU/memory of the `machine` entry in exp.config, looked up in vm.csv.
     local machine
     machine=$(config machine)
 
@@ -89,17 +89,17 @@ infra_resource_limits() {
         return 0
     fi
 
-    local gcp_csv="${DIR}/gcp.csv"
-    if [ ! -f "$gcp_csv" ]; then
-        error "gcp.csv not found: ${gcp_csv}"
+    local vm_csv="${DIR}/vm.csv"
+    if [ ! -f "$vm_csv" ]; then
+        error "vm.csv not found: ${vm_csv}"
         echo ""
         return 1
     fi
 
     local row
-    row=$(awk -F',' -v name="$machine" 'NR>1 && $1==name {print $0; exit}' "$gcp_csv")
+    row=$(awk -F',' -v name="$machine" 'NR>1 && $1==name {print $0; exit}' "$vm_csv")
     if [ -z "$row" ]; then
-        error "Machine type '${machine}' not found in gcp.csv"
+        error "Machine type '${machine}' not found in vm.csv"
         echo ""
         return 1
     fi

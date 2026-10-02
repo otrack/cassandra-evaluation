@@ -95,7 +95,7 @@ by the Docker **client** and shipped as environment variables over the API, so
 it works unchanged against a remote daemon.
 
 **Machine sizing inverts.** `get_resource_limits` and `compute_test_machine`
-translate a `gcp.csv` row into `--cpus`/`--memory` flags so that several
+translate a `vm.csv` row into `--cpus`/`--memory` flags so that several
 containers on one laptop approximate distinct VMs. In real mode the VM *is* the
 machine: the shape becomes a provisioning input rather than a container flag,
 and `--test` (which rewrites `machine=` in `exp.config`) is a
@@ -117,7 +117,7 @@ an EC2 VM's is typically `ens5`. The device must become infra-provided.
 | Container network | user-defined bridge | `--network host` |
 | Inter-node addressing | bridge IP + Docker DNS | VM IP + injected `/etc/hosts` |
 | Latency | `tc`/netem | real WAN |
-| Container CPU/mem | `--cpus`/`--memory` from `gcp.csv` | the VM shape |
+| Container CPU/mem | `--cpus`/`--memory` from `vm.csv` | the VM shape |
 | `tc` device | `eth0` | `ens4` / `ens5` / … |
 
 **Why `--network host` in real mode.** With one node per VM, host networking
@@ -182,8 +182,8 @@ Every `infra/*.sh` must define exactly these functions. Nothing outside
 | `infra_net_device <idx>` | Primary interface name for `tc` (`eth0` simulated, `ens4` GCE, `ens5` EC2). |
 | `infra_open_ports <port>…` | Allow the given TCP ports between the benchmark machines (firewall rules / security-group ingress). No-op in simulation. |
 | `infra_stage_file <idx> <local> <remote>` | Make a local file available at `<remote>` on node `idx`'s filesystem (`scp`). In simulation, echo `<local>` unchanged. Echoes the path to use in `-v`. |
-| `infra_resource_limits <idx>` | The `--cpus`/`--memory` flags for a container on node `idx`. Today's `gcp.csv` lookup in simulation; empty in real mode. |
-| `infra_machine_shape` | The provider's instance type for `$(config machine)` — used by `infra_provision`, and the place where `gcp.csv` names are translated (e.g. `e2-highcpu-8` → EC2 `c5.2xlarge`). |
+| `infra_resource_limits <idx>` | The `--cpus`/`--memory` flags for a container on node `idx`. Today's `vm.csv` lookup in simulation; empty in real mode. |
+| `infra_machine_shape` | The provider's instance type for `$(config machine)` — used by `infra_provision`, and the place where `vm.csv` names are translated (e.g. `e2-highcpu-8` → EC2 `c5.2xlarge`). |
 
 Two orchestration helpers built on top, in `utils.sh` rather than per provider:
 
@@ -301,7 +301,7 @@ start_container() {
         docker_args+=(--network host $(host_aliases))
         docker_args=("${docker_args[@]/--network container:*/--network container:${nearby}}")
     fi
-    # resource limits now come from the infra, not directly from gcp.csv
+    # resource limits now come from the infra, not directly from vm.csv
     docker_args+=($(infra_resource_limits "$idx"))
 
     d "$cname" run "${docker_args[@]}" --log-opt max-size=10m --log-opt max-file=3 \
@@ -436,7 +436,7 @@ therefore also clear `tc qdisc del dev <dev> root` on every host.
 # infra/gcp.sh
 infra_is_real() { return 0; }
 
-infra_machine_shape() { config machine; }        # gcp.csv names are already GCE shapes
+infra_machine_shape() { config machine; }        # vm.csv names are already GCE shapes
 
 infra_provision() {
     local n=$1 shape; shape=$(infra_machine_shape)
@@ -490,12 +490,12 @@ infra_teardown() {
 
 `infra/aws.sh` is the same shape with `aws ec2 run-instances` /
 `describe-instances`, a security group instead of a firewall rule, `ens5` as
-the device, and a `gcp.csv`-shape → EC2-instance-type translation in
+the device, and a `vm.csv`-shape → EC2-instance-type translation in
 `infra_machine_shape`. `infra/simulation.sh` implements the same ten functions
 trivially: `infra_is_real` returns 1, `infra_context`/`infra_host_ip` echo
 nothing, `infra_provision`/`infra_open_ports`/`infra_teardown` are no-ops,
 `infra_stage_file` echoes its local path, `infra_net_device` echoes `eth0`, and
-`infra_resource_limits` keeps today's `gcp.csv` lookup — i.e. the current
+`infra_resource_limits` keeps today's `vm.csv` lookup — i.e. the current
 `get_resource_limits` body moves there verbatim.
 
 The ports to open are each protocol's `${pref}_get_port` plus its internal
