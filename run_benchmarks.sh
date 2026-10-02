@@ -7,6 +7,7 @@ source ${DIR}/utils.sh
 source ${DIR}/swiftpaxos/cluster.sh
 source ${DIR}/cassandra/cluster.sh
 source ${DIR}/cassandra/ycsb.sh
+source ${DIR}/cassandra/profiler.sh
 source ${DIR}/cockroachdb/cluster.sh
 source ${DIR}/cockroachdb/ycsb.sh
 source ${DIR}/tiga/cluster.sh
@@ -379,6 +380,17 @@ run_benchmark() {
         exit 1
     fi
 
+    # Bracket the run phase only: the capture should cover what YCSB measures.
+    local profile=0
+    local profile_tag profile_dir
+    if [ "${pref}" == "cassandra" ] && cassandra_profiler_enabled; then
+        profile=1
+        profile_tag=$(basename "${output_file%.dat}")
+        # Outside the experiment's own log directory, which the parsers glob.
+        profile_dir="${LOGDIR}/profiles/$(basename "$(dirname "${output_file}")")"
+        cassandra_profiler_start "${num_dcs}" "${nodes_per_dc}" "${profile_tag}"
+    fi
+
     for i in $(seq 1 1 ${num_dcs});
     do
         location=$(get_location $i ${LOCATIONS_FILE})
@@ -411,6 +423,10 @@ run_benchmark() {
     done
     if [ ${stuck} -gt 0 ]; then
         error "${stuck} YCSB client(s) had to be stopped after ${client_timeout}s"
+    fi
+
+    if [ ${profile} -eq 1 ]; then
+        cassandra_profiler_stop "${num_dcs}" "${nodes_per_dc}" "${profile_tag}" "${profile_dir}"
     fi
 
     local fast_path_script="${DIR}/${pref}/${pref}_fast_path.sh"

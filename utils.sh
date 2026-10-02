@@ -12,7 +12,7 @@ config() {
     fi
     local key=$1
     local val
-    val=$(cat ${CONFIG_FILE} | grep -E "^${key}=" | cut -d= -f2)
+    val=$(cat ${CONFIG_FILE} | grep -E "^${key}=" | cut -d= -f2-)
     if [ -z "$val" ] && [ "$key" == "nodesperdc" ]; then
         val=1
     fi
@@ -568,7 +568,7 @@ compute_test_machine() {
     # owns a machine, and rewriting machine= would desynchronise exp.config
     # from the shapes already provisioned.
     if infra_is_real; then
-        log "Test mode: keeping machine spec '$(config machine)' (provisioned by $(config infra))"
+        log "Test mode: keeping machine spec '$(infra_machine_shape)' (provisioned by $(config infra))"
         return 0
     fi
     if [ -z "$num_dcs" ] || ! [[ "$num_dcs" =~ ^[0-9]+$ ]] || [ "$num_dcs" -le 0 ]; then

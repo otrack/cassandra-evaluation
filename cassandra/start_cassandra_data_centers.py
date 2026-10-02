@@ -62,6 +62,38 @@ def build_extra_hosts(nodes_per_dc):
                 aliases[f"{dc_name}{k}"] = ip
     return aliases
 
+def profiler_enabled():
+    # CASSANDRA_PROFILER in the environment overrides exp.config for one run,
+    # as in cassandra/profiler.sh.
+    value = os.environ.get("CASSANDRA_PROFILER", config.get("cassandra.profiler", 0))
+    return str(value).strip().lower() in ("1", "true")
+
+def profiler_jvm_opts():
+    """JVM flags that let cassandra/profiler.sh capture a JFR of the run
+    phase, including the spans DebugExecution emits.
+
+    - async_profiler.enabled makes Cassandra load the async-profiler bundled
+      in its lib/ (the jar's embedded native library) at startup.  Span's
+      natives live in that library, so no separate -agentpath is attached.
+      Spans taken before profiling starts are simply 0 and are dropped.
+    - async_profiler.unsafe_mode allows `nodetool profile execute`, the only
+      entry point that accepts arbitrary async-profiler options.
+    - accord.debug_execution creates the DebugExecutor/DebugTask hooks that
+      emit the AccordExecutorCriticalSection and Run_<store> spans.  Its
+      slow-task/slow-lock warnings (accord.debug_execution_report) end up in
+      the node logs; they cost two thread-CPU-time reads per task.
+    - DebugNonSafepoints makes async-profiler's stack traces accurate for
+      inlined frames.
+    """
+    if not profiler_enabled():
+        return ""
+    report = str(config.get("accord.debug_execution_report", "true")).strip().lower()
+    return (" -Dcassandra.async_profiler.enabled=true"
+            " -Dcassandra.async_profiler.unsafe_mode=true"
+            " -Daccord.debug_execution=true"
+            f" -Daccord.debug_execution_report={report}"
+            " -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints")
+
 def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     network_name = config["network_name"]
     is_real = infra.is_real()
@@ -105,6 +137,12 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
         cassandra_xms = "2g"
         cassandra_xmx = "4g"
 
+    jvm_opts = " -Xms"+cassandra_xms+" -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else "")
+    # Server-only flags go in JVM_EXTRA_OPTS alone: cassandra-env.sh appends
+    # it to JVM_OPTS for the daemon, whereas JVM_OPTS itself is also read by
+    # every nodetool/cqlsh run with docker exec.
+    jvm_extra_opts = jvm_opts + profiler_jvm_opts()
+
     containers = []
     log_pattern = r"Startup complete"
     seeds_str = ",".join([f"{locations[idx][2]}1" for idx in range(num_dcs)])
@@ -135,8 +173,8 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                     tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
                     ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
                     environment={
-                        "JVM_EXTRA_OPTS" : " -Xms"+cassandra_xms+" -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else ""),
-                        "JVM_OPTS" : " -Xms"+cassandra_xms+" -Xmx"+cassandra_xmx+(" -XX:ActiveProcessorCount="+gcp_row['vcpus'] if machine and 'gcp_row' in locals() else ""),
+                        "JVM_EXTRA_OPTS" : jvm_extra_opts,
+                        "JVM_OPTS" : jvm_opts,
                         "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
                         "CASSANDRA_SEEDS": "" if is_first_node else seeds_str,
                         "CASSANDRA_CLUSTER_NAME": "TestCluster",

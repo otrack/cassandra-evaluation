@@ -107,6 +107,9 @@ that are defined in the file `exp.config`:
 | `nodesperdc` | The number of replicas per datacenter. |
 | `openloop_arrival` | Arrival process of the Tiga open-loop pump (`tiga_openloop.sh`): `deterministic` (greedy/regular spacing, the default) or `poisson` (exponential inter-arrival, coefficient of variation 1). Recorded per-run in the `arrival` CSV column of `tiga_openloop.csv`. |
 | `accord.*` / `cockroachdb.*` | Per-system tuning knobs (e.g., ephemeral reads, lease holder placement). |
+| `cassandra.profiler` | Record an async-profiler JFR on every Cassandra node during the YCSB run phase, including the spans emitted by Accord's `DebugExecution` (see [Profiling Cassandra nodes](#profiling-cassandra-nodes)). `CASSANDRA_PROFILER=1` overrides it for a single run. |
+| `cassandra.profiler.options` | async-profiler options for that capture (default `event=ctimer,interval=1ms,wall=10ms,lock=1ms`); `jfr` and `file=` are appended. `CASSANDRA_PROFILER_OPTIONS` overrides it. |
+| `accord.debug_execution_report` | While profiling, also log `DebugExecution`'s slow-task and slow-lock warnings to the node logs. |
 
 ### Running on real machines
 
@@ -188,6 +191,67 @@ exposes the same interface to `run_benchmarks.sh`, namely a `cluster.sh` definin
 `<system>_cleanup_cluster`, plus a `<system>_fast_path.sh` script reporting the ratio of operations
 that took the fast, medium and slow paths.
 Adding a system amounts to providing these, then registering its protocols in `protocols.csv`.
+
+### Profiling Cassandra nodes
+
+To find the source of latency outliers, the Cassandra replicas can record an
+[async-profiler](https://github.com/async-profiler/async-profiler) JFR of each run:
+
+``` bash
+CASSANDRA_PROFILER=1 ./cdf.sh --protocols=accord
+# or with other events
+CASSANDRA_PROFILER=1 CASSANDRA_PROFILER_OPTIONS='event=ctimer,interval=1ms,wall=5ms,alloc=1m,lock=100us' ./swap.sh --protocols=accord
+```
+
+The nodes are then started with `cassandra.async_profiler.enabled`,
+`cassandra.async_profiler.unsafe_mode` and `accord.debug_execution`, and every
+`run_benchmark` call profiles exactly its YCSB run phase (warm-up included, load
+excluded). Each capture lands in
+`logs/profiles/<experiment>/<run>_<node>.jfr`, next to but outside the
+experiment's own logs. Besides the stack samples, the JFR contains `profiler.Span`
+events (with a `tag` field) that `DebugExecution` emits through `one.profiler.Span`:
+`AccordExecutorCriticalSection` (executor lock hold time), `Run_<command store>`
+(task execution) and `Wait_<command store>` (queueing; not emitted until
+`DebugTask.onRunning` ends `waitingAtSpan` rather than `runningAtSpan`). They exist only in
+JFR, which is why the capture format is fixed.
+
+``` bash
+jfr print --events profiler.Span logs/profiles/cdf/<run>_<node>.jfr
+```
+
+`DebugExecution` uses `Span.endIfProfiled`, which records a span only if the
+profiler sampled the thread while the span was open. The spans are therefore a
+sample biased towards long ones: good for finding examples of outliers, together
+with the stacks taken inside them, but not for counting them. The `DebugExecution`
+warnings (tasks or lock holds over 100ms) and histograms in the node logs do the
+counting. `ctimer` only samples threads that are on-CPU, so it is `wall` that keeps
+the spans spent waiting. With `wall=10ms`, roughly 90% of 200ms waits are kept and
+fewer of the short ones. Adding `nobatch` keeps nearly all of them, at the cost of a
+much larger file, and its wall samples are then recorded as `jdk.ExecutionSample`,
+mixed in with the CPU samples.
+
+The image must be built (`ant artifacts`) from a Cassandra branch whose `lib/`
+bundles an async-profiler that provides `one.profiler.Span` (4.5 does).
+If a node's log mentions `one/profiler/Span`, the jar in the image does not provide it.
+`jfr summary <file>.jfr` lists the event types recorded; JDK Mission Control
+shows the spans on a per-thread timeline, alongside the samples.
+
+Adding `jfrsync=profile` to the options merges the JDK's own Flight Recorder
+events into the same file: safepoints and VM operations (`jdk.SafepointBegin`,
+`jdk.ExecuteVMOperation`), ZGC page allocations with the memory each one had to
+commit (`jdk.ZPageAllocation`), and GC pauses. Each node's GC log (`gc.log*`, which
+also records the time taken to reach each safepoint) is saved next to its capture as
+`<run>_<node>.gc.tgz`.
+
+CPU samples come from `ctimer` by default: per-thread CPU-time timers, which need
+no privileges. The spans and wall-clock samples need none either. The cost is that the
+stacks stop at the kernel boundary. For kernel frames too, use `event=cpu`
+(`perf_events`); this needs the host to set `kernel.perf_event_paranoid=1`, plus
+`kernel.kptr_restrict=0` to symbolise them. These are host-wide sysctls; a container
+cannot change them. `--cap-add PERFMON` is no substitute: the image's entrypoint
+runs `exec gosu cassandra`, which clears the capability before the JVM starts.
+Each run logs the host's values, and warns if the options ask for `perf_events` but the
+host does not allow them.
 
 ## Demo
 
