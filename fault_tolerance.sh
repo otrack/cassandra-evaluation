@@ -71,11 +71,14 @@ trap restore_settings EXIT
 if [ "$test_run" -eq 1 ]; then
     nodes=3
     duration_minutes=3
+    WARMUP_EXECUTION_TIME=0
     original_machine=$(config machine)
     compute_test_machine "${nodes}"
 fi
 
 duration_s=$((duration_minutes * 60))
+# The measured timeline starts once the warm-up is over.
+warmup_s=$(warmup_execution_time)
 slowdown_s=$((duration_s / 4))
 slowdown_end_s=$((duration_s / 8))
 crash_s=$((3 * duration_s / 8))
@@ -151,7 +154,7 @@ if [ "$dry_run" -eq 0 ]; then
                 -p maxexecutiontime=${duration_s} \
                 -p status.interval=${status_interval} \
 		-p conflict.theta=${theta} -p updateproportion=1.0 -p readproportion=0.0 -p conflict.shift=$(( (records / num_dcs) * (i - 1) ))\
-		-p warmupexecutiontime=10 &
+		-p warmupexecutiontime=${warmup_s} &
         done
 
 	# 2. Fetch the leader in the background (as it can be long...)
@@ -208,9 +211,9 @@ python3 ${DIR}/fault_tolerance.py \
     "${LOGDIR}/fault_tolerance" \
     ${protocols} \
     "${duration_s}" \
-    "$((slowdown_s - 10))" \
-    "$((slowdown_s + slowdown_end_s - 10))" \
-    "$((slowdown_s + slowdown_end_s + crash_s - 10))" \
+    "$((slowdown_s - warmup_s))" \
+    "$((slowdown_s + slowdown_end_s - warmup_s))" \
+    "$((slowdown_s + slowdown_end_s + crash_s - warmup_s))" \
     "${RESULTSDIR}/fault_tolerance.tex"
 
 pdflatex -interaction nonstopmode -jobname=fault_tolerance -output-directory=${RESULTSDIR} \

@@ -72,6 +72,13 @@ emulate_latency() {
     fi
 }
 
+# Warm-up of the YCSB run phase, in seconds: WARMUP_EXECUTION_TIME if set
+# (the --test mode of the experiment scripts sets it to 0), else exp.config.
+warmup_execution_time() {
+    local value="${WARMUP_EXECUTION_TIME:-$(config warmupexecutiontime)}"
+    echo "${value:-0}"
+}
+
 run_ycsb() {
     if [ $# -lt 13 ]; then
 	echo "Usage: $0 <action> <workload_type> <workload> <hosts> <port> <recordcount> <operation_count> <protocol> <replication_factor> <output_file> <threads> <container_name> <network_adapter> [extra_ycsb_options]"
@@ -118,6 +125,11 @@ run_ycsb() {
             fi
         done
         extra_opts=("${filtered_opts[@]}")
+    fi
+
+    # Warm up every run phase, unless the caller sets its own warm-up.
+    if [ "$action" == "run" ] && ! printf '%s\n' "${extra_opts[@]}" | grep -q '^warmupexecutiontime='; then
+        extra_opts+=("-p" "warmupexecutiontime=$(warmup_execution_time)")
     fi
 
     if ! printf '%s\n' "$protocol" | grep -wF -q -e "cockroachdb" -e "accord"; then
@@ -420,7 +432,7 @@ run_benchmark() {
         run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}"
     done
     
-    # A run is bounded by maxexecutiontime, so a client still alive well past
+    # A run is bounded by its warm-up plus maxexecutiontime, so a client still alive well past
     # that is stuck, not slow.  Cap the wait so one wedged client cannot hang
     # the whole sweep; the others keep their results and the parser drops the
     # missing one.  The load phase above is deliberately left unbounded: it is

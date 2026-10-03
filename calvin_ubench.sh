@@ -122,6 +122,7 @@ if [ "$test_run" -eq 1 ]; then
     # The hot pool has 1/CI = 10000 records at CI=0.0001, and the cold pool
     # must still provide 9 records per transaction.
     records=20000
+    WARMUP_EXECUTION_TIME=0
     min_clients=2
     max_clients=10
     compute_test_machine "${nodes}"

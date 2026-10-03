@@ -81,6 +81,7 @@ fi
 
 if [ "$test_run" -eq 1 ]; then
     dc_counts="3"
+    WARMUP_EXECUTION_TIME=0
     nodes=3
     records=1000
     compute_test_machine "${nodes}"

@@ -57,10 +57,9 @@ records=$(config records)
 threads=$(config threads)
 ops_per_thread=0
 
-warmexecutiontime=30
 if [ "$test_run" -eq 1 ]; then
     records=1000
-    warmexecutiontime=0
+    WARMUP_EXECUTION_TIME=0
     original_machine=$(config machine)
     original_maxexecutiontime=$(config maxexecutiontime)
     restore_test_settings() {
@@ -96,7 +95,7 @@ if [ "$dry_run" -eq 0 ]; then
 	        do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	        ts=$(date +%Y%m%d%H%M%S%N)
 	        output_file="${LOGDIR}/cdf/${p}_${num_dcs}_${w}_${ts}.dat"
-	        run_benchmark ${p} ${c} ${num_dcs} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing} -p maxexecutiontime=${maxexecutiontime} -p warmupexecutiontime=${warmexecutiontime}
+	        run_benchmark ${p} ${c} ${num_dcs} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing} -p maxexecutiontime=${maxexecutiontime}
 	        do_create_and_load=0
 	        count=$((count+1))
 	    done

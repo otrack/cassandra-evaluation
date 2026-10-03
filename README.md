@@ -94,7 +94,7 @@ that are defined in the file `exp.config`:
 | Parameter | Meaning |
 | --- | --- |
 | `debug` | Print the debug traces of the scripts. |
-| `ycsb.client.timeout` | Seconds to wait for a YCSB client container to terminate before stopping it (default 300). A run is bounded by `maxexecutiontime`, so a client alive well past it is wedged, not slow; without this one stuck client hangs the whole sweep. The load phase is not bounded by it. |
+| `ycsb.client.timeout` | Seconds to wait for a YCSB client container to terminate before stopping it (default 300). A run is bounded by `warmupexecutiontime` plus `maxexecutiontime`, so a client alive well past it is wedged, not slow; without this one stuck client hangs the whole sweep. The load phase is not bounded by it. |
 | `ycsb_cpus` | CPUs granted to each YCSB client container, and the value the client JVM reports as `availableProcessors()`. The Cassandra binding sizes its connection pools from that number, so leaving it unbounded makes a run on a 96-core host behave differently from one on a laptop. Empty = unbounded. |
 | `ycsb_debug_logger` | Raise one YCSB client logger to `debug`, e.g. `site.ycsb.db.CassandraCQLClient`, so that exceptions the client swallows are printed with their stack trace. Empty disables it; `YCSB_DEBUG_LOGGER=<logger>` overrides it for a single run. |
 | `*_image` | The Docker image used for each system; all of them are pulled before an experiment starts. |
@@ -104,6 +104,7 @@ that are defined in the file `exp.config`:
 | `machine` | The VM shape whose CPU/memory limits are applied to each container — a GCE machine type or an EC2 instance type, looked up in `vm.csv` (regenerate with `tools/gen_vm_csv.py`). |
 | `fieldlength` | Bytes per record (default 4000). The swap workload moves `S` of these in each direction, so varying `S` changes coordination cost and data volume together; this separates them. Changing it also changes the dataset size, and so the memory pressure on the replicas. |
 | `records` / `threads` / `maxexecutiontime` | The YCSB record count, client threads and duration of a run (in seconds). |
+| `warmupexecutiontime` | Seconds every YCSB run phase executes the workload before measuring; the warm-up's operations are discarded (default 30). It comes on top of `maxexecutiontime`. The `--test` mode of the experiment scripts sets it to 0, and `WARMUP_EXECUTION_TIME` overrides it for one run. |
 | `nodesperdc` | The number of replicas per datacenter. |
 | `openloop_arrival` | Arrival process of the Tiga open-loop pump (`tiga_openloop.sh`): `deterministic` (greedy/regular spacing, the default) or `poisson` (exponential inter-arrival, coefficient of variation 1). Recorded per-run in the `arrival` CSV column of `tiga_openloop.csv`. |
 | `accord.*` / `cockroachdb.*` | Per-system tuning knobs (e.g., ephemeral reads, lease holder placement). |

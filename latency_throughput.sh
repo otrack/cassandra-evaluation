@@ -61,6 +61,7 @@ if [ "$test_run" -eq 1 ]; then
     }
     trap restore_test_settings EXIT
     nodes=3
+    WARMUP_EXECUTION_TIME=0
     records=1000
     compute_test_machine "${nodes}"
     sed -i "s/^maxexecutiontime=.*/maxexecutiontime=10/" "${CONFIG_FILE}"
