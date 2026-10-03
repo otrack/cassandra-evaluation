@@ -54,6 +54,18 @@ cat > /etc/security/limits.d/99-bench.conf <<'EOF'
 EOF
 
 sysctl -w vm.max_map_count=1048575 >/dev/null
-echo "vm.max_map_count=1048575" > /etc/sysctl.d/99-bench.conf
+
+# Let cassandra/profiler.sh use event=cpu (perf_events, kernel-frame-capable)
+# instead of just the default event=ctimer. These sysctls are host-wide, not
+# namespaced, so a container cannot set them itself -- the default ctimer
+# needs neither and works regardless of these.
+sysctl -w kernel.perf_event_paranoid=1 >/dev/null
+sysctl -w kernel.kptr_restrict=0 >/dev/null
+
+cat > /etc/sysctl.d/99-bench.conf <<'EOF'
+vm.max_map_count=1048575
+kernel.perf_event_paranoid=1
+kernel.kptr_restrict=0
+EOF
 
 touch "${MARKER}"

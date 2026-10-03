@@ -80,7 +80,7 @@ if [ "$dry_run" -eq 0 ]; then
     do
         # clean prior logs
         rm -f ${LOGDIR}/cdf/*${p}*
-        
+
         do_create_and_load=1
         total=$(( $(echo ${workloads} | wc -w) * $(echo ${threads} | wc -w) ))
         count=0

@@ -501,40 +501,114 @@ infra_rewrite_docker_args() {
 }
 
 infra_open_ports() {
-    local region regions p sg peer_ip peer_ips ranges
+    local region regions peer_ips
 
     regions=$(state_nodes | while read -r n; do _aws_region_of "$(state_get "${n}" zone)"; done | sort -u)
 
     # Peer traffic travels over the public IP (infra_host_ip -- cross-region
     # private IPs aren't routable, see docs/aws-deployment.md §2.4), so a
     # same-region --source-group rule would never actually match it; scope
-    # ingress to the deployment's own peer IPs instead. One combined
-    # --ip-permissions call per (region, port) rather than one per
-    # (region, port, peer), so this stays cheap as node count grows.
+    # ingress to the deployment's own peer IPs instead.
     peer_ips=$(state_nodes | while read -r n; do state_get "${n}" ssh_host; done | sort -u)
-    ranges=""
-    for peer_ip in ${peer_ips}; do
-        [ -z "${peer_ip}" ] && continue
-        [ -n "${ranges}" ] && ranges="${ranges},"
-        ranges="${ranges}{CidrIp=${peer_ip}/32}"
-    done
-    if [ -z "${ranges}" ]; then
+    if [ -z "${peer_ips}" ]; then
         error "aws: no peer addresses recorded; run './deploy.sh provision' first"
         return 1
     fi
 
+    log "aws: opening protocol ports in $(echo "${regions}" | wc -w) region(s)"
+    local -a pids=() names=()
     for region in ${regions}; do
-        sg=$(_aws_find_security_group_id "${region}")
-        if [ -z "${sg}" ] || [ "${sg}" = "None" ]; then
-            error "aws: no security group in ${region}; run './deploy.sh provision' first"
-            return 1
-        fi
-        for p in "$@"; do
-            aws ec2 authorize-security-group-ingress --region "${region}" --group-id "${sg}" \
-                --ip-permissions "IpProtocol=tcp,FromPort=${p},ToPort=${p},IpRanges=[${ranges}]" \
-                >/dev/null 2>&1
-        done
+        (
+            local sg existing perms_str
+            sg=$(_aws_find_security_group_id "${region}")
+            if [ -z "${sg}" ] || [ "${sg}" = "None" ]; then
+                error "aws: no security group in ${region}; run './deploy.sh provision' first"
+                exit 1
+            fi
+
+            # One read call to see what's already open, then at most one
+            # write call for whatever's missing -- AWS rejects the *entire*
+            # --ip-permissions call if even one of its rules already exists,
+            # which would otherwise silently drop a genuinely new peer (e.g.
+            # one that just replaced a reclaimed node) rather than adding it
+            # alongside the unchanged ones. python3 (already required) does
+            # the diff in one shot rather than one CLI call per port -- text
+            # output renders a port and its CIDRs as separate rows with no
+            # reliable way to pair them back up.
+            #
+            # Also revoke CIDRs that are no longer peers (e.g. a reclaimed
+            # spot instance's old IP): a reclaim-and-replace cycle otherwise
+            # leaves the old rule in place forever, and each cycle adds a
+            # full new set of per-port rules on top -- a handful of cycles
+            # is enough to hit AWS's default 60-rules-per-group quota, after
+            # which *every* future authorize call fails outright (for every
+            # region, since they all run the same diff) and every
+            # subsequently replaced node is left unreachable with no
+            # visible error.
+            existing=$(aws ec2 describe-security-groups --region "${region}" --group-ids "${sg}" \
+                --query 'SecurityGroups[0].IpPermissions' --output json 2>/dev/null)
+            local add_str revoke_str
+            { read -r add_str; read -r revoke_str; } < <(python3 -c '
+import json, sys
+existing = json.loads(sys.argv[1] or "[]")
+ports, peers = sys.argv[2].split(), set(sys.argv[3].split())
+have_tcp = {(perm.get("FromPort"), r.get("CidrIp"))
+        for perm in existing if perm.get("IpProtocol") == "tcp"
+        for r in perm.get("IpRanges", [])}
+have_icmp = {r.get("CidrIp")
+        for perm in existing if perm.get("IpProtocol") == "icmp"
+        for r in perm.get("IpRanges", [])}
+add_blocks, revoke_blocks = [], []
+for p in ports:
+    have_ips = {ip for (fp, ip) in have_tcp if fp == int(p)}
+    missing = [ip for ip in peers if ip + "/32" not in have_ips]
+    if missing:
+        ranges = ",".join("{CidrIp=%s/32}" % ip for ip in missing)
+        add_blocks.append("IpProtocol=tcp,FromPort=%s,ToPort=%s,IpRanges=[%s]" % (p, p, ranges))
+    stale = [ip[:-3] for ip in have_ips if ip[:-3] not in peers]
+    if stale:
+        ranges = ",".join("{CidrIp=%s/32}" % ip for ip in stale)
+        revoke_blocks.append("IpProtocol=tcp,FromPort=%s,ToPort=%s,IpRanges=[%s]" % (p, p, ranges))
+# swiftpaxos master pings every replica it registers as a liveness check
+# (see swiftpaxos/cluster.sh) -- allow ICMP between peers too, not just the
+# TCP protocol ports. -1/-1 means all ICMP types/codes.
+missing_icmp = [ip for ip in peers if ip + "/32" not in have_icmp]
+if missing_icmp:
+    ranges = ",".join("{CidrIp=%s/32}" % ip for ip in missing_icmp)
+    add_blocks.append("IpProtocol=icmp,FromPort=-1,ToPort=-1,IpRanges=[%s]" % ranges)
+stale_icmp = [ip[:-3] for ip in have_icmp if ip[:-3] not in peers]
+if stale_icmp:
+    ranges = ",".join("{CidrIp=%s/32}" % ip for ip in stale_icmp)
+    revoke_blocks.append("IpProtocol=icmp,FromPort=-1,ToPort=-1,IpRanges=[%s]" % ranges)
+print(" ".join(add_blocks))
+print(" ".join(revoke_blocks))
+' "${existing}" "$*" "${peer_ips}")
+
+            # Revoke stale rules before adding new ones -- a group already
+            # sitting at AWS's rule quota (see above) has no room for the
+            # add call to succeed until the stale ones are cleared first.
+            local out
+            if [ -n "${revoke_str}" ]; then
+                # shellcheck disable=SC2086
+                if ! out=$(aws ec2 revoke-security-group-ingress --region "${region}" --group-id "${sg}" \
+                    --ip-permissions ${revoke_str} 2>&1); then
+                    error "aws: failed to revoke stale rules in ${region}: ${out}"
+                    exit 1
+                fi
+            fi
+            if [ -n "${add_str}" ]; then
+                # shellcheck disable=SC2086
+                if ! out=$(aws ec2 authorize-security-group-ingress --region "${region}" --group-id "${sg}" \
+                    --ip-permissions ${add_str} 2>&1); then
+                    error "aws: failed to open ports in ${region}: ${out}"
+                    exit 1
+                fi
+            fi
+        ) &
+        pids+=($!)
+        names+=("${region}")
     done
+    _aws_wait_all "open-ports" pids names
 }
 
 infra_provision() {
@@ -563,7 +637,11 @@ infra_provision() {
 
     _aws_record_addresses "${num_nodes}" || return 1
     _aws_wait_ready "${num_nodes}" || return 1
-    _aws_sync_contexts "${num_nodes}" || return 1
+    # --force: a node reused across provisioning runs can come back at a new
+    # address (a reclaimed instance replaced by a fresh one), and a context
+    # left over from the old address would silently point nowhere -- see the
+    # comment on _aws_sync_contexts.
+    _aws_sync_contexts "${num_nodes}" --force || return 1
 
     log "aws: ${num_nodes} node(s) ready"
 }

@@ -62,6 +62,49 @@ def build_extra_hosts(nodes_per_dc):
                 aliases[f"{dc_name}{k}"] = ip
     return aliases
 
+def profiler_enabled():
+    # CASSANDRA_PROFILER in the environment overrides exp.config for one run,
+    # as in cassandra/profiler.sh.
+    value = os.environ.get("CASSANDRA_PROFILER", config.get("cassandra.profiler", 0))
+    return str(value).strip().lower() in ("1", "true")
+
+def profiler_jvm_opts():
+    """JVM flags that let cassandra/profiler.sh capture a JFR of the run
+    phase, including the spans DebugExecution emits.
+
+    - async_profiler.enabled makes Cassandra load the async-profiler bundled
+      in its lib/ (the jar's embedded native library) at startup.  Span's
+      natives live in that library, so no separate -agentpath is attached.
+      Spans taken before profiling starts are simply 0 and are dropped.
+    - async_profiler.unsafe_mode allows `nodetool profile execute`, the only
+      entry point that accepts arbitrary async-profiler options.
+    - accord.debug_execution creates the DebugExecutor/DebugTask hooks that
+      emit the executor critical-section, queued and per-task run spans.
+      accord.debug_execution_report additionally logs slow-task/slow-lock
+      warnings and keeps latency histograms; it is off unless exp.config asks
+      for it, because it reads the thread CPU clock around every task and
+      lock hold, partly while the executor lock is held.  The spans do not
+      depend on it.
+    - DebugNonSafepoints makes async-profiler's stack traces accurate for
+      inlined frames.
+    """
+    if not profiler_enabled():
+        return ""
+    report = str(config.get("accord.debug_execution_report", "false")).strip().lower()
+    return (" -Dcassandra.async_profiler.enabled=true"
+            " -Dcassandra.async_profiler.unsafe_mode=true"
+            " -Daccord.debug_execution=true"
+            f" -Daccord.debug_execution_report={report}"
+            " -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints")
+
+def extra_jvm_opts():
+    """Free-form JVM flags for the Cassandra nodes, e.g. the -D switches that
+    toggle individual optimisations for A/B runs.  CASSANDRA_JVM_OPTS in the
+    environment overrides exp.config for one run."""
+    value = os.environ.get("CASSANDRA_JVM_OPTS", config.get("cassandra.jvm_opts", ""))
+    value = str(value).strip()
+    return " " + value if value else ""
+
 def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     network_name = config["network_name"]
     is_real = infra.is_real()
@@ -136,9 +179,13 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     # than resetting it, and bin/nodetool runs `java $JVM_OPTS -Xmx128m`, so an
     # inherited -Xms larger than 128m makes every nodetool invocation die with
     # "Initial heap size set to a larger value than the maximum heap size".
+    # profiler_jvm_opts() rides along in the same var for the same reason: it
+    # must stay out of JVM_OPTS, or nodetool (used by cassandra/profiler.sh
+    # itself, via dexec) inherits -Daccord.debug_execution etc. too.
     jvm_env = {
         "JVM_EXTRA_OPTS": " -Xms" + cassandra_xms + " -Xmx" + cassandra_xmx +
-                          (" -XX:ActiveProcessorCount=" + vcpus if vcpus else ""),
+                          (" -XX:ActiveProcessorCount=" + vcpus if vcpus else "") +
+                          profiler_jvm_opts() + extra_jvm_opts(),
     }
     if cassandra_direct:
         jvm_env["MAX_DIRECT_MEMORY_SIZE"] = cassandra_direct

@@ -12,7 +12,7 @@ config() {
     fi
     local key=$1
     local val
-    val=$(cat ${CONFIG_FILE} | grep -E "^${key}=" | cut -d= -f2)
+    val=$(cat ${CONFIG_FILE} | grep -E "^${key}=" | cut -d= -f2-)
     if [ -z "$val" ] && [ "$key" == "nodesperdc" ]; then
         val=1
     fi
@@ -203,7 +203,15 @@ host_aliases() {
 infra_bootstrap() {
     local num_nodes=$1
     infra_provision "${num_nodes}" || return 1
-    infra_open_ports 7000 7087 8080 9042 10000 26257
+    # 7000: Cassandra inter-node. 7087: swiftpaxos master. 7070: swiftpaxos
+    # replica-to-replica (defaultPort in config.go -- every replica dials
+    # its lower-indexed peers on this port after registering with master).
+    # 8070: swiftpaxos replica port+1000 -- master dials every replica here
+    # for leader election (master.go's BeTheLeader RPC); GetReplicaList
+    # blocks forever until that round completes, so without this port every
+    # client hangs. 8080: CockroachDB admin. 9042: Cassandra CQL. 10000:
+    # Tiga. 26257: CockroachDB.
+    infra_open_ports 7000 7070 7087 8070 8080 9042 10000 26257
 }
 
 ###############################################################################
@@ -254,6 +262,7 @@ dlogs()    { local name="$1"; shift; d "${name}" logs    "$@" "${name}"; }
 dinspect() { local name="$1"; shift; d "${name}" inspect "$@" "${name}"; }
 dstop()    { local name="$1"; shift; d "${name}" stop    "$@" "${name}"; }
 dkill()    { local name="$1"; shift; d "${name}" kill    "$@" "${name}"; }
+drm()      { local name="$1"; shift; d "${name}" rm -f   "$@" "${name}"; }
 
 # dpull <node_idx> <image>
 dpull() {
@@ -261,11 +270,27 @@ dpull() {
     if infra_is_real; then
         ctx=$(infra_context "${idx}")
     fi
-    if [ -n "${ctx}" ]; then
-        docker --context "${ctx}" pull "${image}"
-    else
-        docker pull "${image}"
+    local -a base=(docker)
+    [ -n "${ctx}" ] && base=(docker --context "${ctx}")
+
+    if "${base[@]}" pull "${image}"; then
+        return 0
     fi
+
+    # A custom image distributed via push_local_image lives only on the
+    # node's own daemon -- no registry to pull it from at all, so the pull
+    # above always fails for it. That is fine as long as it is already
+    # there; only an image that is genuinely missing should abort the run.
+    if "${base[@]}" image inspect "${image}" >/dev/null 2>&1; then
+        # log() writes to stdout, which pull_images' caller redirects to
+        # /dev/null to keep parallel pull progress quiet -- send this one to
+        # stderr instead, or the only thing a caller ever sees is Docker's
+        # own scary "pull access denied" line with no explanation that it
+        # was expected and already handled.
+        log "dpull: '${image}' is not pullable, but already present on this daemon -- using it as is" >&2
+        return 0
+    fi
+    return 1
 }
 
 start_container() {
@@ -436,7 +461,15 @@ stop_container() {
     }
 
     if [ "$running" != "true" ]; then
-        log "Container '${cname}' is already stopped"
+        # Not running, but still present: a normal --rm exit would already
+        # have removed it, so this is a container stuck in a state --rm
+        # never fires for (e.g. "Created" -- creation succeeded but it never
+        # started, which happens when a run command's client disconnects
+        # mid-flight over a laggy SSH-tunneled Docker API). Left alone, it
+        # blocks the next `docker run --name` for this container with a
+        # "Conflict... already in use" error.
+        log "Container '${cname}' is present but not running; removing it"
+        drm "$cname" >/dev/null 2>&1 || true
         return 0
     fi
 
@@ -457,6 +490,11 @@ stop_container() {
         }
         if [ "$running" != "true" ]; then
             log "Container '${cname}' stopped"
+            # --rm removes it on its own exit event, but that can race this
+            # check (or not apply at all for a container started without
+            # --rm); force removal so a lingering, name-conflicting container
+            # never survives a stop_container call.
+            drm "$cname" >/dev/null 2>&1 || true
             return 0
         fi
 
@@ -530,7 +568,7 @@ compute_test_machine() {
     # owns a machine, and rewriting machine= would desynchronise exp.config
     # from the shapes already provisioned.
     if infra_is_real; then
-        log "Test mode: keeping machine spec '$(config machine)' (provisioned by $(config infra))"
+        log "Test mode: keeping machine spec '$(infra_machine_shape)' (provisioned by $(config infra))"
         return 0
     fi
     if [ -z "$num_dcs" ] || ! [[ "$num_dcs" =~ ^[0-9]+$ ]] || [ "$num_dcs" -le 0 ]; then
@@ -638,6 +676,74 @@ pull_images() {
         exit 1
     fi
     log "All Docker images pulled successfully."
+}
+
+# push_local_image <local_image> [as <remote_tag>]
+#
+# Distributes a locally built image to every node's Docker daemon directly,
+# without a registry round-trip: `docker save` once to a local tarball, then
+# `docker load` it into each node's daemon over the same SSH-backed context
+# dpull/pull_images already use. Save/load preserve layer IDs, so any layers
+# the custom build shares with an image already pulled there (base OS, JDK,
+# etc.) are recognized and skipped -- only the build's own top layers
+# actually transfer.
+#
+# The remote_tag is what exp.config's *_image keys should be pointed at
+# (see cmd_use_image in deploy.sh); it defaults to local_image itself.
+push_local_image() {
+    if [ $# -lt 1 ] || { [ -n "${2:-}" ] && [ "${2}" != "as" ]; } || { [ "${2:-}" = "as" ] && [ -z "${3:-}" ]; }; then
+        error "usage: push_local_image <local_image> [as <remote_tag>]"
+        return 2
+    fi
+    local local_image=$1
+    local remote_tag=${3:-${1}}
+
+    docker image inspect "${local_image}" >/dev/null 2>&1 || {
+        error "push_local_image: no local image '${local_image}' (build it first)"
+        return 1
+    }
+    if [ "${remote_tag}" != "${local_image}" ]; then
+        docker tag "${local_image}" "${remote_tag}" || return 1
+    fi
+
+    if ! infra_is_real; then
+        log "push_local_image: simulation infra shares this daemon already; '${remote_tag}' is ready to use"
+        return 0
+    fi
+
+    local tarfile
+    tarfile=$(mktemp)
+    # shellcheck disable=SC2064 -- tarfile is fixed now, expand it immediately
+    trap "rm -f '${tarfile}'" RETURN
+    log "Saving '${remote_tag}' to a local tarball..."
+    docker save -o "${tarfile}" "${remote_tag}" || {
+        error "push_local_image: failed to save '${remote_tag}'"
+        return 1
+    }
+
+    log "Pushing '${remote_tag}' to $(infra_all_indices | wc -l) node(s)..."
+    local -a pids=() nodes=()
+    local idx
+    for idx in $(infra_all_indices); do
+        (
+            local ctx
+            ctx=$(infra_context "${idx}")
+            docker --context "${ctx}" load -i "${tarfile}" >/dev/null
+        ) &
+        pids+=($!)
+        nodes+=("${idx}")
+    done
+
+    local i rc=0
+    for i in "${!pids[@]}"; do
+        if wait "${pids[$i]}"; then
+            log "Image ready on node ${nodes[$i]}"
+        else
+            error "Failed to push image to node ${nodes[$i]}"
+            rc=1
+        fi
+    done
+    return ${rc}
 }
 
 get_location() {

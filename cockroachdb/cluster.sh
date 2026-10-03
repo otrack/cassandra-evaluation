@@ -14,7 +14,14 @@ cockroachdb_start_cluster() {
     local network=$(config "network_name")
     local resource_limits=$(get_resource_limits)
     local max_mem_gb=$(echo ${resource_limits} | awk '{for(i=1;i<=NF;i++) if($i=="--memory") {v=$(i+1); printf "%.0f\n", (tolower(v)~/m/ ? (v+0)/1024 : (v+0))}}')
-    
+    # On real infra get_resource_limits() returns no --memory cap at all (one
+    # node owns its whole instance, nothing to right-size against), so
+    # max_mem_gb comes back empty -- fall back to a fraction of system memory,
+    # which CockroachDB's store spec accepts directly, rather than emitting
+    # an unbounded "size=GB" that fails to parse and crashes the node on start.
+    local store_size="${max_mem_gb:+${max_mem_gb}GB}"
+    store_size="${store_size:-75%}"
+
     log "Starting CockroachDB cluster with ${num_dcs} DC(s) x ${nodes_per_dc} node(s)/DC..."
     cockroachdb_cleanup_cluster >/dev/null 2>&1 || true
 
@@ -22,9 +29,21 @@ cockroachdb_start_cluster() {
     local first_node="${first_city}1"
 
     # 1. Start the very first node
+    local -a advertise_args=()
+    if infra_is_real; then
+        # Left unset, cockroach advertises the address it auto-detects from
+        # the host's default-route interface -- under --network host on real
+        # infra that's the instance's private IP, unreachable from another
+        # region (same class of bug already fixed for Cassandra's
+        # broadcast_address and swiftpaxos's -addr; see those for the fuller
+        # explanation). Every peer that later needs to reconnect to this node
+        # (gossip, liveness, RPC) uses whatever address it advertised itself
+        # as, so this has to be the real, peer-reachable one.
+        advertise_args=(--advertise-addr="$(infra_host_ip "$(node_index_of "${first_node}")")")
+    fi
     start_container ${image} ${first_node} "initial startup completed" ${LOGDIR}/cockroachdb_node1.log \
         --rm -d --network ${network} -p 8080:8080 --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
-        -- start --insecure --store=type=mem,size=${max_mem_gb}GB --join=${first_node} --locality=region=${first_city},zone=1 || {
+        -- start --insecure --store=type=mem,size=${store_size} --join=${first_node} --locality=region=${first_city},zone=1 "${advertise_args[@]}" || {
         error "Failed to start first CockroachDB node ${first_node}"
         return 1
     }
@@ -46,9 +65,13 @@ cockroachdb_start_cluster() {
                 continue
             fi
             local container_name="${city}${k}"
+            local -a node_advertise_args=()
+            if infra_is_real; then
+                node_advertise_args=(--advertise-addr="$(infra_host_ip "$(node_index_of "${container_name}")")")
+            fi
             start_container ${image} ${container_name} "nodeID" ${LOGDIR}/cockroachdb_node${global_node_id}.log \
                 --rm -d --network ${network} --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
-                -- start --insecure --store=type=mem,size=${max_mem_gb}GB --join=${first_ip} --locality=region=${city},zone=${k} || {
+                -- start --insecure --store=type=mem,size=${store_size} --join=${first_ip} --locality=region=${city},zone=${k} "${node_advertise_args[@]}" || {
                 error "Failed to start CockroachDB node ${container_name}"
                 return 3
             }

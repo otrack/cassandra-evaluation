@@ -7,6 +7,7 @@ source ${DIR}/utils.sh
 source ${DIR}/swiftpaxos/cluster.sh
 source ${DIR}/cassandra/cluster.sh
 source ${DIR}/cassandra/ycsb.sh
+source ${DIR}/cassandra/profiler.sh
 source ${DIR}/cockroachdb/cluster.sh
 source ${DIR}/cockroachdb/ycsb.sh
 source ${DIR}/tiga/cluster.sh
@@ -284,6 +285,19 @@ run_ycsb() {
         java_opts+=" -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms"
     fi
 
+    # By default the Java driver (4.x) completes a PREPARE only once every
+    # node has prepared the statement too, so the first execution of each
+    # statement waits for a round trip to the farthest replica.  The client
+    # opens a fresh session for the measured phase, after warmup, and prepares
+    # lazily, so that round trip lands in the first measured operations: on
+    # AWS it lifted the first-interval maximum by ~225-325ms (Osasco's 709ms
+    # against ~380ms server-side).  The client only routes to its local node,
+    # which prepares the statement itself; any other node re-prepares on an
+    # UNPREPARED response.
+    if [ "${ycsb_client}" == "cassandra-cql" ]; then
+        java_opts+=" -Ddatastax-java-driver.advanced.prepared-statements.prepare-on-all-nodes=false"
+    fi
+
     echo -e "JAVA_OPTS=${java_opts}\n\
 YCSB_COMMAND=${action}\n\
 YCSB_BINDING=${ycsb_client}\n\
@@ -379,6 +393,17 @@ run_benchmark() {
         exit 1
     fi
 
+    # Bracket the run phase only: the capture should cover what YCSB measures.
+    local profile=0
+    local profile_tag profile_dir
+    if [ "${pref}" == "cassandra" ] && cassandra_profiler_enabled; then
+        profile=1
+        profile_tag=$(basename "${output_file%.dat}")
+        # Outside the experiment's own log directory, which the parsers glob.
+        profile_dir="${LOGDIR}/profiles/$(basename "$(dirname "${output_file}")")"
+        cassandra_profiler_start "${num_dcs}" "${nodes_per_dc}" "${profile_tag}"
+    fi
+
     for i in $(seq 1 1 ${num_dcs});
     do
         location=$(get_location $i ${LOCATIONS_FILE})
@@ -411,6 +436,10 @@ run_benchmark() {
     done
     if [ ${stuck} -gt 0 ]; then
         error "${stuck} YCSB client(s) had to be stopped after ${client_timeout}s"
+    fi
+
+    if [ ${profile} -eq 1 ]; then
+        cassandra_profiler_stop "${num_dcs}" "${nodes_per_dc}" "${profile_tag}" "${profile_dir}"
     fi
 
     local fast_path_script="${DIR}/${pref}/${pref}_fast_path.sh"
