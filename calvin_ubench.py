@@ -9,6 +9,8 @@ contention, CI=0.01, then low contention, CI=0.0001), side by side:
 - One line per protocol, one point per number of clients per site, showing the
   "hockey stick" effect where latency increases sharply and throughput
   plateaus/degrades as the system saturates
+- Only the Pareto frontier of each line is kept: a point is cut when another
+  point of the same protocol has at least its throughput and at most its latency
 """
 
 import sys
@@ -41,6 +43,14 @@ def safe_float(x):
         return float(x)
     except (TypeError, ValueError):
         return None
+
+
+def pareto_frontier(points):
+    """The (throughput, latency) points that no other point dominates, i.e.
+    such that no other point has at least the same throughput and at most the
+    same latency, sorted by throughput."""
+    return sorted(p for p in set(points)
+                  if not any(q != p and q[0] >= p[0] and q[1] <= p[1] for q in points))
 
 
 def ci_label(ci):
@@ -83,6 +93,7 @@ def main():
     # number of clients: the throughput is summed over the data centers and the
     # latency averaged over them.
     data = {}
+    plotted_clients = set()
     for ci in ci_values:
         for proto in raw_protocols:
             subset = df[(df['protocol'] == proto) & (df['ci'] == ci)]
@@ -93,7 +104,8 @@ def main():
                 lat = rows['median_latency_ms'].mean()
                 if tput > 0 and lat > 0:
                     points.append((tput, lat))
-            data[(ci, proto)] = points
+                    plotted_clients.add(clients)
+            data[(ci, proto)] = pareto_frontier(points)
 
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
@@ -137,8 +149,11 @@ def main():
 
         f.write("    \\end{groupplot}\n")
         f.write("  \\end{tikzpicture}\n")
+        # The range of clients per site tested, over every protocol
+        clients_range = (f" from {min(plotted_clients)} up to {max(plotted_clients)}"
+                         if plotted_clients else "")
         f.write("  \\caption{\\label{fig:calvin-ubench-latency} Calvin micro-benchmark:"
-                " latency vs throughput, increasing the number of clients per site.}\n")
+                f" latency vs throughput, increasing the number of clients per site{clients_range}.}}\n")
         f.write("\\end{figure}\n")
 
     print(f"Generated {output_tikz}")
