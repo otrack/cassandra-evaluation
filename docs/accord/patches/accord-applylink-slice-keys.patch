@@ -1,0 +1,55 @@
+diff --git a/accord-core/src/main/java/accord/messages/Apply.java b/accord-core/src/main/java/accord/messages/Apply.java
+index 15cc6f5..d3dfd04 100644
+--- a/accord-core/src/main/java/accord/messages/Apply.java
++++ b/accord-core/src/main/java/accord/messages/Apply.java
+@@ -27,6 +27,7 @@ import accord.coordinate.ExecuteFlag.ExecuteFlags;
+ import accord.local.CommandStore;
+ import accord.local.CommandStores;
+ import accord.local.Commands;
++import accord.local.ExecutionContext;
+ import accord.local.LoadKeys;
+ import accord.local.Node.Id;
+ import accord.local.SafeCommand;
+@@ -39,6 +40,7 @@ import accord.primitives.FullRoute;
+ import accord.primitives.PartialDeps;
+ import accord.primitives.PartialTxn;
+ import accord.primitives.Route;
++import accord.primitives.Routables;
+ import accord.primitives.SaveStatus;
+ import accord.primitives.Timestamp;
+ import accord.primitives.Txn;
+@@ -160,18 +162,20 @@ public class Apply extends RouteRequest<ApplyReply>
+     {
+         final CommandStore commandStore;
+         final StoreParticipants participants;
++        final ExecutionContext context;
+ 
+-        protected ApplyLink(Head<?> head, CommandStore commandStore, StoreParticipants participants)
++        protected ApplyLink(Head<?> head, CommandStore commandStore, StoreParticipants participants, ExecutionContext context)
+         {
+             super(head);
+             this.commandStore = commandStore;
+             this.participants = participants;
++            this.context = context;
+         }
+ 
+         @Override
+         public AsyncChain<ApplyReply> apply(Void o)
+         {
+-            return commandStore.continuationChain(Apply.this, safeStore -> {
++            return commandStore.continuationChain(context, safeStore -> {
+                 return Apply.apply(Applied, safeStore, participants, ballot, txn, txnId, executeAt, deps, participants.route(), writes, result);
+             });
+         }
+@@ -187,7 +191,10 @@ public class Apply extends RouteRequest<ApplyReply>
+         AsyncChain<Void> written = writes == null ? AsyncChains.success(null)
+                                                   : writes.applyDirect(commandStore, participants.executes(), txn);
+ 
+-        return written.then(head -> new ApplyLink(head, commandStore, participants));
++        // only declare the keys this store owns, as mapReduce does via slice(); otherwise the continuation
++        // acquires (and loads, as empty) the CommandsForKey of every key of the transaction in every store
++        ExecutionContext context = slice(storeRanges.allBetween(minEpoch, maxEpoch), Routables.Slice.Minimal);
++        return written.then(head -> new ApplyLink(head, commandStore, participants, context));
+     }
+ 
+     public ApplyReply apply(SafeCommandStore safeStore, StoreParticipants participants)
