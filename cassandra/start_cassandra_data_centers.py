@@ -105,6 +105,23 @@ def extra_jvm_opts():
     value = str(value).strip()
     return " " + value if value else ""
 
+def initial_token(k, nodes_per_dc, dc_index):
+    """The single token of node k (from 1) of data center dc_index (from 0)
+    with cassandra.fixed_tokens: the ring is cut into nodes_per_dc equal
+    slices, node k owning the k-th of them, as the "murmur3" partitioner of
+    YCSB's Calvin micro-benchmark (CalvinPartitioner.initialToken) assumes.
+    Tokens must be unique in the cluster, hence the offset by dc_index."""
+    if k == nodes_per_dc:
+        token = 2**63 - 1
+    else:
+        token = -2**63 + k * (2**64 // nodes_per_dc) - 1
+    return token - dc_index
+
+
+def fixed_tokens_enabled():
+    return str(config.get("cassandra.fixed_tokens", 0)).lower() in ("1", "true")
+
+
 def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     network_name = config["network_name"]
     is_real = infra.is_real()
@@ -231,6 +248,19 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
                     cap_add=["NET_ADMIN"],
                     detach=True
                 )
+                if fixed_tokens_enabled():
+                    # The image's entrypoint sets num_tokens but not
+                    # initial_token: append it to cassandra.yaml first (once,
+                    # should the container be restarted).
+                    run_kwargs['environment']['CASSANDRA_NUM_TOKENS'] = "1"
+                    run_kwargs['environment']['CASSANDRA_INITIAL_TOKEN'] = str(initial_token(k, nodes_per_dc, i - 1))
+                    run_kwargs['entrypoint'] = [
+                        "sh", "-c",
+                        'grep -q "^initial_token:" "$CASSANDRA_CONF/cassandra.yaml"'
+                        ' || echo "initial_token: $CASSANDRA_INITIAL_TOKEN" >> "$CASSANDRA_CONF/cassandra.yaml";'
+                        ' exec docker-entrypoint.sh "$@"',
+                        "sh"]
+                    run_kwargs['command'] = ["cassandra", "-f"]
                 if nano_cpus is not None:
                     run_kwargs['nano_cpus'] = nano_cpus
                 if mem_limit is not None:

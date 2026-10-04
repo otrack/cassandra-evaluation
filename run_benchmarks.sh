@@ -189,14 +189,13 @@ run_ycsb() {
 	    true
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
 	then
-	    cockroachdb_create_usertable 10 "$replication_factor" "${num_dcs:-3}" "$workload_type"
+	    cockroachdb_create_usertable 10 "$replication_factor" "${num_dcs:-3}" "$workload_type" "$recordcount"
 	else
 	    local transaction_mode="bruh"
 	    if [ "$protocol" == "accord" ]; then 
 		transaction_mode="full"
 	    fi
-	    local nodes_per_dc=$(config nodesperdc)
-	    cassandra_create_keyspace 3600 "${num_dcs:-3}" "$replication_factor" "${nodes_per_dc}"
+	    cassandra_create_keyspace 3600 "${num_dcs:-3}" "$replication_factor"
 	    cassandra_create_usertable 3600 "$transaction_mode" "${num_dcs:-3}" "$workload_type"
 	fi
     fi
@@ -242,6 +241,23 @@ run_ycsb() {
 		break
 	    fi
 	done
+	# With several nodes per DC, spread the clients over the gateways of
+	# their DC: one JDBC "shard" (';'-separated) per local node, each with
+	# the same backup as above.
+	local nodes_per_dc
+	nodes_per_dc=$(config nodesperdc)
+	if [ "${nodes_per_dc:-1}" -gt 1 ]; then
+	    local backup_url="${jdbc_url#*,}"
+	    [ "${backup_url}" == "${jdbc_url}" ] && backup_url=""
+	    local dc_prefix="${nearby_database%1}"
+	    local k gateway
+	    for k in $(seq 2 "${nodes_per_dc}"); do
+		gateway=$(get_container_ip "${dc_prefix}${k}")
+		[ -z "${gateway}" ] && continue
+		jdbc_url+=";jdbc:postgresql://${gateway}:${port}/defaultdb?cockroachdb=true&sslmode=disable"
+		[ -n "${backup_url}" ] && jdbc_url+=",${backup_url}"
+	    done
+	fi
 	extra_opts_str+=" -p db.driver=org.postgresql.Driver \
 -p db.url=${jdbc_url} \
 -p db.user=root \

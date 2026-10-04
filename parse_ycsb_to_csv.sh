@@ -11,7 +11,7 @@ header="protocol,nodes,workload,conflict_rate,dc,op,clients,tput,avg_latency_us"
 for p in $(seq 1 100); do
     header="$header,p$p"
 done
-header="$header,failed,fast_path,medium_path,slow_path,ephemeral_path"
+header="$header,failed,fast_path,medium_path,slow_path,ephemeral_path,partitions,mp"
 echo "$header"
 
 # Process a single file, outputting CSV rows
@@ -64,6 +64,8 @@ process_file() {
         is_conflict   = 0
         is_swap       = 0
         is_calvin     = 0
+        partitions    = "NA"
+        mp            = "NA"
     }
 
     # Extract clients: handle both "-threads 64" and "-threads=64"
@@ -107,6 +109,18 @@ process_file() {
     is_calvin && conflict_rate == "NA" && /calvin\.contentionindex=/ {
         if (match($0, /calvin\.contentionindex=[0-9]+(\.[0-9]+)?([eE]-?[0-9]+)?/)) {
             conflict_rate = substr($0, RSTART + 23, RLENGTH - 23)
+        }
+    }
+
+    # Extract calvin.partitions and calvin.mpproportion (only once)
+    is_calvin && partitions == "NA" && /calvin\.partitions=/ {
+        if (match($0, /calvin\.partitions=[0-9]+/)) {
+            partitions = substr($0, RSTART + 18, RLENGTH - 18)
+        }
+    }
+    is_calvin && mp == "NA" && /calvin\.mpproportion=/ {
+        if (match($0, /calvin\.mpproportion=[0-9]+(\.[0-9]+)?/)) {
+            mp = substr($0, RSTART + 20, RLENGTH - 20)
         }
     }
 
@@ -194,7 +208,7 @@ process_file() {
                 fail = (op in op_fail) ? op_fail[op] : 0
                 total = succ + fail
                 if (total > 0) failed_pct = fail / total * 100
-                print row "," sprintf("%.4f", failed_pct) "," fast_path "," medium_path "," slow_path "," ephemeral_path
+                print row "," sprintf("%.4f", failed_pct) "," fast_path "," medium_path "," slow_path "," ephemeral_path "," partitions "," mp
             }
         }
     }

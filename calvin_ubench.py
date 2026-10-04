@@ -11,6 +11,14 @@ contention, CI=0.01, then low contention, CI=0.0001), side by side:
   plateaus/degrades as the system saturates
 - Only the Pareto frontier of each line is kept: a point is cut when another
   point of the same protocol has at least its throughput and at most its latency
+
+Given the results of the scale phase, it also generates the analogue of Figure 5,
+one graph per contention index, with the total throughput (top) and the
+throughput per node of a data center (bottom) against the number of nodes per
+data center:
+- One line per protocol and proportion of multipartition transactions (solid:
+  the lowest proportion, dashed: the others), one point per number of nodes
+- Each point is the best throughput over the numbers of clients tried
 """
 
 import sys
@@ -27,7 +35,7 @@ CI_LABELS = {0.01: "High contention (CI=0.01)", 0.0001: "Low contention (CI=0.00
 
 
 def usage_and_exit():
-    print("Usage: python calvin_ubench.py results.csv output.tex")
+    print("Usage: python calvin_ubench.py results.csv output.tex [scale_results.csv scale_output.tex]")
     sys.exit(1)
 
 
@@ -58,12 +66,15 @@ def ci_label(ci):
 
 
 def main():
-    if len(sys.argv) < 3:
+    if len(sys.argv) not in (3, 5):
         usage_and_exit()
 
-    results_csv = sys.argv[1]
-    output_tikz = sys.argv[2]
+    plot_saturation(sys.argv[1], sys.argv[2])
+    if len(sys.argv) == 5:
+        plot_scale(sys.argv[3], sys.argv[4])
 
+
+def plot_saturation(results_csv, output_tikz):
     df = pd.read_csv(results_csv)
     df = drop_unsound_rows(df, label='calvin_ubench')
 
@@ -78,8 +89,8 @@ def main():
     df = df[df['ci'].notnull() & df['clients_int'].notnull()
             & df['tput_f'].notnull() & df['median_latency_ms'].notnull()]
     if df.empty:
-        print("Invalid data")
-        sys.exit(1)
+        print(f"No data in {results_csv}")
+        return
 
     raw_protocols = list(dict.fromkeys(df['protocol'].tolist()))
     protocol_order = sort_protocols_for_legend(raw_protocols)
@@ -154,6 +165,117 @@ def main():
                          if plotted_clients else "")
         f.write("  \\caption{\\label{fig:calvin-ubench-latency} Calvin micro-benchmark:"
                 f" latency vs throughput, increasing the number of clients per site{clients_range}.}}\n")
+        f.write("\\end{figure}\n")
+
+    print(f"Generated {output_tikz}")
+
+
+def mp_label(mp):
+    return f"{mp * 100:g}\\% MP"
+
+
+def plot_scale(results_csv, output_tikz):
+    df = pd.read_csv(results_csv)
+    df = drop_unsound_rows(df, label='calvin_ubench_scale')
+    df = df[df['op'] == 'tx-readmodifywrite'].copy()
+    if 'partitions' not in df.columns:
+        print(f"No partitions column in {results_csv}")
+        return
+
+    df['clients_int'] = df['clients'].apply(safe_int)
+    df['tput_f'] = df['tput'].apply(safe_float)
+    df['ci'] = df['conflict_rate'].apply(safe_float)
+    df['npd'] = df['partitions'].apply(safe_int)
+    df['mp_f'] = df['mp'].apply(safe_float)
+    df = df[df['ci'].notnull() & df['clients_int'].notnull() & df['tput_f'].notnull()
+            & df['npd'].notnull() & df['mp_f'].notnull()]
+    if df.empty:
+        print(f"No data in {results_csv}")
+        return
+
+    raw_protocols = list(dict.fromkeys(df['protocol'].tolist()))
+    protocol_order = sort_protocols_for_legend(raw_protocols)
+    plot_order = sort_protocols_for_plotting(raw_protocols)
+    present = sorted(df['ci'].unique().tolist(), reverse=True)
+    ci_values = [ci for ci in DEFAULT_CI_ORDER if ci in present] + \
+                [ci for ci in present if ci not in DEFAULT_CI_ORDER]
+    # With a single node per data center, every transaction is single-partition:
+    # its runs belong to every line
+    mp_values = sorted(df[df['npd'] > 1]['mp_f'].unique().tolist()) or \
+        sorted(df['mp_f'].unique().tolist())
+    npd_values = sorted(df['npd'].unique().tolist())
+
+    # (ci, protocol, mp) -> [(nodes per DC, total throughput)], the throughput
+    # being summed over the data centers and maximized over the clients
+    data = {}
+    for ci in ci_values:
+        for proto in raw_protocols:
+            for mp in mp_values:
+                points = []
+                for npd in npd_values:
+                    rows = df[(df['protocol'] == proto) & (df['ci'] == ci) & (df['npd'] == npd)]
+                    if npd > 1:
+                        rows = rows[rows['mp_f'] == mp]
+                    if rows.empty:
+                        continue
+                    best = rows.groupby('clients_int')['tput_f'].sum().max()
+                    if best > 0:
+                        points.append((npd, best))
+                data[(ci, proto, mp)] = points
+
+    protocol_colors = load_protocol_colors()
+    protocol_aliases = load_protocol_aliases()
+    styles = ["solid", "dashed", "dotted", "dashdotted"]
+
+    with open(output_tikz, 'w') as f:
+        f.write("\\begin{figure}[t]\n")
+        f.write("  \\centering\n")
+        f.write(make_protocol_legend(protocol_order, protocol_colors,
+                                     protocol_aliases=protocol_aliases))
+        f.write("  \\vspace{1mm}\\begin{tikzpicture}[scale=.7]\n")
+        f.write("    \\begin{groupplot}[\n")
+        f.write(f"      group style={{group size={len(ci_values)} by 2, horizontal sep=1.5cm, vertical sep=1.5cm}},\n")
+        f.write("      width=7cm, height=5cm,\n")
+        f.write("      grid=both,\n")
+        f.write(f"      xtick={{{','.join(str(n) for n in npd_values)}}},\n")
+        f.write("      tick label style={font=\\small},\n")
+        f.write("      label style={font=\\small},\n")
+        f.write("      title style={font=\\small},\n")
+        f.write("      legend style={font=\\scriptsize},\n")
+        f.write("      scaled y ticks=false,\n")
+        f.write("      ymin=0,\n")
+        f.write("    ]\n\n")
+
+        for row, per_node in enumerate((False, True)):
+            for section, ci in enumerate(ci_values):
+                f.write("      \\nextgroupplot[\n")
+                if row == 0:
+                    f.write(f"        title={{{ci_label(ci)}}},\n")
+                else:
+                    f.write("        xlabel={Nodes per data center},\n")
+                if section == 0:
+                    label = "Throughput per node (tx/sec)" if per_node else "Total throughput (tx/sec)"
+                    f.write(f"        ylabel={{{label}}},\n")
+                f.write("      ]\n")
+                for idx, proto in enumerate(plot_order):
+                    col = get_protocol_color(proto, protocol_colors, idx)
+                    for m, mp in enumerate(mp_values):
+                        points = data[(ci, proto, mp)]
+                        if not points:
+                            continue
+                        style = styles[m % len(styles)]
+                        f.write(f"      \\addplot+[{col}, {style}, mark=*, mark options={{fill={col}, solid}}, thick]"
+                                " table {\n")
+                        for npd, tput in points:
+                            f.write(f"        {npd} {tput / npd if per_node else tput:.2f}\n")
+                        f.write("      };\n\n")
+
+        f.write("    \\end{groupplot}\n")
+        f.write("  \\end{tikzpicture}\n")
+        mp_caption = ", ".join(f"{styles[m % len(styles)]}: {mp_label(mp)}" for m, mp in enumerate(mp_values))
+        f.write("  \\caption{\\label{fig:calvin-ubench-scale} Calvin micro-benchmark:"
+                f" total and per-node throughput, varying the number of nodes per data center"
+                f" ({mp_caption} transactions).}}\n")
         f.write("\\end{figure}\n")
 
     print(f"Generated {output_tikz}")

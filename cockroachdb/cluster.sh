@@ -195,6 +195,8 @@ PYEOF
         return 1
     fi
 
+    # Read by cockroachdb_partition_usertable
+    COCKROACHDB_LEASE_CITY="${chosen_city}"
     log "Pinning CockroachDB lease holder to ${chosen_city}..."
     local first_city=$(get_location 1 ${LOCATIONS_FILE})
     local container="${first_city}1"
