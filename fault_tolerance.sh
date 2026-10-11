@@ -49,7 +49,7 @@ protocols="accord cockroachdb-opt"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-nodes=3
+nodes=5
 replication_factor=$nodes
 workload_type="site.ycsb.workloads.ConflictWorkload"
 workload="a" # this does not matter
@@ -70,6 +70,7 @@ trap restore_settings EXIT
 
 if [ "$test_run" -eq 1 ]; then
     nodes=3
+    replication_factor=${nodes}
     duration_minutes=3
     WARMUP_EXECUTION_TIME=0
     original_machine=$(config machine)
