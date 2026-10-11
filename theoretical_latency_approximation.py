@@ -1,25 +1,15 @@
 import math
 
+import infra
+
 # Moved here from start_cassandra_cluster.py, which has been removed.
 #
 # Note that estimate_latency below assumes 200 km/ms whereas emulate_latency.py
 # assumes 204 km/ms; the two were never reconciled, so the original constant is
 # kept to leave the estimates this script prints unchanged.
 
-locations_lat_long = [
-    (21.027763, 105.834160), # Hanoi
-    (45.764042, 4.835659), # Lyon
-    (40.712776, -74.005974), # New York
-    (39.904202, 116.407394), # Beijing
-    (19.075983, 72.877655), # Mumbai
-    (51.924419, 4.477733), # Rotterdam
-    (31.968599, -99.901810), # Texas
-    (-23.550520, -46.633308), # Sao Paulo
-    (51.507351, -0.127758), # London
-    (1.352083, 103.819839), # Singapore
-    (35.689487, 139.691711), # Tokyo
-    (32.776665, -96.796989) # Dallas
-]
+# The DCs of the active infra, in the order the experiments deploy them
+locations_lat_long = [(float(row["lat"]), float(row["lon"])) for row in infra.read_locations()]
 
 def haversine(lat1, lon1, lat2, lon2):
     # Calculate the great-circle distance between two points on the Earth
