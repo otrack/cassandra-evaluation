@@ -12,7 +12,7 @@ usage() {
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
-    echo "  --dcs=N          Override the number of DCs (default 3)."
+    echo "  --dcs=N          Override the number of DCs (default 5)."
 }
 
 dry_run=0
@@ -49,7 +49,10 @@ protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockro
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-num_dcs=${dcs_override:-3}
+# 5 DCs by default, 3 in --test mode
+default_dcs=5
+[ "$test_run" -eq 1 ] && default_dcs=3
+num_dcs=${dcs_override:-${default_dcs}}
 replication_factor=${num_dcs}
 dcs=$(locations_list ${num_dcs}) # the DCs of the active infra; can be ""
 plot_average=true

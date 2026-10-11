@@ -54,7 +54,7 @@ protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockro
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-nodes=3
+nodes=5
 if [ "$test_run" -eq 1 ]; then
     nodes=3
 fi
