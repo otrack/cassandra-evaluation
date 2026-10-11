@@ -4,6 +4,7 @@ import time
 import math
 import re
 import csv
+import os
 from datetime import datetime
 
 import infra
@@ -26,6 +27,55 @@ def estimate_latency(distance_km):
     latency_ms = distance_km / speed_of_light_km_per_ms
     return math.floor(latency_ms)
         
+def load_measured_rtts():
+    """Measured round-trip times (ms) of the active provider, keyed by the
+    unordered pair of location names, from infra/<provider>/latencies.csv
+    (src,dst,rtt_ms; lines starting with '#' are comments).  The two
+    directions of a pair are averaged.  Empty if the provider has no such
+    file, in which case latencies are estimated from distances."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "infra", infra.provider(), "latencies.csv")
+    if not os.path.exists(path):
+        return {}
+    samples = {}
+    with open(path, newline='') as f:
+        rows = (line for line in f if not line.lstrip().startswith('#'))
+        for row in csv.DictReader(rows):
+            pair = frozenset((row['src'].strip(), row['dst'].strip()))
+            samples.setdefault(pair, []).append(float(row['rtt_ms']))
+    return {pair: sum(v) / len(v) for pair, v in samples.items()}
+
+def one_way_latency(loc1, loc2, measured_rtts):
+    """One-way delay (ms) between two (lat, lon, name) locations: half their
+    measured round-trip time, or the great-circle estimate if the provider has
+    no measurements at all.  A provider with measurements must cover every
+    pair of its locations."""
+    if not measured_rtts:
+        return estimate_latency(haversine(loc1[0], loc1[1], loc2[0], loc2[1]))
+    rtt = measured_rtts.get(frozenset((loc1[2], loc2[2])))
+    if rtt is None:
+        raise KeyError(f"no measured latency between {loc1[2]} and {loc2[2]} in "
+                       f"infra/{infra.provider()}/latencies.csv")
+    return round(rtt / 2, 2)
+
+def compute_optimum_per_replica(locations, n_nodes):
+    """For each of the first n_nodes (lat, lon, name) locations, the RTT (ms)
+    to its closest majority quorum: the local replica plus the (quorum - 1)
+    nearest others, so the RTT to the farthest of these.  Uses the same
+    latencies as the emulation (see one_way_latency)."""
+    measured_rtts = load_measured_rtts()
+    quorum = (n_nodes // 2) + 1
+    optimums = []
+    for i in range(n_nodes):
+        rtts = sorted(2 * one_way_latency(locations[i], locations[j], measured_rtts)
+                      for j in range(n_nodes) if j != i)
+        if not rtts:
+            # single-node case -> no neighbour
+            optimums.append(0.0)
+            continue
+        optimums.append(rtts[max(1, quorum - 1) - 1])
+    return optimums
+
 def run_tc(container, cmd):
     res = container.exec_run(cmd)
     if res.exit_code != 0:
@@ -38,6 +88,7 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
         return
             
     network_name = config["network_name"]
+    measured_rtts = load_measured_rtts()
 
     containers_info = []
     global_idx = 0
@@ -73,10 +124,9 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
             run_tc(c, f"tc qdisc del dev {dev} root")
             run_tc(c, f"tc qdisc add dev {dev} root handle 1: prio bands {total_containers + 1} priomap {priomap}")
 
-        # Add specific latencies based on geographical distances between different DCs
+        # Add the latency between each pair of DCs (see one_way_latency)
         for idx1 in range(total_containers):
             dc1, k1, src_name, _ = containers_info[idx1]
-            lat1, lon1, _ = dc_locations[dc1]
             src_container = infra.container_for(src_name)
             src_dev = infra.net_device(src_name)
 
@@ -86,9 +136,7 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
                     # Intra-DC latency is negligible (~0ms, no tc rule needed)
                     continue
 
-                lat2, lon2, _ = dc_locations[dc2]
-                distance = haversine(lat1, lon1, lat2, lon2)
-                latency = estimate_latency(distance)
+                latency = one_way_latency(dc_locations[dc1], dc_locations[dc2], measured_rtts)
                 dst_container = infra.container_for(dst_name)
                 dst_dev = infra.net_device(dst_name)
 
@@ -106,7 +154,7 @@ def emulate_latency(num_dcs, nodes_per_dc, dc_locations):
                 run_tc(dst_container, f"tc qdisc add dev {dst_dev} parent 1:{src_band:x} handle {src_band:x}0: netem delay {latency}ms")
                 run_tc(dst_container, f"tc filter add dev {dst_dev} protocol ip parent 1:0 prio 1 u32 match ip dst {src_ip} flowid 1:{src_band:x}")
 
-                debug(f"Added {latency}ms ping latency between '{src_name}' and '{dst_name}' (distance: {distance:.2f} km).")
+                debug(f"Added {latency}ms one-way latency between '{src_name}' and '{dst_name}'.")
 
     except Exception as e:
         print(f"Error adding latency: {e}")

@@ -143,21 +143,15 @@ cockroachdb_fix_lease_holder() {
     local latencies_csv="${LOCATIONS_FILE}"
 
     local chosen_city
-    chosen_city=$(python3 - "${num_dcs}" "${latencies_csv}" "${best}" <<'PYEOF'
-import csv, math, sys
-
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2
-         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
-         * math.sin(dlon / 2) ** 2)
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    chosen_city=$(python3 - "${num_dcs}" "${latencies_csv}" "${best}" "${DIR}" <<'PYEOF'
+import csv, sys
 
 num_dcs       = int(sys.argv[1])
 latencies_csv = sys.argv[2]
 use_best      = sys.argv[3].lower() == 'true'
+sys.path.insert(0, sys.argv[4])
+from emulate_latency import load_measured_rtts, one_way_latency
+measured_rtts = load_measured_rtts()
 majority      = num_dcs // 2 + 1
 
 locations = []
@@ -170,13 +164,13 @@ with open(latencies_csv, newline='') as f:
 
 chosen_city = None
 chosen_cost = float('inf') if use_best else float('-inf')
-for i, (lat1, lon1, loc) in enumerate(locations):
-    dists = sorted(
-        haversine(lat1, lon1, lat2, lon2)
-        for j, (lat2, lon2, _) in enumerate(locations) if i != j
+for i, (_, _, loc) in enumerate(locations):
+    owds = sorted(
+        one_way_latency(locations[i], other, measured_rtts)
+        for j, other in enumerate(locations) if i != j
     )
     needed   = majority - 1
-    farthest = dists[needed - 1] if 0 < needed <= len(dists) else 0.0
+    farthest = owds[needed - 1] if 0 < needed <= len(owds) else 0.0
     if use_best:
         if farthest < chosen_cost:
             chosen_cost = farthest

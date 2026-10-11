@@ -70,8 +70,11 @@ These are spread across several locations to simulate datacenters.
 By default there is one data replica and one client per datacenter; this can be changed with the
 `nodesperdc` parameter (SwiftPaxos only supports `nodesperdc=1`).
 The locations are taken, in order, from the active infrastructure's locations map
-(`infra/simulation/locations.csv` by default); the WAN delay between two of them is
-derived from their coordinates and enforced with the Linux traffic shapping tool (tc).
+(`infra/simulation/locations.csv` by default: the five AWS regions Singapore, Frankfurt,
+Ashburn, Osasco and Tokyo). The WAN delay between two of them is half the round-trip time
+measured between the matching AWS regions (`infra/aws/latencies.csv`, from
+[cloudping.co](https://www.cloudping.co/)), enforced in each direction with the Linux traffic
+shaping tool (tc).
 Replicas and clients are running in Docker containers.
 The client share the same network interface as the nearby replica.
 

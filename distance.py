@@ -3,8 +3,7 @@ import math
 
 import infra
 
-from emulate_latency import haversine
-from emulate_latency import estimate_latency
+from emulate_latency import load_measured_rtts, one_way_latency
 
 def read_locations(file_path):
     """
@@ -22,16 +21,13 @@ def calculate_ping_matrix(locations):
     Calculate ping time matrix (in milliseconds) for given locations.
     """
     n = len(locations)
+    measured_rtts = load_measured_rtts()
     ping_matrix = [[0.0]*n for _ in range(n)]
     
     for i in range(n):
         for j in range(n):
             if i != j:
-                lat1, lon1, _ = locations[i]
-                lat2, lon2, _ = locations[j]
-                distance_km = haversine(lat1, lon1, lat2, lon2)
-                
-                ping_matrix[i][j] = estimate_latency(distance_km*2)
+                ping_matrix[i][j] = 2 * one_way_latency(locations[i], locations[j], measured_rtts)
     return ping_matrix
 
 def print_matrix(locations, ping_matrix):

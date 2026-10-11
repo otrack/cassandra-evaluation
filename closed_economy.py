@@ -19,6 +19,7 @@ import infra
 import pandas as pd
 
 from utils import drop_unsound_rows
+from emulate_latency import load_measured_rtts, one_way_latency
 import numpy as np
 
 from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_legend, sort_protocols_for_plotting
@@ -75,19 +76,6 @@ def calculate_offset_step(series_count):
     # Distribute OFFSET_TOTAL across protocols while keeping a minimum spacing.
     return max(MIN_OFFSET_STEP, OFFSET_TOTAL / series_count)
 
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
-
-def estimate_latency(distance_km):
-    fiber_optic_speed_km_per_ms = 204
-    latency_ms = distance_km / fiber_optic_speed_km_per_ms
-    return math.floor(latency_ms)
-
 def load_locations(latencies_path):
     locations = []
     try:
@@ -99,7 +87,7 @@ def load_locations(latencies_path):
                     lon = float(row['lon'])
                 except (KeyError, TypeError, ValueError):
                     continue
-                locations.append((lat, lon))
+                locations.append((lat, lon, row.get('loc', '').strip()))
     except FileNotFoundError:
         return []
     return locations
@@ -177,43 +165,33 @@ def round_trip_to_quorum(locations, quorum_size):
     n = len(locations)
     if n == 0:
         return []
+    measured_rtts = load_measured_rtts()
     rtts = []
     for i in range(n):
-        dists = []
-        for j in range(n):
-            if i == j:
-                continue
-            lat1, lon1 = locations[i]
-            lat2, lon2 = locations[j]
-            dists.append(haversine(lat1, lon1, lat2, lon2))
-        if not dists:
+        to_others = sorted(2 * one_way_latency(locations[i], locations[j], measured_rtts)
+                       for j in range(n) if j != i)
+        if not to_others:
             rtts.append(0.0)
             continue
-        dists.sort()
         needed = max(1, quorum_size - 1)
-        selected = dists[:min(needed, len(dists))]
-        rtts.append(2 * estimate_latency(max(selected)))
+        selected = to_others[:min(needed, len(to_others))]
+        rtts.append(max(selected))
     return rtts
 
 def round_trip_to_nearest_nodes(locations, count):
     n = len(locations)
     if n == 0:
         return []
+    measured_rtts = load_measured_rtts()
     rtts = []
     for i in range(n):
-        dists = []
-        for j in range(n):
-            if i == j:
-                continue
-            lat1, lon1 = locations[i]
-            lat2, lon2 = locations[j]
-            dists.append(haversine(lat1, lon1, lat2, lon2))
-        if not dists:
+        to_others = sorted(2 * one_way_latency(locations[i], locations[j], measured_rtts)
+                       for j in range(n) if j != i)
+        if not to_others:
             rtts.append(0.0)
             continue
-        dists.sort()
-        selected = dists[:min(count, len(dists))]
-        rtts.append(2 * estimate_latency(max(selected)))
+        selected = to_others[:min(count, len(to_others))]
+        rtts.append(max(selected))
     return rtts
 
 def accord_latency_bounds(locations):

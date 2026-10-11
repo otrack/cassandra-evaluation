@@ -1,0 +1,29 @@
+# Measured round-trip times between AWS regions, in milliseconds, from
+# https://www.cloudping.co/ (retrieved 2026-10-11): one row per direction,
+# src being the region the probe was sent from. The two directions of a pair
+# are averaged (see emulate_latency.load_measured_rtts). Every pair of
+# locations in infra/aws/locations.csv must be listed. The simulation uses
+# this matrix too (infra/simulation/latencies.csv links here).
+# Singapore=ap-southeast-1, Frankfurt=eu-central-1, Ashburn=us-east-1,
+# Osasco=sa-east-1, Tokyo=ap-northeast-1.
+src,dst,rtt_ms
+Singapore,Frankfurt,161.79
+Frankfurt,Singapore,161.52
+Singapore,Ashburn,219.01
+Ashburn,Singapore,221.09
+Singapore,Osasco,331.14
+Osasco,Singapore,333.34
+Singapore,Tokyo,70.03
+Tokyo,Singapore,69.74
+Frankfurt,Ashburn,90.12
+Ashburn,Frankfurt,92.18
+Frankfurt,Osasco,203.41
+Osasco,Frankfurt,203.74
+Frankfurt,Tokyo,228.07
+Tokyo,Frankfurt,228.50
+Ashburn,Osasco,113.28
+Osasco,Ashburn,114.15
+Ashburn,Tokyo,148.39
+Tokyo,Ashburn,148.31
+Osasco,Tokyo,258.78
+Tokyo,Osasco,259.38

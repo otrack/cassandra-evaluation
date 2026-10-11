@@ -1,32 +1,17 @@
 import math
 
 import infra
+from emulate_latency import load_measured_rtts, one_way_latency
 
 # Moved here from start_cassandra_cluster.py, which has been removed.
-#
-# Note that estimate_latency below assumes 200 km/ms whereas emulate_latency.py
-# assumes 204 km/ms; the two were never reconciled, so the original constant is
-# kept to leave the estimates this script prints unchanged.
 
 # The DCs of the active infra, in the order the experiments deploy them
-locations_lat_long = [(float(row["lat"]), float(row["lon"])) for row in infra.read_locations()]
+locations_lat_long = [(float(row["lat"]), float(row["lon"]), row["loc"]) for row in infra.read_locations()]
+measured_rtts = load_measured_rtts()
 
-def haversine(lat1, lon1, lat2, lon2):
-    # Calculate the great-circle distance between two points on the Earth
-    R = 6371  # Earth radius in kilometers
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    distance = R * c
-    return distance
-
-def estimate_latency(distance_km):
-    # Speed of light in fiber optics is approximately 200,000 km/s
-    speed_of_light_km_per_ms = 200  # km/ms
-    latency_ms = distance_km / speed_of_light_km_per_ms
-
-    return math.floor(latency_ms)
+def dc_latency(a, b):
+    # One-way latency (ms) between two DCs, as emulate_latency.py applies it
+    return one_way_latency(a, b, measured_rtts)
 
 def one_wide_area_round_trip(dc_count: int) -> float:
     # result = 0
@@ -37,7 +22,7 @@ def one_wide_area_round_trip(dc_count: int) -> float:
     #     latency_list = []
     #     for j in range(dc_count):
     #         rep_pos = locations_lat_long[j]
-    #         latency_list.append(estimate_latency(haversine(current_pos[0], current_pos[1], rep_pos[0], rep_pos[1])))
+    #         latency_list.append(dc_latency(current_pos, rep_pos))
     #     latency_list.sort()
     #     result += latency_list[quorum_size - 1] * 2
     #     count += 1
@@ -48,7 +33,7 @@ def one_wide_area_round_trip(dc_count: int) -> float:
     latency_list = []
     for i in range(dc_count - 1):
         rep_pos = locations_lat_long[i]
-        latency_list.append(estimate_latency(haversine(current_pos[0], current_pos[1], rep_pos[0], rep_pos[1])))
+        latency_list.append(dc_latency(current_pos, rep_pos))
     latency_list.sort()
     print(latency_list)
     return latency_list[quorum_size - 1] * 2
@@ -68,7 +53,7 @@ def accord_operation_estimation_fast_path(dc_count: int) -> float:
         latency_list = []
         for j in range(dc_count):
             rep_pos = locations_lat_long[j]
-            latency_list.append(estimate_latency(haversine(current_pos[0], current_pos[1], rep_pos[0], rep_pos[1])))
+            latency_list.append(dc_latency(current_pos, rep_pos))
         latency_list.sort()
         result += latency_list[quorum_size - 1] * 2
         count += 1
