@@ -91,6 +91,22 @@ if [ "$dry_run" -eq 0 ]; then
         then
 	    tracing="false" # FIXME
         fi
+        # --test mode disables the warm-up phase (WARMUP_EXECUTION_TIME=0
+        # above), so db.init() and the timed operation loop again share one
+        # maxexecutiontime budget via YCSB's own TerminatorThread. A
+        # swiftpaxos client's connection setup calls findClosest(), which
+        # shells out to `ping` once per replica, sequentially -- routinely
+        # several seconds -- so the 10s test-mode budget can be consumed
+        # almost entirely by init() alone, leaving nothing for the terminator
+        # to measure before it force-stops every thread. Give this protocol
+        # family a longer budget in test mode; other protocols don't pay that
+        # connect cost and keep the fast default.
+        protocol_maxexecutiontime=${maxexecutiontime}
+        if [ "$test_run" -eq 1 ]; then
+            case "$p" in
+                swiftpaxos-*) protocol_maxexecutiontime=30 ;;
+            esac
+        fi
         for w in ${workloads}
         do
 	    for c in ${threads}
@@ -98,7 +114,7 @@ if [ "$dry_run" -eq 0 ]; then
 	        do_clean_up=$(( count == total-1 ? 1 : 0 ))
 	        ts=$(date +%Y%m%d%H%M%S%N)
 	        output_file="${LOGDIR}/cdf/${p}_${num_dcs}_${w}_${ts}.dat"
-	        run_benchmark ${p} ${c} ${num_dcs} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing} -p maxexecutiontime=${maxexecutiontime}
+	        run_benchmark ${p} ${c} ${num_dcs} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing} -p maxexecutiontime=${protocol_maxexecutiontime}
 	        do_create_and_load=0
 	        count=$((count+1))
 	    done

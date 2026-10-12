@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  JFR settings for async-profiler's jfrsync (cassandra/profiler.sh copies this into each node and adds
+  jfrsync=<it> to the profiler options when cassandra.profiler.jfr_events is on).
+
+  async-profiler records CPU/wall/lock samples itself, and jfrsync disables the JDK's equivalents;
+  they are also turned off here in case. Under jfrsync async-profiler leaves the recording context (JVM flags, system
+  properties, CPU load) to JFR, so those are enabled below. Everything else is minimal: the Cassandra diagnostic events
+  (-Dcassandra.jfr.diagnostic_events=true, see org.apache.cassandra.utils.JfrDiagnostics) every 100 ms, GC pauses,
+  slow safepoints, network and container CPU usage/throttling. Events not listed keep their defaults, which for
+  Java-level events is usually enabled: Cassandra's per-operation cache events are therefore disabled explicitly.
+-->
+<configuration version="2.0" label="Cassandra diagnostics" description="Cassandra diagnostic events for latency investigations" provider="cassandra-evaluation">
+
+  <!-- Cassandra: internode connections (queue, backpressure, TCP_INFO), TCP counters, Accord executors -->
+  <event name="cassandra.net.Outbound"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
+  <event name="cassandra.net.Inbound"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
+  <event name="cassandra.net.InboundPeer"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
+  <event name="cassandra.net.Backpressure"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting></event>
+  <event name="cassandra.os.Tcp"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
+  <event name="cassandra.os.Pressure"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
+  <event name="cassandra.os.Threads"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
+  <event name="cassandra.accord.Executor"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
+
+  <!-- Cassandra events that are far too frequent for this purpose -->
+  <event name="cassandra.accord.cache.Add"><setting name="enabled">false</setting></event>
+  <event name="cassandra.accord.cache.Release"><setting name="enabled">false</setting></event>
+  <event name="cassandra.accord.cache.Evict"><setting name="enabled">false</setting></event>
+
+  <!-- recording context: async-profiler leaves these to JFR under jfrsync, so without them the capture would lack
+       the JVM flags, system properties, host and CPU load -->
+  <event name="jdk.JVMInformation"><setting name="enabled">true</setting><setting name="period">beginChunk</setting></event>
+  <event name="jdk.InitialSystemProperty"><setting name="enabled">true</setting><setting name="period">beginChunk</setting></event>
+  <event name="jdk.OSInformation"><setting name="enabled">true</setting><setting name="period">beginChunk</setting></event>
+  <event name="jdk.CPUInformation"><setting name="enabled">true</setting><setting name="period">beginChunk</setting></event>
+  <event name="jdk.CPULoad"><setting name="enabled">true</setting><setting name="period">1 s</setting></event>
+
+  <!-- JVM pauses -->
+  <event name="jdk.GarbageCollection"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting></event>
+  <event name="jdk.GCPhasePause"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting></event>
+  <event name="jdk.GCHeapSummary"><setting name="enabled">true</setting></event>
+  <event name="jdk.ZAllocationStall"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting></event>
+  <event name="jdk.ZPageAllocation"><setting name="enabled">true</setting><setting name="threshold">1 ms</setting></event>
+  <event name="jdk.SafepointBegin"><setting name="enabled">true</setting><setting name="threshold">2 ms</setting></event>
+  <event name="jdk.ExecuteVMOperation"><setting name="enabled">true</setting><setting name="threshold">2 ms</setting></event>
+
+  <!-- host / container -->
+  <event name="jdk.NetworkUtilization"><setting name="enabled">true</setting><setting name="period">1 s</setting></event>
+  <event name="jdk.ContainerCPUUsage"><setting name="enabled">true</setting><setting name="period">1 s</setting></event>
+  <event name="jdk.ContainerCPUThrottling"><setting name="enabled">true</setting><setting name="period">1 s</setting></event>
+  <event name="jdk.ContainerConfiguration"><setting name="enabled">true</setting><setting name="period">beginChunk</setting></event>
+  <event name="jdk.ContainerMemoryUsage"><setting name="enabled">true</setting><setting name="period">1 s</setting></event>
+  <event name="jdk.SwapSpace"><setting name="enabled">true</setting><setting name="period">1 s</setting></event>
+
+  <!-- recorded by async-profiler instead, or too costly here -->
+  <event name="jdk.ExecutionSample"><setting name="enabled">false</setting></event>
+  <event name="jdk.NativeMethodSample"><setting name="enabled">false</setting></event>
+  <event name="jdk.ThreadCPULoad"><setting name="enabled">false</setting></event>
+  <event name="jdk.JavaMonitorEnter"><setting name="enabled">false</setting></event>
+  <event name="jdk.JavaMonitorWait"><setting name="enabled">false</setting></event>
+  <event name="jdk.ThreadPark"><setting name="enabled">false</setting></event>
+  <event name="jdk.ObjectAllocationSample"><setting name="enabled">false</setting></event>
+  <event name="jdk.ObjectAllocationInNewTLAB"><setting name="enabled">false</setting></event>
+  <event name="jdk.ObjectAllocationOutsideTLAB"><setting name="enabled">false</setting></event>
+  <event name="jdk.FileRead"><setting name="enabled">false</setting></event>
+  <event name="jdk.FileWrite"><setting name="enabled">false</setting></event>
+  <event name="jdk.SocketRead"><setting name="enabled">false</setting></event>
+  <event name="jdk.SocketWrite"><setting name="enabled">false</setting></event>
+  <event name="jdk.JavaExceptionThrow"><setting name="enabled">false</setting></event>
+  <event name="jdk.JavaErrorThrow"><setting name="enabled">false</setting></event>
+  <event name="jdk.ExceptionStatistics"><setting name="enabled">false</setting></event>
+  <event name="jdk.ThreadSleep"><setting name="enabled">false</setting></event>
+</configuration>
