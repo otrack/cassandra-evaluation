@@ -36,13 +36,13 @@ for arg in "$@"; do
     esac
 done
 
+#    "calvin_ubench.sh"
 scripts=(
     "ephemeral.sh"
     "fault_tolerance.sh"
     "latency_throughput.sh"
     "cdf.sh"
     "closed_economy.sh"
-    "calvin_ubench.sh"
     "conflict.sh"
     "swap.sh"
     "ycsb.sh"

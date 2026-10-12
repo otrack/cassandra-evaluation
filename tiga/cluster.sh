@@ -37,28 +37,21 @@ with open(latencies_csv, newline='') as f:
     reader = csv.DictReader(f)
     for row in reader:
         locations.append(row['loc'].strip().strip('\"'))
-        lat_lons.append((float(row['lat']), float(row['lon'])))
+        lat_lons.append((float(row['lat']), float(row['lon']), locations[-1]))
         if len(locations) >= num_dcs:
             break
 
-def haversine(lat1, lon1, lat2, lon2):
-    import math
-    R = 6371
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon1 - lon2)
-    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+sys.path.insert(0, sys.argv[-1])
+from emulate_latency import load_measured_rtts, one_way_latency
+measured_rtts = load_measured_rtts()
 
 best_leader_idx = 0
 min_total_owd = float('inf')
 for i in range(num_dcs):
-    lat1, lon1 = lat_lons[i]
     total_owd = 0
     for j in range(num_dcs):
         if i == j: continue
-        lat2, lon2 = lat_lons[j]
-        dist = haversine(lat1, lon1, lat2, lon2)
-        total_owd += int(dist / 204)
+        total_owd += one_way_latency(lat_lons[i], lat_lons[j], measured_rtts)
     if total_owd < min_total_owd:
         min_total_owd = total_owd
         best_leader_idx = i
@@ -107,7 +100,7 @@ config['probe_lateness_trace_cap'] = int(sys.argv[6])
 
 with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
     yaml.dump(config, f, default_flow_style=False)
-" "$num_dcs" "$nodes_per_dc" "${TIGA_DIR}" "${LOCATIONS_FILE}" "$probe_lateness" "$probe_trace_cap"
+" "$num_dcs" "$nodes_per_dc" "${TIGA_DIR}" "${LOCATIONS_FILE}" "$probe_lateness" "$probe_trace_cap" "${DIR}"
 
     log "Generated dynamic config file in ${TIGA_DIR}/config-ycsb.yml for ${num_dcs} DCs x ${nodes_per_dc} nodes/DC (probe_lateness=${probe_lateness}, probe_lateness_trace_cap=${probe_trace_cap})"
 
@@ -198,31 +191,26 @@ with open(latencies_csv, newline='') as f:
     reader = csv.DictReader(f)
     for row in reader:
         locations.append(row['loc'].strip().strip('\"'))
-        lat_lons.append((float(row['lat']), float(row['lon'])))
+        lat_lons.append((float(row['lat']), float(row['lon']), locations[-1]))
         if len(locations) >= num_dcs:
             break
 
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon1 - lon2)
-    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+sys.path.insert(0, sys.argv[-1])
+from emulate_latency import load_measured_rtts, one_way_latency
+measured_rtts = load_measured_rtts()
 
 best_leader_idx = 0
 min_total_owd = float('inf')
 for i in range(num_dcs):
-    lat1, lon1 = lat_lons[i]
     total_owd = 0
     for j in range(num_dcs):
         if i == j: continue
-        lat2, lon2 = lat_lons[j]
-        total_owd += int(haversine(lat1, lon1, lat2, lon2) / 204)
+        total_owd += one_way_latency(lat_lons[i], lat_lons[j], measured_rtts)
     if total_owd < min_total_owd:
         min_total_owd = total_owd
         best_leader_idx = i
 
 print(locations[best_leader_idx])
-" "$num_dcs" "${LOCATIONS_FILE}")
+" "$num_dcs" "${LOCATIONS_FILE}" "${DIR}")
     echo "${best_city}1"
 }

@@ -46,8 +46,9 @@ Which places this infra deploys to, as `lat,lon,loc`, one row per DC, in order.
 Row *i* is DC *i*.
 
 This is deliberately **per provider**, not global. The simulation's map is a
-list of cities it pretends to run in, and the distances between them are what
-`tc` reproduces. A cloud provider's map is *derived*: it names the zones it
+list of cities it pretends to run in: the AWS regions of `infra/aws`, whose
+measured round-trip times (`latencies.csv`, linked to `infra/aws/latencies.csv`)
+are what `tc` reproduces. A cloud provider's map is *derived*: it names the zones it
 runs in, and looks their coordinates up in a table of where that cloud's
 regions physically are. Coordinates therefore describe where the machines
 actually are, which is what makes the theoretical-optimum overlays in `cdf.py`,
@@ -80,6 +81,15 @@ the set of nodes it records.
 
 Everything on the local Docker daemon, WAN emulated with `tc`. Historical
 behavior; every contract function is a no-op or returns the local daemon.
+
+**Latencies are measured, not derived.** `latencies.csv` (`src,dst,rtt_ms`, one
+row per direction) records the round-trip times between AWS regions taken from
+[cloudping.co](https://www.cloudping.co/); the two directions of a pair are
+averaged and each direction delayed by half of it. Every pair of locations
+must be listed, so adding a city to `locations.csv` means adding its
+measurements too. A provider without a `latencies.csv` (GCP) falls back to the
+great-circle distance at 204 km/ms, which underestimates real round trips by
+1.3–2.5×.
 
 ### `gcp`
 

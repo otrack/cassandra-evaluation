@@ -13,7 +13,7 @@ usage() {
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
     echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
-    echo "  --dcs=N          Override the number of DCs (default 3)."
+    echo "  --dcs=N          Override the number of DCs (default 5)."
 }
 
 dry_run=0
@@ -51,7 +51,7 @@ protocols=$(awk -F',' 'NR>1 && $1!="" {print $1}' protocols.csv | grep -v cockro
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
-dcs=${dcs_override:-3}
+dcs=${dcs_override:-5}
 replication_factor=${dcs}
 threads=$(config threads)
 records=10000 # at least one per thread * DC plus one
@@ -66,6 +66,8 @@ if [ "$test_run" -eq 1 ]; then
     }
     trap restore_test_settings EXIT
     dcs=3
+    replication_factor=${dcs}
+    WARMUP_EXECUTION_TIME=0
     records=1000
     compute_test_machine "${dcs}"
     sed -i "s/^maxexecutiontime=.*/maxexecutiontime=10/" "${CONFIG_FILE}"

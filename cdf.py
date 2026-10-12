@@ -4,51 +4,8 @@ import pandas as pd
 
 from utils import drop_unsound_rows
 
-from emulate_latency import haversine, estimate_latency
+from emulate_latency import compute_optimum_per_replica
 from colors import load_protocol_colors, load_protocol_aliases, get_protocol_color, make_protocol_legend, sort_protocols_for_plotting
-
-def compute_optimum_per_replica(latlon, n_nodes):
-    """
-    For each replica i (0..n_nodes-1), compute the RTT to the closest quorum
-    (majority) of replicas.
-
-    Algorithm:
-      - quorum_size = floor(n_nodes/2) + 1 (majority)
-      - for replica i, compute haversine distances to all other replicas
-      - take the (quorum_size - 1) nearest other replicas (since the local replica
-        itself counts toward the quorum)
-      - the RTT for replica i is 2 * estimate_latency(max_distance) where
-        max_distance is the distance to the farthest replica in the quorum
-    Returns a list of RTTs (same order as latlon[0..n_nodes-1]).
-    """
-    optimums = []
-    # quorum (majority)
-    quorum = (n_nodes // 2) + 1
-
-    for i in range(n_nodes):
-        dists = []
-        for j in range(n_nodes):
-            if i == j:
-                continue
-            dist = haversine(latlon[i][0], latlon[i][1], latlon[j][0], latlon[j][1])
-            dists.append(dist)
-
-        if not dists:
-            # single-node case -> no neighbour, fallback to 0
-            optimums.append(0.0)
-            continue
-
-        # sort ascending and pick the nearest (quorum - 1) other replicas
-        dists.sort()
-        need = max(1, quorum - 1)  # at least 1 if quorum>1, safe if quorum==1
-        selected = dists[:min(need, len(dists))]
-
-        # RTT to reach a quorum is determined by the slowest member in that quorum
-        max_dist = max(selected)
-        rtt = 2*estimate_latency(max_dist)
-        optimums.append(rtt)
-
-    return optimums
 
 def escape_latex(text):
     """Escape special LaTeX characters in a string."""
@@ -251,7 +208,7 @@ def main():
             node_locs.append(row['loc'] if 'loc' in row else '')
         except Exception as e:
             print(f"WARNING: Skipping row {idx+2} in latitudes.csv due to error: {e}", file=sys.stderr)
-    latlon = list(zip(node_lats, node_lons))
+    latlon = list(zip(node_lats, node_lons, node_locs))
 
     # Compute theoretical optimum for each listed DC
     dc_optimums = {}
