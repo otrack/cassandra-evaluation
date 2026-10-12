@@ -49,16 +49,20 @@ scripts=(
 )
 
 # Not every experiment can run every protocol.  The transactional workloads
-# need multi-key atomicity, which only Accord, CockroachDB and Tiga provide,
-# and the fault-tolerance experiment needs a leader to slow down and kill.
+# need multi-key atomicity, which only Accord, CockroachDB, Tiga and SwiftPaxos'
+# Janus provide; Janus executes one-shot transactions only, so it does not run
+# the swap workload, whose writes depend on its reads.  The fault-tolerance
+# experiment needs a leader to slow down and kill.
 # Names must match the first column of protocols.csv.
 DEFAULT_PROTOCOLS="accord cockroachdb-opt swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp swiftpaxos-janus cassandra-paxos tiga"
 TRANSACTIONAL_PROTOCOLS="accord cockroachdb-opt tiga swiftpaxos-janus"
+SWAP_PROTOCOLS="accord cockroachdb-opt tiga"
 FAULT_TOLERANCE_PROTOCOLS="accord cockroachdb-opt"
 
 protocols_for() {
     case "$1" in
-        closed_economy.sh|calvin_ubench.sh|swap.sh) echo "${TRANSACTIONAL_PROTOCOLS}" ;;
+        closed_economy.sh|calvin_ubench.sh) echo "${TRANSACTIONAL_PROTOCOLS}" ;;
+        swap.sh)                   echo "${SWAP_PROTOCOLS}" ;;
         fault_tolerance.sh)        echo "${FAULT_TOLERANCE_PROTOCOLS}" ;;
         *)                         echo "${DEFAULT_PROTOCOLS}" ;;
     esac

@@ -68,7 +68,7 @@ docker build -t user/cassandra-accord:latest .
 At a high-level, the benchmark creates a set of replicas and clients.
 These are spread across several locations to simulate datacenters.
 By default there is one data replica and one client per datacenter; this can be changed with the
-`nodesperdc` parameter (SwiftPaxos only supports `nodesperdc=1`).
+`nodesperdc` parameter (SwiftPaxos only supports `nodesperdc=1`, except Janus, whose shard j is made of the j-th node of every DC).
 The locations are taken, in order, from the active infrastructure's locations map
 (`infra/simulation/locations.csv` by default: the five AWS regions Singapore, Frankfurt,
 Ashburn, Osasco and Tokyo). The WAN delay between two of them is half the round-trip time
@@ -161,7 +161,7 @@ the results into a plot or a table.
 | `conflict.sh` | Plots the average latency across all clients when changing a fixed conflict rate for updates. |
 | `closed_economy.sh` | Runs a closed economy workload (banking transactions) on transaction-supporting protocols, varying the number of nodes. |
 | `swap.sh` | Runs a workload that atomically swaps S items per transaction, with S varying from 3 to 8. Unlike the other experiments it deploys **3 nodes per datacentre** by default (`--nodesperdc=N` to change), so the replica set spans a realistic multi-node DC. |
-| `calvin_ubench.sh` | Runs the micro-benchmark of Calvin (SIGMOD'12, Section 6.2, Figure 5) on `accord`, `cockroachdb` and `tiga`: each transaction reads 10 records, one of them from a small pool of hot records, and increments their counters if their sum is non-negative. Under high (contention index 0.01, i.e. 100 hot records) and low (0.0001) contention, with 1M records, it increases the number of clients per site by a factor of 1.5 (16, 24, 36, ..., up to 2048) until both latency and throughput degrade, and plots one latency vs throughput (hockey stick) graph per contention index. `--ci=LIST`, `--clients=LIST`, `--max-clients=N` and `--records=N` change these settings; `--test` uses 20000 records and 2 to 10 clients per site. |
+| `calvin_ubench.sh` | Runs the micro-benchmark of Calvin (SIGMOD'12, Section 6.2, Figure 5) on `accord`, `cockroachdb`, `tiga` and `swiftpaxos-janus`: each transaction reads 10 records, one of them from a small pool of hot records, and increments their counters if their sum is non-negative. Under high (contention index 0.01, i.e. 100 hot records) and low (0.0001) contention, with 1M records, it increases the number of clients per site by a factor of 1.5 (16, 24, 36, ..., up to 2048) until both latency and throughput degrade, and plots one latency vs throughput (hockey stick) graph per contention index. It runs on 3 DCs with 2 nodes (hence 2 partitions) per DC by default (`--nodesperdc=N` to change). `--ci=LIST`, `--clients=LIST`, `--max-clients=N` and `--records=N` change these settings; `--test` uses 20000 records and 2 to 10 clients per site. |
 | `latency_throughput.sh` | Generates a classical latency vs throughput graph by increasing the number of clients by a factor of 2 (1, 2, 4, 8, ..., up to 128) to demonstrate the hockey stick effect (where latency increases and throughput plateaus/degrades as the system saturates). |
 | `fault_tolerance.sh` | Injects a 400ms slowdown then a crash on the first replica, and plots the throughput over time (mimics Figure 6 of the CockroachDB SIGMOD'20 paper). |
 | `ephemeral.sh` | Illustrates the benefit of activating ephemeral reads in Accord, as a LaTeX table of the speed-up over workloads A to D. |
@@ -172,7 +172,8 @@ It selects the protocols per experiment, since not all of them apply everywhere:
 | experiments | protocols |
 | --- | --- |
 | default | `accord`, `cockroachdb-opt`, `swiftpaxos-paxos`, `swiftpaxos-epaxos`, `swiftpaxos-curp`, `cassandra-paxos`, `tiga` |
-| `closed_economy.sh`, `calvin_ubench.sh`, `swap.sh` | `accord`, `cockroachdb-opt`, `tiga` — the transactional workloads need multi-key atomicity |
+| `closed_economy.sh`, `calvin_ubench.sh` | `accord`, `cockroachdb-opt`, `tiga`, `swiftpaxos-janus` — the transactional workloads need multi-key atomicity |
+| `swap.sh` | `accord`, `cockroachdb-opt`, `tiga` — Janus only executes one-shot transactions, and the writes of a swap depend on its reads |
 | `fault_tolerance.sh` | `accord`, `cockroachdb-opt` |
 
 `--protocols=LIST` on `run-all.sh` overrides all of them. `ephemeral.sh` ignores
@@ -186,8 +187,9 @@ Each experiment accepts the following flags:
 
 The protocols are listed in `protocols.csv`, together with the color and the name used for them in
 the plots. Not all of them are meaningful for every experiment: the transactional ones
-(`closed_economy.sh`, `swap.sh`) only run Accord and CockroachDB, `calvin_ubench.sh` runs Accord,
-CockroachDB and Tiga (the systems whose YCSB client implements its transaction), and `ephemeral.sh`
+(`closed_economy.sh`, `swap.sh`) only run Accord and CockroachDB (and Janus, for `closed_economy.sh`),
+`calvin_ubench.sh` runs Accord, CockroachDB, Tiga and Janus (the systems whose YCSB client implements its
+transaction), and `ephemeral.sh`
 only runs Accord.
 
 The results of the benchmarks are PDF plots created under `results/`.

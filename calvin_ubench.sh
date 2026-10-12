@@ -14,7 +14,7 @@
 #
 # The experiment has two phases:
 #  - saturation: at a fixed number of nodes per data center (--nodesperdc,
-#    default from exp.config), for each contention index, it increases the
+#    default: 2, i.e. 2 partitions), on 3 data centers, for each contention index, it increases the
 #    number of clients per site by a factor of 1.5 (as latency_throughput.sh
 #    does) to plot the latency against the throughput, and stops once both of
 #    them degrade (the system is saturated).  The number of clients of the
@@ -46,7 +46,7 @@ usage() {
     echo "  --no-pull          Use the local Docker images, without pulling them first."
     echo "  --phase=PHASE      saturation, scale or all (default: all)."
     echo "  --protocols=LIST   Override the list of protocols to run (comma-separated)."
-    echo "  --nodesperdc=N     Nodes per DC of the saturation phase (default from exp.config)."
+    echo "  --nodesperdc=N     Nodes per DC of the saturation phase (default: 2, on 3 DCs)."
     echo "  --ci=LIST          Contention indexes to run (comma-separated, default: 0.0001,0.01)."
     echo "  --clients=LIST     Clients per site of the saturation phase (comma-separated, default:"
     echo "                     16, 24, 36, ..., multiplying by 1.5 up to --max-clients)."
@@ -193,8 +193,8 @@ restore_settings() {
 }
 trap restore_settings EXIT
 
-saturation_nodesperdc=${original_nodesperdc:-1}
-[ -n "$nodesperdc_override" ] && saturation_nodesperdc="$nodesperdc_override"
+# 3 DCs (nodes) with 2 nodes, hence 2 partitions, per DC, with and without --test
+saturation_nodesperdc=${nodesperdc_override:-2}
 
 if [ "$test_run" -eq 1 ]; then
     # The hot pool of a partition has 1/CI = 10000 records at CI=0.0001, and
