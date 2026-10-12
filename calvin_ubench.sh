@@ -143,7 +143,7 @@ mkdir -p ${RESULTSDIR}
 workload_type="site.ycsb.workloads.CalvinWorkload"
 workload="calvin"
 # The transactional systems whose YCSB client implements checkAndIncrement
-protocols="accord cockroachdb-opt tiga"
+protocols="accord cockroachdb-opt tiga swiftpaxos-janus"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
@@ -253,7 +253,8 @@ calvin_partitioner() {
     case "$1" in
         accord|cassandra-*|paxos|quorum|one) echo "murmur3" ;;
         cockroachdb*) echo "range" ;;
-        tiga*|calvin|detock|janus) echo "tiga" ;;
+        tiga*|calvin|detock) echo "tiga" ;;
+        swiftpaxos-janus) echo "swiftpaxos" ;;
         *) echo "mod" ;;
     esac
 }
@@ -370,7 +371,7 @@ scale_clients_for() {
 scale_phase() {
     for p in ${protocols}
     do
-        if [[ "$p" == swiftpaxos* ]]; then
+        if [[ "$p" == swiftpaxos* && "$p" != swiftpaxos-janus ]]; then
             log "Skipping ${p} in the scale phase (a single node per DC)"
             continue
         fi

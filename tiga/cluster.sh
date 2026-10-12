@@ -122,7 +122,7 @@ with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
                 -e PROTOCOL=${protocol} \
                 -e SERVER_NAME=${server_name} \
                 -e CONFIG_PATH=/app/config/config-ycsb.yml || {
-                error "Failed to start tiga/calvin/detock/janus server ${container_name}"
+                error "Failed to start tiga/calvin/detock server ${container_name}"
                 return 2
             }
             global_node_id=$((global_node_id + 1))

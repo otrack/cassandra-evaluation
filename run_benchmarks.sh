@@ -174,7 +174,7 @@ run_ycsb() {
     # --env-file is read by the Docker client, so it needs no staging even when
     # the daemon lives on another machine.
     local docker_args="--rm -d --security-opt apparmor=unconfined${cpu_limit} --network container:${nearby_database} --env-file=${output_file%.dat}.docker"
-    if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
+    if printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
         # Bind-mounts, on the other hand, resolve on the daemon's filesystem.
         local staged_config
         staged_config=$(infra_stage_file "$(node_index_of "${nearby_database}")" \
@@ -184,7 +184,7 @@ run_ycsb() {
     
     if [ "$action" == "load" ];
     then
-	if printf '%s\n' "$norm_protocol" | grep -wF -q -e "swiftpaxos" -e "tiga" -e "calvin" -e "detock" -e "janus";
+	if printf '%s\n' "$norm_protocol" | grep -wF -q -e "swiftpaxos" -e "tiga" -e "calvin" -e "detock";
 	then
 	    true
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb";
@@ -220,6 +220,11 @@ run_ycsb() {
 	    fast="false"
 	elif printf '%s\n' "$protocol" | grep -wF -q -- "curp";
 	then
+	    leaderless="true"
+	    fast="false"
+	elif printf '%s\n' "$protocol" | grep -wF -q -- "janus";
+	then
+	    # the closest replica coordinates the transactions
 	    leaderless="true"
 	    fast="false"
 	fi	
@@ -262,7 +267,7 @@ run_ycsb() {
 -p db.url=${jdbc_url} \
 -p db.user=root \
 -p db.passwd="
-    elif printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
+    elif printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
 	ycsb_client="tiga"
 	extra_opts_str+=" -p tiga.config=/ycsb/config-ycsb.yml -p tiga.mode=${norm_protocol}"
     else
@@ -309,7 +314,7 @@ run_ycsb() {
         log "YCSB debug logging enabled for ${debug_logger}"
     fi
 
-    if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
+    if ! printf '%s\n' "$norm_protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
         java_opts+=" -Ddatastax-java-driver.advanced.request.trace.attempts=100 -Ddatastax-java-driver.advanced.request.trace.interval=100ms"
     fi
 
@@ -376,13 +381,13 @@ run_benchmark() {
     pref=cassandra
     if printf '%s\n' "$protocol" | grep -wF -q -- "swiftpaxos"; then	
 	pref=swiftpaxos
-	if [ "${nodes_per_dc:-1}" -gt 1 ]; then
+	if [ "${nodes_per_dc:-1}" -gt 1 ] && [ "$protocol" != "swiftpaxos-janus" ]; then
 	    error "swiftpaxos protocol does not support nodesperdc > 1 (current nodesperdc=${nodes_per_dc})."
 	    exit 1
 	fi
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
 	pref=cockroachdb
-    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
+    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
 	pref=tiga
     fi   
 
@@ -530,7 +535,7 @@ stop_benchmark() {
 	pref=swiftpaxos
     elif printf '%s\n' "$protocol" | grep -wF -q -- "cockroachdb"; then
 	pref=cockroachdb
-    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock" -e "janus"; then
+    elif printf '%s\n' "$protocol" | grep -wF -q -e "tiga" -e "calvin" -e "detock"; then
 	pref=tiga
     fi
     

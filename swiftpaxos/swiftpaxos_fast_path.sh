@@ -6,8 +6,13 @@ source ${FAST_PATH_DIR}/../utils.sh
 
 CONTAINER_ID="${1:?Usage: $0 <container_id_or_name>}"
 
-# Get the last log line matching the swiftpaxos path stats format
+# Get the last log line matching the swiftpaxos path stats format, or Janus'
+# ("janus: <fast> fast, <slow> slow paths", logged every 1000 transactions)
 LAST_LINE=$(dlogs "$CONTAINER_ID" 2>&1 | grep -E "weird [0-9]+; conflicted [0-9]+; slow [0-9]+; fast [0-9]+" | tail -n 1)
+if [ -z "$LAST_LINE" ]; then
+    LAST_LINE=$(dlogs "$CONTAINER_ID" 2>&1 | grep -E "janus: [0-9]+ fast, [0-9]+ slow paths" | tail -n 1 |
+        sed -E 's/.*janus: ([0-9]+) fast, ([0-9]+) slow paths.*/slow \2; fast \1/')
+fi
 
 if [ -z "$LAST_LINE" ]; then
     echo "Fast ratio: 0.0"

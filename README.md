@@ -1,8 +1,8 @@
 This repository contains a set of scripts to benchmark Cassandra replication protocols with the Yahoo! Cloud Serving Benchmark (YCSB).
 It also offers a way to compare it against
-- the [SwiftPaxos](https://github.com/imdea-software/swiftpaxos) library which implements a basic replicated key-value store several state-of-the-art protocols such as Paxos, Egalitarian Paxos, and SwiftPaxos;
+- the [SwiftPaxos](https://github.com/imdea-software/swiftpaxos) library which implements a basic replicated key-value store several state-of-the-art protocols such as Paxos, Egalitarian Paxos, and SwiftPaxos, as well as the Janus transactional protocol;
 - the [cockraochDB](https://github.com/cockroachdb/cockroach) distributed data store; and
-- the Tiga suite, which bundles the Tiga, Calvin, Detock and Janus transactional protocols.
+- the Tiga suite, which bundles the Tiga, Calvin and Detock transactional protocols.
 
 ## Overview
 

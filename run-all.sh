@@ -52,8 +52,8 @@ scripts=(
 # need multi-key atomicity, which only Accord, CockroachDB and Tiga provide,
 # and the fault-tolerance experiment needs a leader to slow down and kill.
 # Names must match the first column of protocols.csv.
-DEFAULT_PROTOCOLS="accord cockroachdb-opt swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp cassandra-paxos tiga"
-TRANSACTIONAL_PROTOCOLS="accord cockroachdb-opt tiga"
+DEFAULT_PROTOCOLS="accord cockroachdb-opt swiftpaxos-paxos swiftpaxos-epaxos swiftpaxos-curp swiftpaxos-janus cassandra-paxos tiga"
+TRANSACTIONAL_PROTOCOLS="accord cockroachdb-opt tiga swiftpaxos-janus"
 FAULT_TOLERANCE_PROTOCOLS="accord cockroachdb-opt"
 
 protocols_for() {
