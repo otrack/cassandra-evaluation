@@ -38,14 +38,14 @@ done
 
 #    "calvin_ubench.sh"
 scripts=(
-    "ephemeral.sh"
-    "fault_tolerance.sh"
-    "latency_throughput.sh"
     "cdf.sh"
-    "closed_economy.sh"
-    "conflict.sh"
-    "swap.sh"
     "ycsb.sh"
+    "conflict.sh"
+    "latency_throughput.sh"
+    "closed_economy.sh"
+    "swap.sh"
+    "fault_tolerance.sh"
+    "ephemeral.sh"
 )
 
 # Not every experiment can run every protocol.  The transactional workloads
