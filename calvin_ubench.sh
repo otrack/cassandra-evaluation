@@ -12,7 +12,7 @@
 # As in Figure 5, the experiment considers low (CI=0.0001) and high (CI=0.01)
 # contention, and 1M records per partition.
 #
-# The experiment has two phases:
+# The experiment has two phases (--phase; only the saturation one by default):
 #  - saturation: at a fixed number of nodes per data center (--nodesperdc,
 #    default: 1, i.e. 1 partition), on 3 data centers, for each contention index, it increases the
 #    number of clients per site by a factor of 1.5 (as latency_throughput.sh
@@ -44,7 +44,7 @@ usage() {
     echo "                     clients/site, 1 and 2 nodes/DC), with containers right-sized to fit"
     echo "                     this machine."
     echo "  --no-pull          Use the local Docker images, without pulling them first."
-    echo "  --phase=PHASE      saturation, scale or all (default: all)."
+    echo "  --phase=PHASE      saturation, scale or all (default: saturation)."
     echo "  --protocols=LIST   Override the list of protocols to run (comma-separated)."
     echo "  --nodesperdc=N     Nodes per DC of the saturation phase (default: 1, on 3 DCs)."
     echo "  --ci=LIST          Contention indexes to run (comma-separated, default: 0.0001,0.01)."
@@ -62,7 +62,7 @@ usage() {
 dry_run=0
 test_run=0
 no_pull=0
-phase="all"
+phase="saturation"
 protocols_override=""
 nodesperdc_override=""
 ci_override=""
