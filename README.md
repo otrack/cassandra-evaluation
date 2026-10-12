@@ -111,6 +111,9 @@ that are defined in the file `exp.config`:
 | `cassandra.profiler.options` | async-profiler options for that capture (default `event=ctimer,interval=1ms,wall=10ms,lock=1ms`); `jfr` and `file=` are appended. `CASSANDRA_PROFILER_OPTIONS` overrides it. |
 | `cassandra.jvm_opts` | Extra JVM flags for the Cassandra nodes, e.g. the `-D` switches that turn individual Accord optimisations off for A/B runs. `CASSANDRA_JVM_OPTS` overrides it for a single run. |
 | `accord.debug_execution_report` | While profiling, also log `DebugExecution`'s slow-task and slow-lock warnings and keep its latency histograms (default `false`). It reads the thread CPU clock around every task and lock hold, which cost ~4% of executor CPU in the conflict runs; the spans are recorded either way. |
+| `accord.debug_distributed_execution` | While profiling, emit a `DX` span for every step of one transaction in N (coordinator phases, messages, replica state changes, command store tasks), tagged with its TxnId so the captures of all nodes can be joined; `0` (default) is off, `1` traces everything. `CASSANDRA_DX` overrides it for a single run. Needs a Cassandra build with `DebugDistributedExecution`. |
+| `accord.debug_distributed_execution_keys` | While profiling, record every transaction's `CommandsForKey` interactions on one key in K, including which transaction released each waiter, so wait chains can be followed; `0` (default) is off. `CASSANDRA_DX_KEYS` overrides it for a single run. |
+| `accord.debug_distributed_execution_report` | After each profiled run with either setting above, write the timelines and wait chains of the N slowest traced transactions to `<run>_txntrace.txt` next to the captures (default `10`, `0` to skip; needs a JDK 17+ where the scripts run). `CASSANDRA_DX_REPORT` overrides it for a single run. |
 
 ### Running on real machines
 

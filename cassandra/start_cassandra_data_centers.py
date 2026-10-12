@@ -87,6 +87,17 @@ def profiler_jvm_opts():
       depend on it.
     - DebugNonSafepoints makes async-profiler's stack traces accurate for
       inlined frames.
+    - SafepointTimeout with a 200 ms delay makes the JVM log (to gc.log, via
+      the image's -Xlog:safepoint=info) the threads that had not reached a
+      safepoint after 200 ms, with their OS thread id and CPU time: whether a
+      long time-to-safepoint was a thread spinning in Java or one blocked in
+      the kernel.  It only acts on safepoints that are already slow.
+    - accord.debug_distributed_execution[_keys] (see distributed_execution_opts)
+      add the per-transaction "DX" spans; they are recorded only while a
+      capture runs, so they are only passed when profiling.
+    - cassandra.jfr.diagnostic_events registers the JFR diagnostic events
+      (connections, TCP, Accord executors) that profiler.sh records through
+      jfrsync; see jfr_events_enabled.
     """
     if not profiler_enabled():
         return ""
@@ -95,7 +106,37 @@ def profiler_jvm_opts():
             " -Dcassandra.async_profiler.unsafe_mode=true"
             " -Daccord.debug_execution=true"
             f" -Daccord.debug_execution_report={report}"
-            " -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints")
+            " -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints"
+            " -XX:+SafepointTimeout -XX:SafepointTimeoutDelay=200"
+            + (" -Dcassandra.jfr.diagnostic_events=true" if jfr_events_enabled() else "")
+            + distributed_execution_opts())
+
+def jfr_events_enabled():
+    """cassandra.profiler.jfr_events (CASSANDRA_JFR_EVENTS overrides it), as in
+    cassandra/profiler.sh. A Cassandra build without JfrDiagnostics ignores the flag."""
+    value = os.environ.get("CASSANDRA_JFR_EVENTS", config.get("cassandra.profiler.jfr_events", 1))
+    return str(value).strip().lower() in ("1", "true")
+
+def _sample_setting(env, key):
+    value = str(os.environ.get(env, config.get(key, 0))).strip()
+    if not value.isdigit():
+        raise ValueError(f"{key} (or {env}) must be a non-negative integer, got '{value}'")
+    return int(value)
+
+def distributed_execution_opts():
+    """DebugDistributedExecution sampling: one transaction in N gets a DX span
+    for every step of its distributed execution, and every transaction's
+    CommandsForKey interactions are recorded on one key in K.  0 disables
+    either.  CASSANDRA_DX / CASSANDRA_DX_KEYS override exp.config for one run.
+    A Cassandra build without DebugDistributedExecution ignores the flags."""
+    txns = _sample_setting("CASSANDRA_DX", "accord.debug_distributed_execution")
+    keys = _sample_setting("CASSANDRA_DX_KEYS", "accord.debug_distributed_execution_keys")
+    opts = ""
+    if txns > 0:
+        opts += f" -Daccord.debug_distributed_execution={txns}"
+    if keys > 0:
+        opts += f" -Daccord.debug_distributed_execution_keys={keys}"
+    return opts
 
 def extra_jvm_opts():
     """Free-form JVM flags for the Cassandra nodes, e.g. the -D switches that

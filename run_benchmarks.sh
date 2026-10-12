@@ -307,7 +307,23 @@ YCSB_OPERATIONCOUNT=${operationcount}\n\
 YCSB_THREADS=${ycsb_threads}\n\
 YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldlength=${fieldlength} -p workload=${workload_type} -p workload=${workload_type} -p measurementtype=hdrhistogram -p hdrhistogram.fileoutput=false -p hdrhistogram.percentiles=$(seq -s, 1 100) ${extra_opts_str}" > ${output_file%.dat}.docker
     
-    start_container ${ycsb_image} ${container_name} "Starting" ${output_file} ${docker_args}
+    # Synchronised start (run_benchmark sets YCSB_START_AT for the run phase):
+    # the container waits in _ycsb_start_at_script until then, so the launcher only
+    # waits for that script's first line, not for YCSB itself.
+    local wait_msg="Starting"
+    local container_cmd=()
+    if [ "$action" == "run" ] && [ -n "${YCSB_START_AT:-}" ]; then
+        if _ycsb_sync_start "${ycsb_image}" "${container_name}"; then
+            docker_args+="${YCSB_SYNC_ARGS}"
+            container_cmd=( -- "${YCSB_SYNC_CMD[@]}" )
+            echo "YCSB_START_AT=${YCSB_START_AT}" >> ${output_file%.dat}.docker
+            wait_msg="Scheduled YCSB start"
+        else
+            error "Could not set up a synchronised start for ${container_name}: it starts as soon as it is launched"
+        fi
+    fi
+
+    start_container ${ycsb_image} ${container_name} "${wait_msg}" ${output_file} ${docker_args} "${container_cmd[@]}"
 
     if [ $? -eq 0 ]; then
         log "YCSB $action launched successfully."
@@ -315,6 +331,77 @@ YCSB_OPTS=-s -p core_workload_insertion_retry_limit=10 -p fieldcount=1 -p fieldl
         log "Error launching YCSB $action."
         exit 1
     fi
+}
+
+# The YCSB clients' entrypoint for a synchronised start: wait until
+# YCSB_START_AT (epoch seconds), then exec the image's own entrypoint and
+# command, passed as the arguments.  Every client is launched well before that
+# time, so they all start within a few milliseconds of each other however long
+# launching them one after another took (on AWS ~10s each through the remote
+# Docker contexts); the hosts' clocks are NTP/chrony synchronised.  Its first
+# line is the launcher's readiness message (see run_ycsb).  POSIX sh, as the
+# image's shell is unknown.  Kept here rather than in a file of its own, so it
+# cannot go missing from a checkout.
+_ycsb_start_at_script() {
+    cat <<'SCRIPT'
+t=${YCSB_START_AT:-0}
+now=$(date +%s)
+echo "Scheduled YCSB start at ${t} (in $((t - now))s)"
+if [ "${t}" -gt "${now}" ]; then
+    if [ $((t - now)) -gt 1 ]; then
+        sleep $((t - now - 1))
+    fi
+    while [ "$(date +%s)" -lt "${t}" ]; do
+        sleep 0.01 2>/dev/null || sleep 1
+    done
+elif [ "${t}" -gt 0 ]; then
+    echo "WARNING: launched $((now - t))s after the scheduled start; raise ycsb.start_delay"
+fi
+echo "YCSB starting at $(date -u +%H:%M:%S.%3N 2>/dev/null || date -u +%H:%M:%S) UTC"
+exec "$@"
+SCRIPT
+}
+
+# _ycsb_sync_start <image> <container_name>: the docker arguments (YCSB_SYNC_ARGS)
+# and command (YCSB_SYNC_CMD) that run the image's own entrypoint and command
+# through _ycsb_start_at_script.  The image's entrypoint and command are read
+# from the daemon that will run the container (pulling the image there first
+# if need be).  The script is passed inline (sh -c '<script>' ycsb-start-at
+# <entrypoint> <cmd>...), so nothing has to exist on the daemon's machine.
+_ycsb_sync_start() {
+    local image=$1 cname=$2 idx spec
+    idx=$(node_index_of "${cname}")
+    local fmt='{{json .Config.Entrypoint}}{{"\n"}}{{json .Config.Cmd}}'
+    if ! spec=$(d "${cname}" image inspect --format "${fmt}" "${image}" 2>/dev/null); then
+        dpull "${idx}" "${image}" >/dev/null 2>&1
+        spec=$(d "${cname}" image inspect --format "${fmt}" "${image}" 2>/dev/null) || return 1
+    fi
+    local original=() a
+    while IFS= read -r a; do
+        original+=("${a}")
+    done < <(printf '%s\n' "${spec}" | python3 -c '
+import json, sys
+for line in sys.stdin:
+    line = line.strip()
+    if line and line != "null":
+        for a in json.loads(line):
+            print(a)')
+    [ ${#original[@]} -gt 0 ] || return 1
+    YCSB_SYNC_ARGS=" --entrypoint sh"
+    YCSB_SYNC_CMD=( -c "$(_ycsb_start_at_script)" ycsb-start-at "${original[@]}" )
+}
+
+# The delay between launching the first YCSB client of a run phase and the
+# moment all of them start (ycsb.start_delay, YCSB_START_DELAY overrides it;
+# 0 = start each as soon as it is launched).  Unset: 90s on real machines,
+# where launching one client through its remote Docker context took ~10s, and
+# 15s in simulation.
+ycsb_start_delay() {
+    local v="${YCSB_START_DELAY:-$(config ycsb.start_delay)}"
+    if [ -z "${v}" ]; then
+        if infra_is_real; then v=90; else v=15; fi
+    fi
+    echo "${v}"
 }
 
 run_benchmark() {    
@@ -414,7 +501,25 @@ run_benchmark() {
     # of most DCs' own window. run_ycsb/start_container only touch per-DC
     # resources (container name, output/.docker/log files), so nothing here
     # is shared across the parallel calls.
+    #
+    # Concurrent launching alone does not make the containers' own startup
+    # (image pull, JVM warm-up) line up, so each client also waits in
+    # _ycsb_start_at_script until a shared future moment (YCSB_START_AT)
+    # before beginning the run: launching them one after another on AWS used
+    # to spread their starts over ~40s, more than the 30s warmup, so each
+    # client's cold start landed in the others' measured windows.
     local -a run_pids=()
+    local start_delay
+    start_delay=$(ycsb_start_delay)
+    YCSB_START_AT=""
+    if [ "${start_delay:-0}" -gt 0 ] 2>/dev/null && [ "${num_dcs}" -gt 1 ]; then
+        YCSB_START_AT=$(( $(date +%s) + start_delay ))
+        log "YCSB clients start together at $(date -u -d "@${YCSB_START_AT}" +%H:%M:%S 2>/dev/null || date -u -r "${YCSB_START_AT}" +%H:%M:%S) UTC (in ${start_delay}s)"
+    else
+        start_delay=0
+    fi
+
+
     for i in $(seq 1 1 ${num_dcs});
     do
         location=$(get_location $i ${LOCATIONS_FILE})
@@ -438,9 +543,14 @@ run_benchmark() {
     # the whole sweep; the others keep their results and the parser drops the
     # missing one.  The load phase above is deliberately left unbounded: it is
     # single-threaded over recordcount rows and legitimately takes far longer.
+    if [ -n "${YCSB_START_AT}" ] && [ "$(date +%s)" -ge "${YCSB_START_AT}" ]; then
+        error "Launching the YCSB clients took longer than ycsb.start_delay (${start_delay}s): the last ones started late; raise it"
+    fi
+    YCSB_START_AT=""
+
     local client_timeout
     client_timeout=$(config ycsb.client.timeout)
-    client_timeout=${client_timeout:-300}
+    client_timeout=$(( ${client_timeout:-300} + start_delay ))
 
     local stuck=0
     for i in $(seq 1 1 ${num_dcs});

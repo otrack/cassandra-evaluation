@@ -30,6 +30,7 @@
 # gone at cleanup.
 
 CASSANDRA_PROFILER_DIR_IN_CONTAINER=/tmp/async-profiler
+CASSANDRA_PROFILER_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # 0/1; CASSANDRA_PROFILER=1 in the environment overrides exp.config for one run.
 cassandra_profiler_enabled() {
@@ -57,6 +58,71 @@ cassandra_profiler_enabled() {
 cassandra_profiler_options() {
     local opts="${CASSANDRA_PROFILER_OPTIONS:-$(config cassandra.profiler.options)}"
     echo "${opts:-event=ctimer,interval=1ms,wall=10ms,lock=1ms}"
+}
+
+# Cassandra's JFR diagnostic events (connections with TCP_INFO, backpressure,
+# TCP counters, Accord executors, GC pauses, container CPU throttling), merged
+# into each capture through async-profiler's jfrsync with diagnostics.jfc; the
+# nodes need -Dcassandra.jfr.diagnostic_events=true, which
+# start_cassandra_data_centers.py passes when the cluster is created.
+# CASSANDRA_JFR_EVENTS overrides exp.config for one run.
+cassandra_profiler_jfr_events() {
+    local v="${CASSANDRA_JFR_EVENTS:-$(config cassandra.profiler.jfr_events)}"
+    case "${v:-1}" in 1|true) return 0 ;; *) return 1 ;; esac
+}
+CASSANDRA_PROFILER_JFC="${CASSANDRA_PROFILER_SCRIPT_DIR}/diagnostics.jfc"
+
+# The emulated WAN's counters (netem drops and backlog: see netem_stats.sh), the
+# node's TCP counters, the container's pressure stalls and memory (cgroup v2),
+# and the host's vmstat (major faults, swapping), appended to <file> inside the
+# container; run at the start and the end of a capture so that the two can be
+# compared.
+_cassandra_profiler_netstat_snapshot() {
+    local c=$1 file=$2 label=$3
+    dexec "${c}" sh -c "{ echo '## ${label} '\$(date -u +%H:%M:%S.%N); echo '# tc -s qdisc show'; tc -s qdisc show 2>&1; echo '# /proc/net/snmp'; cat /proc/net/snmp; echo '# /proc/net/netstat'; cat /proc/net/netstat; for f in cpu.pressure memory.pressure io.pressure memory.current memory.swap.current memory.events memory.stat; do echo \"# /sys/fs/cgroup/\$f\"; cat /sys/fs/cgroup/\$f 2>&1; done; echo '# /proc/vmstat'; cat /proc/vmstat; } >> '${file}'" >/dev/null 2>&1
+}
+
+# DebugDistributedExecution sampling, as passed to the nodes by
+# start_cassandra_data_centers.py (distributed_execution_opts); 0 = off.
+# CASSANDRA_DX / CASSANDRA_DX_KEYS override exp.config for one run, but like
+# cassandra.profiler they only take effect when the cluster is created.
+cassandra_profiler_dx_txns() { echo "${CASSANDRA_DX:-$(config accord.debug_distributed_execution)}"; }
+cassandra_profiler_dx_keys() { echo "${CASSANDRA_DX_KEYS:-$(config accord.debug_distributed_execution_keys)}"; }
+# How many of the slowest traced transactions to summarise after each run (0 = no report).
+cassandra_profiler_dx_report() { echo "${CASSANDRA_DX_REPORT:-$(config accord.debug_distributed_execution_report)}"; }
+
+# Summarise the DX spans of one run's captures (all nodes together):
+# - <run>_txnlatency.txt: TxnLatency, where the tail is (per coordinator and kind,
+#   by execution path and key, messaging against waiting) and the slowest TxnIds;
+# - <run>_txntrace.txt: TxnTrace, the slowest traced transactions, each with its
+#   timeline across the replicas and its wait chains (which transaction released
+#   it on each key, and so on).
+# Best effort: it needs cassandra/jfr-analysis next to this script, a JDK 17+
+# here, and a capture that has DX spans.
+_cassandra_profiler_dx_summary() {
+    local dest_dir=$1 tag=$2
+    local txns keys top
+    txns=$(cassandra_profiler_dx_txns); keys=$(cassandra_profiler_dx_keys); top=$(cassandra_profiler_dx_report)
+    [ "${txns:-0}" != "0" ] || [ "${keys:-0}" != "0" ] || return 0
+    [ "${top:-0}" != "0" ] || return 0
+    local captures=( "${dest_dir}/${tag}"_*.jfr )
+    [ -e "${captures[0]}" ] || return 0
+    local tools="${CASSANDRA_PROFILER_SCRIPT_DIR}/jfr-analysis/run.sh"
+    if [ ! -x "${tools}" ]; then
+        error "No DX summary: ${tools} is missing (copy cassandra/jfr-analysis to this machine)"
+        return 0
+    fi
+    local latency="${dest_dir}/${tag}_txnlatency.txt" out="${dest_dir}/${tag}_txntrace.txt"
+    if "${tools}" TxnLatency --top "${top}" "${captures[@]}" > "${latency}" 2>&1; then
+        log "Distributed execution latency summary: ${latency}"
+    else
+        error "TxnLatency failed (a JDK 17+ is needed on this machine); see ${latency}"
+    fi
+    if "${tools}" TxnTrace --slowest "${top}" "${captures[@]}" > "${out}" 2>&1; then
+        log "Distributed execution summary of the ${top} slowest traced transactions: ${out}"
+    else
+        error "TxnTrace failed (a JDK 17+ is needed on this machine); see ${out}"
+    fi
 }
 
 # Report the host settings that decide what perf_events can do, and warn when
@@ -107,15 +173,38 @@ cassandra_profiler_start() {
     opts=$(cassandra_profiler_options)
 
     log "Starting async-profiler on Cassandra nodes (${opts})"
+    local dx_txns dx_keys
+    dx_txns=$(cassandra_profiler_dx_txns); dx_keys=$(cassandra_profiler_dx_keys)
+    if [ "${dx_txns:-0}" != "0" ] || [ "${dx_keys:-0}" != "0" ]; then
+        log "Distributed execution spans: one transaction in ${dx_txns:-0}, one key in ${dx_keys:-0} (0 = off)"
+    fi
     _cassandra_profiler_check_perf "$(cassandra_profiler_nodes "${num_dcs}" "${nodes_per_dc}" | head -1)" "${opts}"
+    local jfrsync=""
+    if cassandra_profiler_jfr_events; then
+        case ",${opts}," in
+            *",jfrsync"*) log "JFR diagnostic events: the options already have jfrsync, not adding diagnostics.jfc" ;;
+            *) jfrsync="${CASSANDRA_PROFILER_DIR_IN_CONTAINER}/diagnostics.jfc"
+               log "JFR diagnostic events: jfrsync=${jfrsync} (from ${CASSANDRA_PROFILER_JFC})" ;;
+        esac
+    fi
     local c pids=()
     for c in $(cassandra_profiler_nodes "${num_dcs}" "${nodes_per_dc}"); do
         (
             local file="${CASSANDRA_PROFILER_DIR_IN_CONTAINER}/${tag}_${c}.jfr"
             # docker exec runs as root, the server as cassandra.
             dexec "${c}" mkdir -p -m 1777 "${CASSANDRA_PROFILER_DIR_IN_CONTAINER}" >/dev/null 2>&1
+            _cassandra_profiler_netstat_snapshot "${c}" "${CASSANDRA_PROFILER_DIR_IN_CONTAINER}/${tag}_${c}.netstat.txt" start
+            local node_opts="${opts}"
+            if [ -n "${jfrsync}" ]; then
+                if d "${c}" cp "${CASSANDRA_PROFILER_JFC}" "${c}:${jfrsync}" >/dev/null 2>&1; then
+                    dexec "${c}" chmod 644 "${jfrsync}" >/dev/null 2>&1
+                    node_opts="${opts},jfrsync=${jfrsync}"
+                else
+                    error "Could not copy ${CASSANDRA_PROFILER_JFC} to ${c}: no JFR diagnostic events"
+                fi
+            fi
             local out
-            if ! out=$(_cassandra_nodetool_profile "${c}" execute "start,${opts},jfr,file=${file}" 2>&1); then
+            if ! out=$(_cassandra_nodetool_profile "${c}" execute "start,${node_opts},jfr,file=${file}" 2>&1); then
                 error "async-profiler did not start on ${c}: ${out}"
                 if printf '%s' "${out}" | grep -q -e "not enabled" -e "not permitted"; then
                     error "  the node was not started with the profiler properties; was cassandra.profiler set before the cluster was created?"
@@ -156,6 +245,11 @@ cassandra_profiler_stop() {
             else
                 error "No async-profiler capture could be copied from ${c}:${file}"
             fi
+            local netstat="${CASSANDRA_PROFILER_DIR_IN_CONTAINER}/${tag}_${c}.netstat.txt"
+            _cassandra_profiler_netstat_snapshot "${c}" "${netstat}" end
+            if d "${c}" cp "${c}:${netstat}" "${dest_dir}/" >/dev/null 2>&1; then
+                dexec "${c}" rm -f "${netstat}" >/dev/null 2>&1
+            fi
             # The JVM's own GC log (-Xlog:gc,safepoint,... in jvm-server.options).
             # Its "Reaching safepoint" times are the time-to-safepoint, which
             # samples can only infer, and it goes when the container does.  It
@@ -176,4 +270,6 @@ cassandra_profiler_stop() {
     done
     # Not a bare `wait`: see cassandra_profiler_start.
     wait "${pids[@]}"
+
+    _cassandra_profiler_dx_summary "${dest_dir}" "${tag}"
 }
