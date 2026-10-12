@@ -2,6 +2,49 @@
 
 CASSANDRA_DIR=$(dirname "${BASH_SOURCE[0]}")
 
+# cassandra_wait_schema_agreement <container> <timeout_s>
+# Waits until every node reports the same schema version, as seen from
+# <container>.  `nodetool describecluster` lists one "<version>: [nodes]" line
+# per schema version in use, plus an UNREACHABLE one if some node is down.
+cassandra_wait_schema_agreement() {
+    local container=$1 timeout=$2
+    local deadline=$((SECONDS + timeout)) versions
+    while [ ${SECONDS} -lt ${deadline} ]; do
+        # JVM_OPTS carries the server heap flags, which nodetool would inherit
+        versions=$(dexec "${container}" env JVM_OPTS='' nodetool describecluster 2>/dev/null \
+                       | sed -n '/Schema versions:/,/Stats for all nodes:/p' \
+                       | grep -E '^[[:space:]]+[^[:space:]]+: \[')
+        if [ "$(echo "${versions}" | grep -c .)" -eq 1 ] && ! echo "${versions}" | grep -q UNREACHABLE; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
+# cassandra_cql <container> <timeout_s> <statement>
+# Runs <statement> with cqlsh.  In batch mode cqlsh exits non-zero after any
+# message on stderr, including its warning that the nodes have not agreed on
+# the schema yet, which a DDL statement over a large or distant cluster can
+# outlast (the driver waits only ~15s for agreement).  The statement has
+# succeeded then, so wait for the agreement instead of failing.
+cassandra_cql() {
+    local container=$1 timeout=$2 statement=$3
+    local err
+    { err=$(dexec "${container}" -i cqlsh --request-timeout="${timeout}" -e "${statement}" 2>&1 1>&3); } 3>&1 && return 0
+    if [ -n "${err}" ] && ! echo "${err}" | grep -v 'schema version mismatch' | grep -q .; then
+        log "Nodes do not agree on the schema yet after '${statement}'; waiting up to ${timeout}s"
+        if cassandra_wait_schema_agreement "${container}" "${timeout}"; then
+            log "Schema agreement reached"
+            return 0
+        fi
+        error "No schema agreement within ${timeout}s after '${statement}'"
+        return 1
+    fi
+    echo "${err}" >&2
+    return 1
+}
+
 cassandra_create_keyspace() {
     local timeout=$1
     local num_dcs=$2
@@ -22,7 +65,7 @@ cassandra_create_keyspace() {
     drop_keyspace_command="DROP KEYSPACE IF EXISTS ycsb;"
     create_keyspace_command="CREATE KEYSPACE IF NOT EXISTS ycsb WITH replication = { ${dc_map} } AND durable_writes = false;"
     
-    dexec ${container} -i cqlsh --request-timeout="$timeout" -e "$drop_keyspace_command"
+    cassandra_cql "${container}" "${timeout}" "${drop_keyspace_command}"
     if [ $? -eq 0 ]; then
         debug "Keyspace 'ycsb' dropped if it existed."
     else
@@ -30,7 +73,7 @@ cassandra_create_keyspace() {
         exit 1
     fi
 
-    dexec ${container} -i cqlsh --request-timeout="$timeout" -e "$create_keyspace_command"
+    cassandra_cql "${container}" "${timeout}" "${create_keyspace_command}"
     if [ $? -eq 0 ]; then
         debug "Keyspace 'ycsb' created with NetworkTopologyStrategy (1 replica per DC)."
     else
@@ -63,7 +106,7 @@ cassandra_create_usertable() {
     fi
     create_table_command="${create_table_command};"
 
-    dexec ${container} -i cqlsh --request-timeout="${timeout}" -e "${create_table_command}"
+    cassandra_cql "${container}" "${timeout}" "${create_table_command}"
     if [ $? -eq 0 ]; then
         debug "Table 'usertable' created or already exists."
     else
