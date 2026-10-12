@@ -14,7 +14,7 @@
 #
 # The experiment has two phases (--phase; only the saturation one by default):
 #  - saturation: at a fixed number of nodes per data center (--nodesperdc,
-#    default: 1, i.e. 1 partition), on 3 data centers, for each contention index, it increases the
+#    default: 1, i.e. 1 partition), on 5 data centers (3 with --test), for each contention index, it increases the
 #    number of clients per site by a factor of 1.5 (as latency_throughput.sh
 #    does) to plot the latency against the throughput, and stops once both of
 #    them degrade (the system is saturated).  The number of clients of the
@@ -46,7 +46,7 @@ usage() {
     echo "  --no-pull          Use the local Docker images, without pulling them first."
     echo "  --phase=PHASE      saturation, scale or all (default: saturation)."
     echo "  --protocols=LIST   Override the list of protocols to run (comma-separated)."
-    echo "  --nodesperdc=N     Nodes per DC of the saturation phase (default: 1, on 3 DCs)."
+    echo "  --nodesperdc=N     Nodes per DC of the saturation phase (default: 1, on 5 DCs; 3 with --test)."
     echo "  --ci=LIST          Contention indexes to run (comma-separated, default: 0.0001,0.01)."
     echo "  --clients=LIST     Clients per site of the saturation phase (comma-separated, default:"
     echo "                     16, 24, 36, ..., multiplying by 1.5 up to --max-clients)."
@@ -161,8 +161,8 @@ min_clients=16
 max_clients=2048
 client_counts=""
 records=1000000
-nodes=3
-replication_factor=3
+dcs=5
+replication_factor=${dcs}
 ops_per_thread=0
 
 original_machine=$(config machine)
@@ -193,10 +193,12 @@ restore_settings() {
 }
 trap restore_settings EXIT
 
-# 3 DCs (nodes) with 1 node, hence 1 partition, per DC, with and without --test
+# 1 node, hence 1 partition, per DC, with and without --test
 saturation_nodesperdc=${nodesperdc_override:-1}
 
 if [ "$test_run" -eq 1 ]; then
+    dcs=3
+    replication_factor=${dcs}
     # The hot pool of a partition has 1/CI = 10000 records at CI=0.0001, and
     # its cold pool must still provide 9 records per transaction.
     records=20000
@@ -229,7 +231,7 @@ maxexecutiontime=$(config maxexecutiontime)
 global_tput_latency() {
     local output_file=$1
     local total_tput=0 total_latency=0 dc_count=0
-    for i in $(seq 1 ${nodes}); do
+    for i in $(seq 1 ${dcs}); do
         local dc dc_file dc_tput dc_lat
         dc=$(get_location ${i} ${LOCATIONS_FILE})
         dc_file="${output_file%.dat}_${dc}.dat"
@@ -280,7 +282,7 @@ configure_deployment() {
         set_config cockroachdb.partitions 0
     fi
     if [ "$test_run" -eq 1 ]; then
-        compute_test_machine "${nodes}" "${npd}"
+        compute_test_machine "${dcs}" "${npd}"
     fi
 }
 
@@ -292,8 +294,8 @@ run_calvin() {
     local proto=$1 npd=$2 ci=$3 mp=$4 clients=$5 logdir=$6 create=$7
     local ts output_file
     ts=$(date +%Y%m%d%H%M%S%N)
-    output_file="${logdir}/${proto}_${nodes}_${workload}_${ts}.dat"
-    run_benchmark ${proto} ${clients} ${nodes} ${replication_factor} ${workload_type} ${workload} \
+    output_file="${logdir}/${proto}_${dcs}_${workload}_${ts}.dat"
+    run_benchmark ${proto} ${clients} ${dcs} ${replication_factor} ${workload_type} ${workload} \
         $((records * npd)) $((clients * ops_per_thread)) ${output_file} ${create} 0 \
         -p calvin.contentionindex=${ci} \
         -p calvin.partitions=${npd} \
@@ -344,7 +346,7 @@ saturation_phase() {
             echo "${p},${ci},${peak_clients},${peak_throughput}" >> ${PEAK_FILE}
         done
 
-        stop_benchmark ${p} ${nodes}
+        stop_benchmark ${p} ${dcs}
     done
 }
 
@@ -396,7 +398,7 @@ scale_phase() {
                     [ "${npd}" -eq 1 ] && break
                 done
             done
-            stop_benchmark ${p} ${nodes}
+            stop_benchmark ${p} ${dcs}
         done
     done
 }
