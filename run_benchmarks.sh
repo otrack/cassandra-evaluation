@@ -404,6 +404,17 @@ run_benchmark() {
         cassandra_profiler_start "${num_dcs}" "${nodes_per_dc}" "${profile_tag}"
     fi
 
+    # Launched concurrently, not one DC after another: each run_ycsb call
+    # only blocks until its own container reports "Starting" (early in its
+    # life, long before any measurement happens), so a sequential loop here
+    # staggers every DC's actual measured window by however long the launches
+    # ahead of it took -- observed up to ~36s across 5 regions against a 60s
+    # maxexecutiontime, meaning the "all regions concurrently loaded" state
+    # a multi-region run is supposed to capture only existed for a fraction
+    # of most DCs' own window. run_ycsb/start_container only touch per-DC
+    # resources (container name, output/.docker/log files), so nothing here
+    # is shared across the parallel calls.
+    local -a run_pids=()
     for i in $(seq 1 1 ${num_dcs});
     do
         location=$(get_location $i ${LOCATIONS_FILE})
@@ -411,15 +422,17 @@ run_benchmark() {
         log ${location}
 
         EXTRA_YCSB_OPTS2=("${EXTRA_YCSB_OPTS[@]}")
-        if [ "${workload_type}" == "site.ycsb.workloads.ConflictWorkload" ]; 
+        if [ "${workload_type}" == "site.ycsb.workloads.ConflictWorkload" ];
         then
             EXTRA_YCSB_OPTS2+=("-p")
             EXTRA_YCSB_OPTS2+=("conflict.shift=$(( (record_count / num_dcs) * (i - 1) ))")
         fi
 
-        run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}"
+        run_ycsb "run" "$workload_type" "$workload" "$hosts" "$port" "$record_count" "$operation_count" "$protocol" "$replication_factor" "${output_file%.dat}_${location}.dat" "$nthreads" "ycsb-${i}" "${nearby_database}" "${EXTRA_YCSB_OPTS2[@]}" &
+        run_pids+=($!)
     done
-    
+    wait "${run_pids[@]}"
+
     # A run is bounded by maxexecutiontime, so a client still alive well past
     # that is stuck, not slow.  Cap the wait so one wedged client cannot hang
     # the whole sweep; the others keep their results and the parser drops the
