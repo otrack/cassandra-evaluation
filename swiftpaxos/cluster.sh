@@ -125,7 +125,8 @@ swiftpaxos_get_hosts() {
 swiftpaxos_get_num_dcs() {
     i=1
     while true; do
-        location=$(get_location $i ${LOCATIONS_FILE})
+        # Past the last location, get_location fails: the end of the walk
+        location=$(get_location $i ${LOCATIONS_FILE} 2>/dev/null)
         if [ -z "$location" ]; then
             break
         fi
