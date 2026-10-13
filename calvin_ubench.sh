@@ -38,7 +38,7 @@ source ${DIR}/run_benchmarks.sh
 usage() {
     echo "Usage: $0 [--dry-run] [--test] [--no-pull] [--phase=PHASE] [--protocols=LIST] [--nodesperdc=N]"
     echo "          [--ci=LIST] [--clients=LIST] [--max-clients=N] [--records=N] [--scale=LIST] [--mp=LIST]"
-    echo "          [--scale-clients=N]"
+    echo "          [--scale-clients=N] [--check-invariant[=true|false]]"
     echo "  --dry-run          Skip the experiment run; only parse existing data."
     echo "  --test             Small and short runs (20000 records per partition, 10s, 2 to 10"
     echo "                     clients/site, 1 and 2 nodes/DC), with containers right-sized to fit"
@@ -57,6 +57,10 @@ usage() {
     echo "                     (comma-separated, default: 0.1,1.0; the saturation phase uses the first)."
     echo "  --scale-clients=N  Clients per site and per node of the scale phase, instead of the peak"
     echo "                     of the saturation phase."
+    echo "  --check-invariant  Read the records of each transaction and check that the sum of their"
+    echo "                     counters is non-negative before incrementing them (default:"
+    echo "                     calvin.checkinvariant in exp.config, false). Skips swiftpaxos-janus,"
+    echo "                     which cannot evaluate the check."
 }
 
 dry_run=0
@@ -72,6 +76,7 @@ records_override=""
 scale_override=""
 mp_override=""
 scale_clients=""
+check_invariant=$(config calvin.checkinvariant)
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
@@ -113,6 +118,12 @@ for arg in "$@"; do
         --scale-clients=*)
             scale_clients="${arg#*=}"
             ;;
+        --check-invariant)
+            check_invariant=true
+            ;;
+        --check-invariant=*)
+            check_invariant="${arg#*=}"
+            ;;
         -h|--help)
             usage
             exit 0
@@ -134,6 +145,16 @@ case "${phase}" in
         ;;
 esac
 
+check_invariant=${check_invariant:-false}
+case "${check_invariant}" in
+    true|false) ;;
+    *)
+        echo "Invalid --check-invariant / calvin.checkinvariant: ${check_invariant} (true or false)"
+        usage
+        exit 1
+        ;;
+esac
+
 SATURATION_LOGDIR=${LOGDIR}/calvin_ubench
 SCALE_LOGDIR=${LOGDIR}/calvin_ubench/scale
 PEAK_FILE=${RESULTSDIR}/calvin_ubench_peak.csv
@@ -142,11 +163,20 @@ mkdir -p ${RESULTSDIR}
 
 workload_type="site.ycsb.workloads.CalvinWorkload"
 workload="calvin"
-# The transactional systems whose YCSB client implements checkAndIncrement
+# The transactional systems whose YCSB client executes the transaction atomically
 protocols="accord cockroachdb-opt tiga swiftpaxos-janus"
 if [ -n "$protocols_override" ]; then
     protocols="$protocols_override"
 fi
+# The writes of a one-shot transaction cannot depend on its reads: with the
+# check, the YCSB client of Janus reports every transaction as not implemented.
+if [ "${check_invariant}" == "true" ]; then
+    for p in ${protocols}; do
+        [[ "$p" == swiftpaxos-* ]] && log "Skipping ${p}: it cannot check the invariant (--check-invariant)"
+    done
+    protocols=$(for p in ${protocols}; do [[ "$p" == swiftpaxos-* ]] || echo "$p"; done | tr '\n' ' ')
+fi
+log "Calvin micro-benchmark: invariant check ${check_invariant}"
 
 # Parameters of the Calvin paper: 10 records per transaction, one of them hot
 # per partition (calvin.txnsize and calvin.hotfraction keep the defaults of the
@@ -301,6 +331,7 @@ run_calvin() {
         -p calvin.partitions=${npd} \
         -p calvin.partitioner=$(calvin_partitioner ${proto}) \
         -p calvin.mpproportion=${mp} \
+        -p calvin.checkinvariant=${check_invariant} \
         -p maxexecutiontime=${maxexecutiontime}
     read -r run_tput run_latency <<< "$(global_tput_latency ${output_file})"
 }
