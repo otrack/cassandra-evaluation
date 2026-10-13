@@ -82,12 +82,19 @@ the set of nodes it records.
 Everything on the local Docker daemon, WAN emulated with `tc`. Historical
 behavior; every contract function is a no-op or returns the local daemon.
 
+**Locations are AWS regions.** `locations.csv` lists every region of
+`infra/aws/regions.csv`, with its coordinates, starting with the five that the
+AWS deployment uses (Singapore, Frankfurt, Ashburn, Osasco, Tokyo); a run with
+*N* DCs takes the first *N*.
+
 **Latencies are measured, not derived.** `latencies.csv` (`src,dst,rtt_ms`, one
-row per direction) records the round-trip times between AWS regions taken from
-[cloudping.co](https://www.cloudping.co/); the two directions of a pair are
-averaged and each direction delayed by half of it. Every pair of locations
-must be listed, so adding a city to `locations.csv` means adding its
-measurements too. A provider without a `latencies.csv` (GCP) falls back to the
+row per direction) records the median round-trip times over a day between all
+the regions of `infra/aws/regions.csv`, taken from
+[cloudping.co](https://www.cloudping.co/) by `infra/aws/fetch_latencies.py`
+(run it by hand to refresh them; the experiments never fetch them). The two
+directions of a pair are averaged and each direction delayed by half of it.
+Every pair of locations must be listed, so a city added to `locations.csv`
+must be an AWS region of `regions.csv`. A provider without a `latencies.csv` (GCP) falls back to the
 great-circle distance at 204 km/ms, which underestimates real round trips by
 1.3–2.5×.
 
