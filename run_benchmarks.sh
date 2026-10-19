@@ -437,7 +437,26 @@ ycsb_start_delay() {
     echo "${v}"
 }
 
-run_benchmark() {    
+# benchmark_already_done <output_file_base_without_.dat> <num_dcs>
+#
+# True when every per-location file a run_benchmark call for
+# <output_file_base>.dat would produce (see the run-phase loop below) already
+# exists and reached YCSB's own completion marker, so a resumed sweep can
+# skip re-running that point instead of overwriting a result that's already
+# there. A run cut short mid-flight (e.g. by a reclaimed node) leaves a
+# shorter file with no such marker, so it is correctly treated as not done.
+benchmark_already_done() {
+    local base=$1 num_dcs=$2 i location f
+    for i in $(seq 1 "${num_dcs}"); do
+        location=$(get_location "${i}" "${LOCATIONS_FILE}" 2>/dev/null) || return 1
+        f="${base}_${location}.dat"
+        [ -f "${f}" ] || return 1
+        grep -q '^\[OVERALL\], Throughput(ops/sec),' "${f}" || return 1
+    done
+    return 0
+}
+
+run_benchmark() {
     if [ $# -lt 11 ]; then
 	echo "Usage: $0 <protocol> <number_of_threads> <num_dcs> <replication_factor> <workload_type> <workload> <record_count> <operation_count> <output_file> <do_create_and_load> <do_clean_up> [EXTRA_YCSB_OPTS...]"
 	exit 1
@@ -494,6 +513,10 @@ run_benchmark() {
 		echo "Failed to retrieve IP addresses."
 		exit 1
 	fi
+	if [ "${num_dcs}" -ne "${dc_count}" ]; then
+		error "${protocol}: only ${num_dcs}/${dc_count} DC(s) came up; cluster formation failed partway through"
+		exit 1
+	fi
 
 	first_dc=$(get_location 1 ${LOCATIONS_FILE})
 	nearby_database="${first_dc}1"
@@ -510,6 +533,16 @@ run_benchmark() {
 
     if [ -z "$hosts" ]; then
         echo "Failed to retrieve IP addresses."
+        exit 1
+    fi
+    if [ "${num_dcs}" -ne "${dc_count}" ]; then
+        # Cluster formation stalled partway through (e.g. a replica's
+        # registration wasn't observed in time) and silently left a
+        # smaller deployment running. Measuring that would produce a
+        # result file that looks complete but isn't comparable to the
+        # other DCs' sweep points; fail loudly instead so run_resilient.sh
+        # repairs the deployment and retries this point.
+        error "${protocol}: only ${num_dcs}/${dc_count} DC(s) came up; cluster formation failed partway through"
         exit 1
     fi
 

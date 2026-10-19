@@ -237,6 +237,21 @@ infra_bootstrap() {
     infra_open_ports 7000 7070 7087 8070 8080 9042 10000 26257
 }
 
+# Re-provision any node whose instance is gone (e.g. a reclaimed spot
+# instance) without touching the others. infra_provision's per-node
+# existing-instance check (see _aws_create_instance) already skips anything
+# still pending/running and is safe to re-run on the full node set -- the
+# only thing missing to call it again is the node count, which a previous
+# provisioning run already recorded, so this just replays infra_bootstrap
+# with that count instead of asking for it again. A no-op under
+# infra=simulation, which never provisions anything to begin with.
+infra_repair() {
+    local num_nodes
+    num_nodes=$(infra_all_indices | wc -l)
+    [ "${num_nodes}" -gt 0 ] || return 0
+    infra_bootstrap "${num_nodes}"
+}
+
 ###############################################################################
 # Docker dispatch
 #
@@ -316,6 +331,20 @@ dpull() {
     return 1
 }
 
+# %q-quotes each argument for a log/echo line, except a multi-line one (e.g.
+# the YCSB sync-start script passed as a single -c argument) which is shown
+# as a short placeholder instead of dumping its full text.
+_display_args() {
+    local a
+    for a in "$@"; do
+        if [[ "${a}" == *$'\n'* ]]; then
+            printf '<script, %d lines> ' "$(wc -l <<< "${a}")"
+        else
+            printf '%q ' "${a}"
+        fi
+    done
+}
+
 start_container() {
     if [ $# -lt 4 ]; then
         error "usage: start_container <image> <name> <message> <logfile> [docker args...] [-- container_cmd...]"
@@ -356,11 +385,11 @@ start_container() {
 
     log "Starting container from image '${image}' as '${cname}' using ${log_file} to log and args '${docker_args[*]}'"
     if [ ${#container_cmd[@]} -gt 0 ]; then
-        log "Container command: ${container_cmd[*]}"
+        log "Container command: $(_display_args "${container_cmd[@]}")"
     fi
 
     local cid
-    echo "docker run ${docker_args[@]} --name $cname $image ${container_cmd[@]}"
+    echo "docker run $(_display_args "${docker_args[@]}") --name $cname $image $(_display_args "${container_cmd[@]}")"
     cid=$(d $cname run ${docker_args[@]} --log-opt max-size=10m  --log-opt max-file=3 --name $cname $image "${container_cmd[@]}" 2>&1) || {
          error "docker run failed: ${cid}"
          return 3

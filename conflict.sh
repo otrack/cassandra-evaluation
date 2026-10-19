@@ -9,15 +9,19 @@ source ${DIR}/run_benchmarks.sh
 source ${DIR}/cassandra/cassandra_breakdown.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST]"
+    echo "Usage: $0 [--dry-run] [--test] [--resume] [--protocols=LIST]"
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
+    echo "  --resume         Keep existing per-point output and skip whatever it already covers,"
+    echo "                   instead of wiping all logs and starting the sweep over. run_resilient.sh"
+    echo "                   passes this on every retry after the first."
     echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
     echo "  --dcs=N          Override the number of DCs (default 5)."
 }
 
 dry_run=0
 test_run=0
+resume=0
 protocols_override=""
 for arg in "$@"; do
     case "$arg" in
@@ -26,6 +30,9 @@ for arg in "$@"; do
             ;;
         --test)
             test_run=1
+            ;;
+        --resume)
+            resume=1
             ;;
         --protocols=*)
             protocols_override=$(echo "${arg#*=}" | tr ',' ' ')
@@ -79,8 +86,10 @@ if [ "$dry_run" -eq 0 ]; then
     do_clean_up=0
     for p in ${protocols}
     do
-        # clean prior logs
-        rm -f ${LOGDIR}/conflict/*${p}*
+        if [ "${resume}" -eq 0 ]; then
+            # clean prior logs
+            rm -f ${LOGDIR}/conflict/*${p}*
+        fi
 
         if [ "$p" == "accord-cmt" ]; then
             # For Accord (Committed), restart the server for each theta value so that JMX metrics
@@ -106,21 +115,26 @@ if [ "$dry_run" -eq 0 ]; then
                 stop_benchmark accord ${dcs}
             done
         else
-            do_create_and_load=1
-            total=$(( $(echo ${thetas} | wc -w) * $(echo ${threads} | wc -w) ))
-            count=0
+            cluster_started=0
             for t in ${thetas}
             do
 	        for c in ${threads}
 	        do
-	            do_clean_up=$(( count == total-1 ? 1 : 0 ))
-	            ts=$(date +%Y%m%d%H%M%S%N)
-	            output_file="${LOGDIR}/conflict/${p}_${dcs}_a_${ts}.dat"
-	            run_benchmark ${p} ${c} ${dcs} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=${maxexecutiontime}
-	            do_create_and_load=0
-	            count=$((count+1))
+	            # Deterministic per-(theta, threads) token instead of a
+	            # timestamp, so a --resume re-run computes the exact same
+	            # filename and benchmark_already_done can recognize it.
+	            theta_token="${t/./}"
+	            output_file="${LOGDIR}/conflict/${p}_${dcs}_a_${theta_token}$(printf '%04d' "${c}").dat"
+	            if [ "${resume}" -eq 1 ] && benchmark_already_done "${output_file%.dat}" "${dcs}"; then
+	                log "Skipping ${p} theta=${t} threads=${c}: already done (${output_file})"
+	                continue
+	            fi
+	            do_create_and_load=$(( cluster_started == 0 ? 1 : 0 ))
+	            run_benchmark ${p} ${c} ${dcs} ${replication_factor} ${workload_type} ${workload} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0 -p conflict.theta=${t} -p updateproportion=1.0 -p readproportion=0.0 -p maxexecutiontime=${maxexecutiontime}
+	            cluster_started=1
 	        done
             done
+            [ "${cluster_started}" -eq 1 ] && stop_benchmark ${p} ${dcs}
         fi
     done
 fi
