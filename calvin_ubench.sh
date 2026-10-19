@@ -372,10 +372,16 @@ ramp_run() {
     local saved_maxexecutiontime=${maxexecutiontime}
     # One more step than the stages: the run's clock starts before the first stage does (client setup)
     maxexecutiontime=$(( (stages + 1) * ramp_step ))
+    # The ramp outlasts the default timeout on a stuck client (ycsb.client.timeout): allow for the
+    # warm-up and the run, plus the usual margin
+    local margin
+    margin=$(config ycsb.client.timeout)
+    export YCSB_CLIENT_TIMEOUT=$(( maxexecutiontime + $(warmup_execution_time) + ${margin:-300} ))
     run_calvin_extra=(-p calvin.ramp=${list} -p calvin.rampstep=${ramp_step} -p calvin.rampskip=${ramp_skip})
     # The run is bounded by maxexecutiontime (ops_per_thread is 0: no operation count)
     run_calvin ${p} ${saturation_nodesperdc} ${ci} ${saturation_mp} ${max} ${SATURATION_LOGDIR} ${create}
     run_calvin_extra=()
+    unset YCSB_CLIENT_TIMEOUT
     maxexecutiontime=${saved_maxexecutiontime}
 }
 

@@ -584,7 +584,7 @@ run_benchmark() {
     YCSB_START_AT=""
 
     local client_timeout
-    client_timeout=$(config ycsb.client.timeout)
+    client_timeout=${YCSB_CLIENT_TIMEOUT:-$(config ycsb.client.timeout)}
     client_timeout=$(( ${client_timeout:-300} + start_delay ))
 
     local stuck=0
