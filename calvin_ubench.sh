@@ -53,7 +53,7 @@ usage() {
     echo "  --ci=LIST          Contention indexes to run (comma-separated, default: 0.0001,0.01)."
     echo "  --clients=LIST     Clients per site of the saturation phase (comma-separated, default:"
     echo "                     16, 24, 36, ..., multiplying by 1.5 up to --max-clients)."
-    echo "  --max-clients=N    Largest number of clients per site of the default sweep (default: 2048)."
+    echo "  --max-clients=N    Largest number of clients per site of the default sweep (default: 2048, 1024 with --ramp)."
     echo "  --records=N        Number of records per partition (default: 1000000)."
     echo "  --ramp             Saturation phase: sweep the numbers of clients (--clients, --max-clients) as the"
     echo "                     stages of one run per protocol and contention index, rather than one run each."
@@ -263,6 +263,8 @@ fi
 [ -n "$mp_override" ] && mp_values="$mp_override"
 [ -n "$scale_override" ] && scale_values="$scale_override"
 [ -n "$clients_override" ] && client_counts="$clients_override"
+# A ramp cannot stop at saturation, and its threads all exist from the start
+[ "$ramp" -eq 1 ] && [ "$test_run" -eq 0 ] && max_clients=1024
 [ -n "$max_clients_override" ] && max_clients="$max_clients_override"
 if [ -z "$client_counts" ]; then
     c=${min_clients}
