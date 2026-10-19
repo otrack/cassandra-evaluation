@@ -111,6 +111,7 @@ that are defined in the file `exp.config`:
 | `nodesperdc` | The number of replicas per datacenter. |
 | `openloop_arrival` | Arrival process of the Tiga open-loop pump (`tiga_openloop.sh`): `deterministic` (greedy/regular spacing, the default) or `poisson` (exponential inter-arrival, coefficient of variation 1). Recorded per-run in the `arrival` CSV column of `tiga_openloop.csv`. |
 | `accord.*` / `cockroachdb.*` | Per-system tuning knobs (e.g., ephemeral reads, lease holder placement). |
+| `swiftpaxos.leader` | Pin `swiftpaxos-paxos`'s leader to a named location instead of letting the master elect the one it measures as closest. Only effective under a real infra provider; a no-op under `infra=simulation`. Empty (default) keeps RTT-based election. `SWIFTPAXOS_LEADER` overrides it for a single run. |
 | `cassandra.profiler` | Record an async-profiler JFR on every Cassandra node during the YCSB run phase, including the spans emitted by Accord's `DebugExecution` (see [Profiling Cassandra nodes](#profiling-cassandra-nodes)). `CASSANDRA_PROFILER=1` overrides it for a single run. |
 | `cassandra.profiler.options` | async-profiler options for that capture (default `event=ctimer,interval=1ms,wall=10ms,lock=1ms`); `jfr` and `file=` are appended. `CASSANDRA_PROFILER_OPTIONS` overrides it. |
 | `cassandra.jvm_opts` | Extra JVM flags for the Cassandra nodes, e.g. the `-D` switches that turn individual Accord optimisations off for A/B runs. `CASSANDRA_JVM_OPTS` overrides it for a single run. |
