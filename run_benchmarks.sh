@@ -117,7 +117,7 @@ run_ycsb() {
         local i=0
         while [ $i -lt ${#extra_opts[@]} ]; do
             if [ "${extra_opts[$i]}" == "-p" ] && [ $((i+1)) -lt ${#extra_opts[@]} ] && \
-               { [[ "${extra_opts[$((i+1))]}" == maxexecutiontime=* ]] || [[ "${extra_opts[$((i+1))]}" == db.tracing=* ]] || [[ "${extra_opts[$((i+1))]}" == tiga.openloop.* ]]; }; then
+               { [[ "${extra_opts[$((i+1))]}" == maxexecutiontime=* ]] || [[ "${extra_opts[$((i+1))]}" == calvin.ramp* ]] || [[ "${extra_opts[$((i+1))]}" == db.tracing=* ]] || [[ "${extra_opts[$((i+1))]}" == tiga.openloop.* ]]; }; then
                 i=$((i+2))
             else
                 filtered_opts+=("${extra_opts[$i]}")
@@ -149,7 +149,9 @@ run_ycsb() {
     local extra_opts_str=""
     if [ ${#extra_opts[@]} -gt 0 ]; then
       for o in "${extra_opts[@]}"; do
-        extra_opts_str+=" $(printf '%q' "$o")"
+        # printf %q escapes the commas of lists (calvin.ramp=2,4), which the
+        # client would read as part of the value; they are safe unescaped.
+        extra_opts_str+=" $(printf '%q' "$o" | sed 's/\\,/,/g')"
       done
     fi
     log ${extra_opts_str[@]}

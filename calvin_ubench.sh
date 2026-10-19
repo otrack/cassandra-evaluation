@@ -370,7 +370,8 @@ ramp_run() {
     max=$(echo ${client_counts} | tr ' ' '\n' | tail -1)
     stages=$(echo ${client_counts} | wc -w)
     local saved_maxexecutiontime=${maxexecutiontime}
-    maxexecutiontime=$(( stages * ramp_step ))
+    # One more step than the stages: the run's clock starts before the first stage does (client setup)
+    maxexecutiontime=$(( (stages + 1) * ramp_step ))
     run_calvin_extra=(-p calvin.ramp=${list} -p calvin.rampstep=${ramp_step} -p calvin.rampskip=${ramp_skip})
     # The run is bounded by maxexecutiontime (ops_per_thread is 0: no operation count)
     run_calvin ${p} ${saturation_nodesperdc} ${ci} ${saturation_mp} ${max} ${SATURATION_LOGDIR} ${create}
