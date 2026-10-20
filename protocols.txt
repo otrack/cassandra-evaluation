@@ -1,6 +1,11 @@
 accord
+accord-cmt
 cassandra-paxos
 cockroachdb
+cockroachdb-opt
+cockroachdb-bad
 swiftpaxos-paxos
 swiftpaxos-epaxos
 swiftpaxos-curp
+swiftpaxos-janus
+tiga
