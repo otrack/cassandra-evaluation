@@ -41,7 +41,7 @@ source ${DIR}/run_benchmarks.sh
 usage() {
     echo "Usage: $0 [--dry-run] [--test] [--no-pull] [--phase=PHASE] [--protocols=LIST] [--nodesperdc=N]"
     echo "          [--ci=LIST] [--clients=LIST] [--max-clients=N] [--records=N] [--scale=LIST] [--mp=LIST]"
-    echo "          [--scale-clients=N] [--check-invariant[=true|false]] [--ramp] [--ramp-step=S] [--ramp-skip=S] [--ramp-delay=S]"
+    echo "          [--scale-clients=N] [--check-invariant[=true|false]] [--ramp] [--ramp-step=S] [--ramp-skip=S] [--ramp-delay=S] [--pareto]"
     echo "  --dry-run          Skip the experiment run; only parse existing data."
     echo "  --test             Small and short runs (20000 records per partition, 10s, 2 to 10"
     echo "                     clients/site, 1 and 2 nodes/DC), with containers right-sized to fit"
@@ -61,6 +61,7 @@ usage() {
     echo "  --ramp-step=S      Seconds per stage of --ramp (default: 30)."
     echo "  --ramp-delay=S     Seconds between the end of the warm-up and the start of the first stage, which all the"
     echo "                     clients start together (default: 30); it must cover their set-up."
+    echo "  --pareto           Plot only the Pareto frontier of each curve, not every point (default: every point)."
     echo "  --ramp-skip=S      Seconds at the start of each stage left out of its results (default: 5)."
     echo "  --scale=LIST       Nodes per DC of the scale phase (comma-separated, default: 1,2,4)."
     echo "  --mp=LIST          Proportions of multipartition transactions of the scale phase"
@@ -90,6 +91,7 @@ ramp=0
 ramp_step=30
 ramp_skip=5
 ramp_delay=30
+pareto=0
 check_invariant=$(config calvin.checkinvariant)
 for arg in "$@"; do
     case "$arg" in
@@ -140,6 +142,9 @@ for arg in "$@"; do
             ;;
         --ramp-skip=*)
             ramp_skip="${arg#*=}"
+            ;;
+        --pareto|-pareto)
+            pareto=1
             ;;
         --ramp-delay=*)
             ramp_delay="${arg#*=}"
@@ -523,20 +528,20 @@ if [ "$dry_run" -eq 0 ]; then
 fi
 
 debug "Parsing results..."
-if [ "${ramp}" -eq 1 ]; then
-    python3 ${DIR}/ramp_to_csv.py $(ls ${SATURATION_LOGDIR}/*.dat 2>/dev/null | grep -v fast_path_ratio) \
-        > ${RESULTSDIR}/calvin_ubench.csv
-else
-    ${DIR}/parse_ycsb_to_csv.sh \
-        $(ls ${SATURATION_LOGDIR}/*.dat 2>/dev/null) \
-        > ${RESULTSDIR}/calvin_ubench.csv
-fi
+# The logs of a ramp (calvin.ramp) hold one result per stage ([RAMP] lines), the others one per run: parse
+# each kind with its parser, whether or not this invocation has --ramp (it may only re-parse, with --dry-run)
+ramp_logs=$(grep -l '^\[RAMP\]' ${SATURATION_LOGDIR}/*.dat 2>/dev/null)
+other_logs=$(ls ${SATURATION_LOGDIR}/*.dat 2>/dev/null | grep -v -x -F -f <(echo "${ramp_logs}" | sed '/^$/d') )
+{
+    ${DIR}/parse_ycsb_to_csv.sh ${other_logs}
+    [ -n "${ramp_logs}" ] && python3 ${DIR}/ramp_to_csv.py ${ramp_logs} | tail -n +2
+} > ${RESULTSDIR}/calvin_ubench.csv
 ${DIR}/parse_ycsb_to_csv.sh \
     $(ls ${SCALE_LOGDIR}/*.dat 2>/dev/null) \
     > ${RESULTSDIR}/calvin_ubench_scale.csv
 
 debug "Plotting..."
-python3 ${DIR}/calvin_ubench.py ${RESULTSDIR}/calvin_ubench.csv ${RESULTSDIR}/calvin_ubench.tex \
+python3 ${DIR}/calvin_ubench.py $([ "${pareto}" -eq 1 ] && echo --pareto) ${RESULTSDIR}/calvin_ubench.csv ${RESULTSDIR}/calvin_ubench.tex \
     ${RESULTSDIR}/calvin_ubench_scale.csv ${RESULTSDIR}/calvin_ubench_scale.tex
 
 for job in calvin_ubench calvin_ubench_scale; do
