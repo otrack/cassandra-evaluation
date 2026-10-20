@@ -555,6 +555,14 @@ run_benchmark() {
     fi
 
 
+    # A ramp (calvin.ramp) starts all its clients' stages at the same moment,
+    # YCSB_RAMP_DELAY seconds after the end of their warm-up, which leaves them the time to get ready
+    if [ -n "${YCSB_RAMP_DELAY:-}" ]; then
+        local ramp_start=$(( ${YCSB_START_AT:-$(date +%s)} + $(warmup_execution_time) + YCSB_RAMP_DELAY ))
+        EXTRA_YCSB_OPTS+=("-p" "calvin.rampstart=${ramp_start}")
+        log "The stages of the ramp start together at $(date -u -d "@${ramp_start}" +%H:%M:%S 2>/dev/null || date -u -r "${ramp_start}" +%H:%M:%S) UTC"
+    fi
+
     for i in $(seq 1 1 ${num_dcs});
     do
         location=$(get_location $i ${LOCATIONS_FILE})

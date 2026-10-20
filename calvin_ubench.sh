@@ -41,7 +41,7 @@ source ${DIR}/run_benchmarks.sh
 usage() {
     echo "Usage: $0 [--dry-run] [--test] [--no-pull] [--phase=PHASE] [--protocols=LIST] [--nodesperdc=N]"
     echo "          [--ci=LIST] [--clients=LIST] [--max-clients=N] [--records=N] [--scale=LIST] [--mp=LIST]"
-    echo "          [--scale-clients=N] [--check-invariant[=true|false]] [--ramp] [--ramp-step=S] [--ramp-skip=S]"
+    echo "          [--scale-clients=N] [--check-invariant[=true|false]] [--ramp] [--ramp-step=S] [--ramp-skip=S] [--ramp-delay=S]"
     echo "  --dry-run          Skip the experiment run; only parse existing data."
     echo "  --test             Small and short runs (20000 records per partition, 10s, 2 to 10"
     echo "                     clients/site, 1 and 2 nodes/DC), with containers right-sized to fit"
@@ -59,6 +59,8 @@ usage() {
     echo "                     stages of one run per protocol and contention index, rather than one run each."
     echo "                     The sweep cannot stop early: it goes up to the largest number of clients."
     echo "  --ramp-step=S      Seconds per stage of --ramp (default: 30)."
+    echo "  --ramp-delay=S     Seconds between the end of the warm-up and the start of the first stage, which all the"
+    echo "                     clients start together (default: 30); it must cover their set-up."
     echo "  --ramp-skip=S      Seconds at the start of each stage left out of its results (default: 5)."
     echo "  --scale=LIST       Nodes per DC of the scale phase (comma-separated, default: 1,2,4)."
     echo "  --mp=LIST          Proportions of multipartition transactions of the scale phase"
@@ -87,6 +89,7 @@ scale_clients=""
 ramp=0
 ramp_step=30
 ramp_skip=5
+ramp_delay=30
 check_invariant=$(config calvin.checkinvariant)
 for arg in "$@"; do
     case "$arg" in
@@ -137,6 +140,9 @@ for arg in "$@"; do
             ;;
         --ramp-skip=*)
             ramp_skip="${arg#*=}"
+            ;;
+        --ramp-delay=*)
+            ramp_delay="${arg#*=}"
             ;;
         --check-invariant)
             check_invariant=true
@@ -372,18 +378,20 @@ ramp_run() {
     max=$(echo ${client_counts} | tr ' ' '\n' | tail -1)
     stages=$(echo ${client_counts} | wc -w)
     local saved_maxexecutiontime=${maxexecutiontime}
-    # One more step than the stages: the run's clock starts before the first stage does (client setup)
-    maxexecutiontime=$(( (stages + 1) * ramp_step ))
+    # The run's clock starts before the first stage does (ramp_delay, the set-up of the clients): the stages, that
+    # delay, and one more step of margin
+    maxexecutiontime=$(( stages * ramp_step + ramp_delay + ramp_step ))
     # The ramp outlasts the default timeout on a stuck client (ycsb.client.timeout): allow for the
     # warm-up and the run, plus the usual margin
     local margin
     margin=$(config ycsb.client.timeout)
     export YCSB_CLIENT_TIMEOUT=$(( maxexecutiontime + $(warmup_execution_time) + ${margin:-300} ))
+    export YCSB_RAMP_DELAY=${ramp_delay}
     run_calvin_extra=(-p calvin.ramp=${list} -p calvin.rampstep=${ramp_step} -p calvin.rampskip=${ramp_skip})
     # The run is bounded by maxexecutiontime (ops_per_thread is 0: no operation count)
     run_calvin ${p} ${saturation_nodesperdc} ${ci} ${saturation_mp} ${max} ${SATURATION_LOGDIR} ${create}
     run_calvin_extra=()
-    unset YCSB_CLIENT_TIMEOUT
+    unset YCSB_CLIENT_TIMEOUT YCSB_RAMP_DELAY
     maxexecutiontime=${saved_maxexecutiontime}
 }
 
