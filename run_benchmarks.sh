@@ -587,13 +587,24 @@ run_benchmark() {
     client_timeout=${YCSB_CLIENT_TIMEOUT:-$(config ycsb.client.timeout)}
     client_timeout=$(( ${client_timeout:-300} + start_delay ))
 
+    # The first client that has to be stopped jeopardises the run, since the clients are meant to
+    # run together: stop the others at once rather than wait for each of them in turn.
     local stuck=0
     for i in $(seq 1 1 ${num_dcs});
     do
-        wait_container "ycsb-${i}" "${client_timeout}" || stuck=$((stuck + 1))
+        if ! wait_container "ycsb-${i}" "${client_timeout}"; then
+            stuck=$((stuck + 1))
+            for j in $(seq $((i + 1)) 1 ${num_dcs});
+            do
+                error "ycsb-${i} had to be stopped: stopping ycsb-${j} too, as the run is lost"
+                stop_container "ycsb-${j}"
+                stuck=$((stuck + 1))
+            done
+            break
+        fi
     done
     if [ ${stuck} -gt 0 ]; then
-        error "${stuck} YCSB client(s) had to be stopped after ${client_timeout}s"
+        error "${stuck} YCSB client(s) had to be stopped (after ${client_timeout}s for the first one)"
     fi
 
     if [ ${profile} -eq 1 ]; then
