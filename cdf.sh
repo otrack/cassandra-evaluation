@@ -8,15 +8,20 @@ source ${DIR}/utils.sh
 source ${DIR}/run_benchmarks.sh
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--test] [--protocols=LIST] [--dcs=N]"
+    echo "Usage: $0 [--dry-run] [--test] [--resume] [--protocols=LIST] [--dcs=N]"
     echo "  --dry-run        Skip the experiment run; only draw plots using existing data."
     echo "  --test           Use a 60s run time and right-size containers to fit this machine."
+    echo "  --resume         Keep existing per-point output and skip whatever it already covers,"
+    echo "                   instead of wiping all logs and starting every protocol over. If a"
+    echo "                   protocol already has a complete result, it's skipped entirely."
+    echo "                   run_resilient.sh passes this on every retry after the first."
     echo "  --protocols=LIST Override the list of protocols to run (comma-separated)."
     echo "  --dcs=N          Override the number of DCs (default 5)."
 }
 
 dry_run=0
 test_run=0
+resume=0
 protocols_override=""
 dcs_override=""
 for arg in "$@"; do
@@ -26,6 +31,9 @@ for arg in "$@"; do
             ;;
         --test)
             test_run=1
+            ;;
+        --resume)
+            resume=1
             ;;
         --protocols=*)
             protocols_override=$(echo "${arg#*=}" | tr ',' ' ')
@@ -77,15 +85,14 @@ maxexecutiontime=$(config maxexecutiontime)
 
 if [ "$dry_run" -eq 0 ]; then
     pull_images
-    do_clean_up=0
     for p in ${protocols}
     do
-        # clean prior logs
-        rm -f ${LOGDIR}/cdf/*${p}*
+        if [ "${resume}" -eq 0 ]; then
+            # clean prior logs
+            rm -f ${LOGDIR}/cdf/*${p}*
+        fi
 
-        do_create_and_load=1
-        total=$(( $(echo ${workloads} | wc -w) * $(echo ${threads} | wc -w) ))
-        count=0
+        cluster_started=0
         tracing="false"
         if printf '%s\n' "$p" | grep -wF -q -- "cockroachdb";
         then
@@ -111,14 +118,21 @@ if [ "$dry_run" -eq 0 ]; then
         do
 	    for c in ${threads}
 	    do
-	        do_clean_up=$(( count == total-1 ? 1 : 0 ))
-	        ts=$(date +%Y%m%d%H%M%S%N)
-	        output_file="${LOGDIR}/cdf/${p}_${num_dcs}_${w}_${ts}.dat"
-	        run_benchmark ${p} ${c} ${num_dcs} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} ${do_clean_up} -p db.tracing=${tracing} -p maxexecutiontime=${protocol_maxexecutiontime}
-	        do_create_and_load=0
-	        count=$((count+1))
+	        # Deterministic per-(workload, threads) token instead of a
+	        # timestamp, so a --resume re-run computes the exact same
+	        # filename and benchmark_already_done can recognize it.
+	        c_token=$(printf '%04d' "${c}")
+	        output_file="${LOGDIR}/cdf/${p}_${num_dcs}_${w}_${c_token}.dat"
+	        if [ "${resume}" -eq 1 ] && benchmark_already_done "${output_file%.dat}" "${num_dcs}"; then
+	            log "Skipping ${p} workload=${w} threads=${c}: already done (${output_file})"
+	            continue
+	        fi
+	        do_create_and_load=$(( cluster_started == 0 ? 1 : 0 ))
+	        run_benchmark ${p} ${c} ${num_dcs} ${replication_factor} ${workload_type} ${w} ${records} $((threads * ops_per_thread)) ${output_file} ${do_create_and_load} 0 -p db.tracing=${tracing} -p maxexecutiontime=${protocol_maxexecutiontime}
+	        cluster_started=1
 	    done
         done
+        [ "${cluster_started}" -eq 1 ] && stop_benchmark ${p} ${num_dcs}
     done
 fi
 
