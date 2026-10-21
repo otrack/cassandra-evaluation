@@ -117,7 +117,7 @@ run_ycsb() {
         local i=0
         while [ $i -lt ${#extra_opts[@]} ]; do
             if [ "${extra_opts[$i]}" == "-p" ] && [ $((i+1)) -lt ${#extra_opts[@]} ] && \
-               { [[ "${extra_opts[$((i+1))]}" == maxexecutiontime=* ]] || [[ "${extra_opts[$((i+1))]}" == db.tracing=* ]] || [[ "${extra_opts[$((i+1))]}" == tiga.openloop.* ]]; }; then
+               { [[ "${extra_opts[$((i+1))]}" == maxexecutiontime=* ]] || [[ "${extra_opts[$((i+1))]}" == calvin.ramp* ]] || [[ "${extra_opts[$((i+1))]}" == db.tracing=* ]] || [[ "${extra_opts[$((i+1))]}" == tiga.openloop.* ]]; }; then
                 i=$((i+2))
             else
                 filtered_opts+=("${extra_opts[$i]}")
@@ -149,7 +149,9 @@ run_ycsb() {
     local extra_opts_str=""
     if [ ${#extra_opts[@]} -gt 0 ]; then
       for o in "${extra_opts[@]}"; do
-        extra_opts_str+=" $(printf '%q' "$o")"
+        # printf %q escapes the commas of lists (calvin.ramp=2,4), which the
+        # client would read as part of the value; they are safe unescaped.
+        extra_opts_str+=" $(printf '%q' "$o" | sed 's/\\,/,/g')"
       done
     fi
     log ${extra_opts_str[@]}
@@ -586,6 +588,14 @@ run_benchmark() {
     fi
 
 
+    # A ramp (calvin.ramp) starts all its clients' stages at the same moment,
+    # YCSB_RAMP_DELAY seconds after the end of their warm-up, which leaves them the time to get ready
+    if [ -n "${YCSB_RAMP_DELAY:-}" ]; then
+        local ramp_start=$(( ${YCSB_START_AT:-$(date +%s)} + $(warmup_execution_time) + YCSB_RAMP_DELAY ))
+        EXTRA_YCSB_OPTS+=("-p" "calvin.rampstart=${ramp_start}")
+        log "The stages of the ramp start together at $(date -u -d "@${ramp_start}" +%H:%M:%S 2>/dev/null || date -u -r "${ramp_start}" +%H:%M:%S) UTC"
+    fi
+
     for i in $(seq 1 1 ${num_dcs});
     do
         location=$(get_location $i ${LOCATIONS_FILE})
@@ -615,16 +625,27 @@ run_benchmark() {
     YCSB_START_AT=""
 
     local client_timeout
-    client_timeout=$(config ycsb.client.timeout)
+    client_timeout=${YCSB_CLIENT_TIMEOUT:-$(config ycsb.client.timeout)}
     client_timeout=$(( ${client_timeout:-300} + start_delay ))
 
+    # The first client that has to be stopped jeopardises the run, since the clients are meant to
+    # run together: stop the others at once rather than wait for each of them in turn.
     local stuck=0
     for i in $(seq 1 1 ${num_dcs});
     do
-        wait_container "ycsb-${i}" "${client_timeout}" || stuck=$((stuck + 1))
+        if ! wait_container "ycsb-${i}" "${client_timeout}"; then
+            stuck=$((stuck + 1))
+            for j in $(seq $((i + 1)) 1 ${num_dcs});
+            do
+                error "ycsb-${i} had to be stopped: stopping ycsb-${j} too, as the run is lost"
+                stop_container "ycsb-${j}"
+                stuck=$((stuck + 1))
+            done
+            break
+        fi
     done
     if [ ${stuck} -gt 0 ]; then
-        error "${stuck} YCSB client(s) had to be stopped after ${client_timeout}s"
+        error "${stuck} YCSB client(s) had to be stopped (after ${client_timeout}s for the first one)"
     fi
 
     if [ ${profile} -eq 1 ]; then

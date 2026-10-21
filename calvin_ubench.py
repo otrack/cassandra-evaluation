@@ -5,11 +5,12 @@ Plotting script for the Calvin micro-benchmark (Thomson et al., SIGMOD 2012, Fig
 This script generates one latency vs throughput graph per contention index (high
 contention, CI=0.01, then low contention, CI=0.0001), side by side:
 - X-axis: throughput (transactions/sec), summed over the data centers
-- Y-axis: median latency (milliseconds), averaged over the data centers
+- Y-axis: median latency (milliseconds), averaged over the data centers, on a log scale
 - One line per protocol, one point per number of clients per site, showing the
   "hockey stick" effect where latency increases sharply and throughput
   plateaus/degrades as the system saturates
-- Only the Pareto frontier of each line is kept: a point is cut when another
+- Every point is plotted, in the order of the number of clients, to spot anomalies; with
+  --pareto, only the Pareto frontier of each line is kept: a point is cut when another
   point of the same protocol has at least its throughput and at most its latency
 
 Given the results of the scale phase, it also generates the analogue of Figure 5,
@@ -35,7 +36,7 @@ CI_LABELS = {0.01: "High contention (CI=0.01)", 0.0001: "Low contention (CI=0.00
 
 
 def usage_and_exit():
-    print("Usage: python calvin_ubench.py results.csv output.tex [scale_results.csv scale_output.tex]")
+    print("Usage: python calvin_ubench.py [--pareto] results.csv output.tex [scale_results.csv scale_output.tex]")
     sys.exit(1)
 
 
@@ -66,15 +67,17 @@ def ci_label(ci):
 
 
 def main():
-    if len(sys.argv) not in (3, 5):
+    args = [a for a in sys.argv[1:] if a not in ('--pareto', '-pareto')]
+    pareto = len(args) != len(sys.argv) - 1
+    if len(args) not in (2, 4):
         usage_and_exit()
 
-    plot_saturation(sys.argv[1], sys.argv[2])
-    if len(sys.argv) == 5:
-        plot_scale(sys.argv[3], sys.argv[4])
+    plot_saturation(args[0], args[1], pareto)
+    if len(args) == 4:
+        plot_scale(args[2], args[3])
 
 
-def plot_saturation(results_csv, output_tikz):
+def plot_saturation(results_csv, output_tikz, pareto=False):
     df = pd.read_csv(results_csv)
     df = drop_unsound_rows(df, label='calvin_ubench')
 
@@ -116,7 +119,7 @@ def plot_saturation(results_csv, output_tikz):
                 if tput > 0 and lat > 0:
                     points.append((tput, lat))
                     plotted_clients.add(clients)
-            data[(ci, proto)] = pareto_frontier(points)
+            data[(ci, proto)] = pareto_frontier(points) if pareto else points
 
     protocol_colors = load_protocol_colors()
     protocol_aliases = load_protocol_aliases()
@@ -141,13 +144,14 @@ def plot_saturation(results_csv, output_tikz):
         for section, ci in enumerate(ci_values):
             points = [p for proto in raw_protocols for p in data[(ci, proto)]]
             xmax = max((t for t, _ in points), default=1000) * 1.1
-            ymax = max((l for _, l in points), default=100) * 1.2
+            ymax = max((l for _, l in points), default=100) * 1.5
+            ymin = min((l for _, l in points), default=10) / 1.5
             f.write("      \\nextgroupplot[\n")
             f.write(f"        title={{{ci_label(ci)}}},\n")
             if section == 0:
                 f.write("        ylabel={Median Latency (ms)},\n")
             f.write(f"        xmin=0, xmax={xmax:.2f},\n")
-            f.write(f"        ymin=0, ymax={ymax:.2f},\n")
+            f.write(f"        ymode=log, ymin={ymin:.2f}, ymax={ymax:.2f},\n")
             f.write("      ]\n")
             for idx, proto in enumerate(plot_order):
                 if not data[(ci, proto)]:
@@ -164,7 +168,8 @@ def plot_saturation(results_csv, output_tikz):
         clients_range = (f" from {min(plotted_clients)} up to {max(plotted_clients)}"
                          if plotted_clients else "")
         f.write("  \\caption{\\label{fig:calvin-ubench-latency} Calvin micro-benchmark:"
-                f" latency vs throughput, increasing the number of clients per site{clients_range}.}}\n")
+                f" latency vs throughput, increasing the number of clients per site{clients_range}"
+                f"{' (Pareto frontier)' if pareto else ''}.}}\n")
         f.write("\\end{figure}\n")
 
     print(f"Generated {output_tikz}")

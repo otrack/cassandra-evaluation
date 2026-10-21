@@ -19,6 +19,9 @@
 #    does) to plot the latency against the throughput, and stops once both of
 #    them degrade (the system is saturated).  The number of clients of the
 #    peak throughput is saved in results/calvin_ubench_peak.csv.
+#    With --ramp, a single run per protocol and contention index goes through
+#    the numbers of clients as stages (calvin.ramp of the workload, which runs
+#    the first n threads in the stage of n clients), instead of one run each.
 #  - scale: for each number of nodes per data center (--scale), contention
 #    index and proportion of multipartition transactions (--mp), it runs the
 #    peak number of clients of the saturation phase, scaled by the number of
@@ -38,7 +41,7 @@ source ${DIR}/run_benchmarks.sh
 usage() {
     echo "Usage: $0 [--dry-run] [--test] [--no-pull] [--phase=PHASE] [--protocols=LIST] [--nodesperdc=N]"
     echo "          [--ci=LIST] [--clients=LIST] [--max-clients=N] [--records=N] [--scale=LIST] [--mp=LIST]"
-    echo "          [--scale-clients=N] [--check-invariant[=true|false]]"
+    echo "          [--scale-clients=N] [--check-invariant[=true|false]] [--ramp] [--ramp-step=S] [--ramp-skip=S] [--ramp-delay=S] [--pareto]"
     echo "  --dry-run          Skip the experiment run; only parse existing data."
     echo "  --test             Small and short runs (20000 records per partition, 10s, 2 to 10"
     echo "                     clients/site, 1 and 2 nodes/DC), with containers right-sized to fit"
@@ -50,8 +53,16 @@ usage() {
     echo "  --ci=LIST          Contention indexes to run (comma-separated, default: 0.0001,0.01)."
     echo "  --clients=LIST     Clients per site of the saturation phase (comma-separated, default:"
     echo "                     16, 24, 36, ..., multiplying by 1.5 up to --max-clients)."
-    echo "  --max-clients=N    Largest number of clients per site of the default sweep (default: 2048)."
+    echo "  --max-clients=N    Largest number of clients per site of the default sweep (default: 2048, 1024 with --ramp)."
     echo "  --records=N        Number of records per partition (default: 1000000)."
+    echo "  --ramp             Saturation phase: sweep the numbers of clients (--clients, --max-clients) as the"
+    echo "                     stages of one run per protocol and contention index, rather than one run each."
+    echo "                     The sweep cannot stop early: it goes up to the largest number of clients."
+    echo "  --ramp-step=S      Seconds per stage of --ramp (default: 30)."
+    echo "  --ramp-delay=S     Seconds between the end of the warm-up and the start of the first stage, which all the"
+    echo "                     clients start together (default: 30); it must cover their set-up."
+    echo "  --pareto           Plot only the Pareto frontier of each curve, not every point (default: every point)."
+    echo "  --ramp-skip=S      Seconds at the start of each stage left out of its results (default: 5)."
     echo "  --scale=LIST       Nodes per DC of the scale phase (comma-separated, default: 1,2,4)."
     echo "  --mp=LIST          Proportions of multipartition transactions of the scale phase"
     echo "                     (comma-separated, default: 0.1,1.0; the saturation phase uses the first)."
@@ -76,6 +87,11 @@ records_override=""
 scale_override=""
 mp_override=""
 scale_clients=""
+ramp=0
+ramp_step=30
+ramp_skip=5
+ramp_delay=30
+pareto=0
 check_invariant=$(config calvin.checkinvariant)
 for arg in "$@"; do
     case "$arg" in
@@ -117,6 +133,21 @@ for arg in "$@"; do
             ;;
         --scale-clients=*)
             scale_clients="${arg#*=}"
+            ;;
+        --ramp)
+            ramp=1
+            ;;
+        --ramp-step=*)
+            ramp_step="${arg#*=}"
+            ;;
+        --ramp-skip=*)
+            ramp_skip="${arg#*=}"
+            ;;
+        --pareto|-pareto)
+            pareto=1
+            ;;
+        --ramp-delay=*)
+            ramp_delay="${arg#*=}"
             ;;
         --check-invariant)
             check_invariant=true
@@ -243,6 +274,8 @@ fi
 [ -n "$mp_override" ] && mp_values="$mp_override"
 [ -n "$scale_override" ] && scale_values="$scale_override"
 [ -n "$clients_override" ] && client_counts="$clients_override"
+# A ramp cannot stop at saturation, and its threads all exist from the start
+[ "$ramp" -eq 1 ] && [ "$test_run" -eq 0 ] && max_clients=1024
 [ -n "$max_clients_override" ] && max_clients="$max_clients_override"
 if [ -z "$client_counts" ]; then
     c=${min_clients}
@@ -319,7 +352,7 @@ configure_deployment() {
 # Runs protocol $1 with $2 nodes per data center, contention index $3, a
 # proportion $4 of multipartition transactions and $5 clients per site, logging
 # in directory $6; the first run of a deployment ($7=1) creates and loads it.
-# Sets run_tput and run_latency to the throughput and latency of the run.
+# Sets run_tput and run_latency to the throughput and latency of the run, and run_output_file to its log.
 run_calvin() {
     local proto=$1 npd=$2 ci=$3 mp=$4 clients=$5 logdir=$6 create=$7
     local ts output_file
@@ -332,8 +365,39 @@ run_calvin() {
         -p calvin.partitioner=$(calvin_partitioner ${proto}) \
         -p calvin.mpproportion=${mp} \
         -p calvin.checkinvariant=${check_invariant} \
-        -p maxexecutiontime=${maxexecutiontime}
+        -p maxexecutiontime=${maxexecutiontime} \
+        "${run_calvin_extra[@]}"
+    run_output_file=${output_file}
     read -r run_tput run_latency <<< "$(global_tput_latency ${output_file})"
+}
+
+# Extra arguments of the YCSB run of run_calvin (the ramp)
+run_calvin_extra=()
+
+# The saturation phase of protocol $1 with --ramp: one run per contention index
+# whose stages are the numbers of clients per site, instead of one run each.
+ramp_run() {
+    local p=$1 ci=$2 create=$3
+    local list max stages
+    list=$(echo ${client_counts} | tr ' ' ',')
+    max=$(echo ${client_counts} | tr ' ' '\n' | tail -1)
+    stages=$(echo ${client_counts} | wc -w)
+    local saved_maxexecutiontime=${maxexecutiontime}
+    # The run's clock starts before the first stage does (ramp_delay, the set-up of the clients): the stages, that
+    # delay, and one more step of margin
+    maxexecutiontime=$(( stages * ramp_step + ramp_delay + ramp_step ))
+    # The ramp outlasts the default timeout on a stuck client (ycsb.client.timeout): allow for the
+    # warm-up and the run, plus the usual margin
+    local margin
+    margin=$(config ycsb.client.timeout)
+    export YCSB_CLIENT_TIMEOUT=$(( maxexecutiontime + $(warmup_execution_time) + ${margin:-300} ))
+    export YCSB_RAMP_DELAY=${ramp_delay}
+    run_calvin_extra=(-p calvin.ramp=${list} -p calvin.rampstep=${ramp_step} -p calvin.rampskip=${ramp_skip})
+    # The run is bounded by maxexecutiontime (ops_per_thread is 0: no operation count)
+    run_calvin ${p} ${saturation_nodesperdc} ${ci} ${saturation_mp} ${max} ${SATURATION_LOGDIR} ${create}
+    run_calvin_extra=()
+    unset YCSB_CLIENT_TIMEOUT YCSB_RAMP_DELAY
+    maxexecutiontime=${saved_maxexecutiontime}
 }
 
 saturation_phase() {
@@ -352,6 +416,25 @@ saturation_phase() {
             prev_throughput=-1
             peak_clients=0
             peak_throughput=-1
+            if [ "${ramp}" -eq 1 ]; then
+                ramp_run ${p} ${ci} ${do_create_and_load}
+                do_create_and_load=0
+                local dc_files=()
+                for i in $(seq 1 ${dcs}); do
+                    dc_files+=("${run_output_file%.dat}_$(get_location ${i} ${LOCATIONS_FILE}).dat")
+                done
+                # The stages of the run, summed over the data centers
+                while read -r stage clients tput latency; do
+                    log "Ramp ${p} (CI=${ci}, ${clients} clients/site): ${tput} tx/s, median ${latency}ms"
+                    if [ "${tput}" -gt "${peak_throughput}" ]; then
+                        peak_throughput=${tput}
+                        peak_clients=${clients}
+                    fi
+                done < <(python3 ${DIR}/ramp_to_csv.py --summary "${dc_files[@]}")
+                log "Peak of ${p} (CI=${ci}, ${saturation_nodesperdc} node(s)/DC): ${peak_throughput} tx/s with ${peak_clients} clients/site"
+                echo "${p},${ci},${peak_clients},${peak_throughput}" >> ${PEAK_FILE}
+                continue
+            fi
             for clients in ${client_counts}
             do
                 run_calvin ${p} ${saturation_nodesperdc} ${ci} ${saturation_mp} ${clients} ${SATURATION_LOGDIR} ${do_create_and_load}
@@ -445,15 +528,20 @@ if [ "$dry_run" -eq 0 ]; then
 fi
 
 debug "Parsing results..."
-${DIR}/parse_ycsb_to_csv.sh \
-    $(ls ${SATURATION_LOGDIR}/*.dat 2>/dev/null) \
-    > ${RESULTSDIR}/calvin_ubench.csv
+# The logs of a ramp (calvin.ramp) hold one result per stage ([RAMP] lines), the others one per run: parse
+# each kind with its parser, whether or not this invocation has --ramp (it may only re-parse, with --dry-run)
+ramp_logs=$(grep -l '^\[RAMP\]' ${SATURATION_LOGDIR}/*.dat 2>/dev/null)
+other_logs=$(ls ${SATURATION_LOGDIR}/*.dat 2>/dev/null | grep -v -x -F -f <(echo "${ramp_logs}" | sed '/^$/d') )
+{
+    ${DIR}/parse_ycsb_to_csv.sh ${other_logs}
+    [ -n "${ramp_logs}" ] && python3 ${DIR}/ramp_to_csv.py ${ramp_logs} | tail -n +2
+} > ${RESULTSDIR}/calvin_ubench.csv
 ${DIR}/parse_ycsb_to_csv.sh \
     $(ls ${SCALE_LOGDIR}/*.dat 2>/dev/null) \
     > ${RESULTSDIR}/calvin_ubench_scale.csv
 
 debug "Plotting..."
-python3 ${DIR}/calvin_ubench.py ${RESULTSDIR}/calvin_ubench.csv ${RESULTSDIR}/calvin_ubench.tex \
+python3 ${DIR}/calvin_ubench.py $([ "${pareto}" -eq 1 ] && echo --pareto) ${RESULTSDIR}/calvin_ubench.csv ${RESULTSDIR}/calvin_ubench.tex \
     ${RESULTSDIR}/calvin_ubench_scale.csv ${RESULTSDIR}/calvin_ubench_scale.tex
 
 for job in calvin_ubench calvin_ubench_scale; do

@@ -331,20 +331,6 @@ dpull() {
     return 1
 }
 
-# %q-quotes each argument for a log/echo line, except a multi-line one (e.g.
-# the YCSB sync-start script passed as a single -c argument) which is shown
-# as a short placeholder instead of dumping its full text.
-_display_args() {
-    local a
-    for a in "$@"; do
-        if [[ "${a}" == *$'\n'* ]]; then
-            printf '<script, %d lines> ' "$(wc -l <<< "${a}")"
-        else
-            printf '%q ' "${a}"
-        fi
-    done
-}
-
 start_container() {
     if [ $# -lt 4 ]; then
         error "usage: start_container <image> <name> <message> <logfile> [docker args...] [-- container_cmd...]"
@@ -385,11 +371,18 @@ start_container() {
 
     log "Starting container from image '${image}' as '${cname}' using ${log_file} to log and args '${docker_args[*]}'"
     if [ ${#container_cmd[@]} -gt 0 ]; then
-        log "Container command: $(_display_args "${container_cmd[@]}")"
+        # Multi-line arguments (inline scripts passed to sh -c) are elided.
+        local shown=() a
+        for a in "${container_cmd[@]}"; do
+            case "$a" in
+                *$'\n'*) shown+=("<inline script>") ;;
+                *) shown+=("$a") ;;
+            esac
+        done
+        log "Container command: ${shown[*]}"
     fi
 
     local cid
-    echo "docker run $(_display_args "${docker_args[@]}") --name $cname $image $(_display_args "${container_cmd[@]}")"
     cid=$(d $cname run ${docker_args[@]} --log-opt max-size=10m  --log-opt max-file=3 --name $cname $image "${container_cmd[@]}" 2>&1) || {
          error "docker run failed: ${cid}"
          return 3
