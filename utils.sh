@@ -127,8 +127,31 @@ node_index_of() {
         ""|accord-viz)
             # Runs alongside the benchmark scripts, not on a node.
             echo 0; return 0 ;;
-        swiftpaxos-master|ycsb)
-            # No DC of their own; pinned to the first node.
+        ycsb)
+            # No DC of its own; pinned to the first node.
+            echo 1; return 0 ;;
+        swiftpaxos-master)
+            # Normally pinned to the first node, like ycsb. swiftpaxos.leader
+            # instead pins it to a named location: the master elects whichever
+            # registering replica has the lowest measured RTT as leader (see
+            # swiftpaxos/master/master.go), and the master's own real network
+            # RTT to its own region's replica is far below any cross-region
+            # RTT, so colocating it there reliably elects that location's
+            # replica. Only meaningful under a real infra provider --
+            # emulate_latency.py never shapes this container's traffic, so
+            # under infra=simulation every replica is equally (un-)close.
+            local leader_loc
+            leader_loc="${SWIFTPAXOS_LEADER:-$(config swiftpaxos.leader)}"
+            if [ -n "${leader_loc}" ]; then
+                local i=1 loc
+                while loc=$(get_location $i "${LOCATIONS_FILE}" 2>/dev/null) && [ -n "$loc" ]; do
+                    if [ "${loc}" = "${leader_loc}" ]; then
+                        echo $(( (i - 1) * nodes_per_dc + 1 )); return 0
+                    fi
+                    i=$((i + 1))
+                done
+                error "swiftpaxos.leader='${leader_loc}' is not among the active locations"
+            fi
             echo 1; return 0 ;;
         ycsb-*|database-node*)
             local dc="${name#ycsb-}"
@@ -192,9 +215,9 @@ host_aliases() {
         done
         i=$((i + 1))
     done
-    local first
-    first=$(infra_host_ip 1)
-    [ -n "$first" ] && printf -- '--add-host swiftpaxos-master:%s ' "$first"
+    local master_ip
+    master_ip=$(infra_host_ip "$(node_index_of swiftpaxos-master)")
+    [ -n "$master_ip" ] && printf -- '--add-host swiftpaxos-master:%s ' "$master_ip"
 }
 
 # Images are deliberately not pulled here: every experiment script pulls them
@@ -212,6 +235,21 @@ infra_bootstrap() {
     # client hangs. 8080: CockroachDB admin. 9042: Cassandra CQL. 10000:
     # Tiga. 26257: CockroachDB.
     infra_open_ports 7000 7070 7087 8070 8080 9042 10000 26257
+}
+
+# Re-provision any node whose instance is gone (e.g. a reclaimed spot
+# instance) without touching the others. infra_provision's per-node
+# existing-instance check (see _aws_create_instance) already skips anything
+# still pending/running and is safe to re-run on the full node set -- the
+# only thing missing to call it again is the node count, which a previous
+# provisioning run already recorded, so this just replays infra_bootstrap
+# with that count instead of asking for it again. A no-op under
+# infra=simulation, which never provisions anything to begin with.
+infra_repair() {
+    local num_nodes
+    num_nodes=$(infra_all_indices | wc -l)
+    [ "${num_nodes}" -gt 0 ] || return 0
+    infra_bootstrap "${num_nodes}"
 }
 
 ###############################################################################

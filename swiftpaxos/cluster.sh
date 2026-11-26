@@ -81,12 +81,19 @@ swiftpaxos_wait_registration() {
     local start_time
     start_time=$(date +%s)
     local timeout=${START_CONTAINER_TIMEOUT:-90}
+    # Each check is a fresh SSH-based `docker logs` call under a real infra
+    # provider (no connection reuse); polling every 0.2s hammers that
+    # connection with up to ~450 round trips over the full timeout and has
+    # been observed to make the registration spuriously look like it never
+    # happened (the wait then times out and aborts cluster formation
+    # early, even though the replica did register). 1s keeps the same
+    # timeout budget with far fewer connections.
     until dlogs swiftpaxos-master 2>&1 | grep -q -- "node $1 \["; do
         if (( $(date +%s) - start_time >= timeout )); then
             error "Timeout (${timeout}s) waiting for the registration of replica $1 at the master"
             return 1
         fi
-        sleep 0.2
+        sleep 1
     done
 }
 

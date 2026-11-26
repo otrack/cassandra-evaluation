@@ -18,6 +18,10 @@ Usage: $0 <command> [args]
                   command needed before a first run; the experiment scripts pull
                   the images themselves.
   provision <n>   Provision <n> machines only.
+  repair          Re-provision any machine of the current deployment whose
+                  instance is gone (e.g. a reclaimed spot instance), without
+                  touching the others. run_resilient.sh calls this
+                  automatically between retries of an experiment script.
   sync            Re-create the Docker contexts and SSH aliases of an existing
                   deployment (after a machine restart, or on another laptop).
   status          Show what the locations map, the provider and Docker agree on.
@@ -104,6 +108,9 @@ case "${1:-}" in
     provision)
         [ -n "${2:-}" ] || { usage; exit 1; }
         infra_provision "$2"
+        ;;
+    repair)
+        infra_repair
         ;;
     sync)
         infra_sync
