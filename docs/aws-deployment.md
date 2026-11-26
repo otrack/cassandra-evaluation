@@ -696,7 +696,8 @@ before `./deploy.sh` is ever invoked.
          "ec2:RunInstances", "ec2:TerminateInstances", "ec2:DescribeInstances",
          "ec2:DescribeAvailabilityZones", "ec2:DescribeVpcs", "ec2:DescribeSubnets",
          "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:DescribeSecurityGroups",
-         "ec2:AuthorizeSecurityGroupIngress", "ec2:CreateTags", "ec2:DescribeImages",
+         "ec2:AuthorizeSecurityGroupIngress", "ec2:RevokeSecurityGroupIngress",
+         "ec2:CreateTags", "ec2:DescribeImages",
          "ssm:GetParameters", "sts:GetCallerIdentity"
        ],
        "Resource": "*"
@@ -732,6 +733,12 @@ before `./deploy.sh` is ever invoked.
    deleted): https://docs.aws.amazon.com/vpc/latest/userguide/work-with-default-vpc.html#create-default-vpc
 8. **A budget alert** (recommended, multi-region runs bill continuously
    until teardown): https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-create.html
+9. **SSH connection multiplexing** (optional, recommended when the regions
+   are far from the orchestrator): a `Match user ubuntu` block with
+   `ControlMaster auto` in `~/.ssh/config` makes each Docker-over-SSH call
+   skip the full handshake, e.g. `docker run` against Singapore from Europe
+   drops from ~9 s to ~2 s. See `infra/README.md`, "Optional: SSH connection
+   multiplexing".
 
 Per-deployment, after the above: pick AZs into `infra/aws/locations.csv`, set
 `infra=aws`/`latency_simulation=0`/`aws.machine=` in `exp.config` (optionally

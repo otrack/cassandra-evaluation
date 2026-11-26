@@ -129,7 +129,10 @@ _gcp_ssh_target() {
 }
 
 # ssh to a node with everything stated explicitly, so that no entry in
-# ~/.ssh/config is needed for the suite to work.
+# ~/.ssh/config is needed for the suite to work.  ControlPath=none opts out of
+# any connection multiplexing the operator enabled (infra/README.md): the
+# readiness poll logs in before the boot script adds the login to the docker
+# group, and sessions sharing that first connection would keep its old groups.
 _gcp_ssh() {
     local idx=$1; shift
     local target
@@ -142,6 +145,7 @@ _gcp_ssh() {
         -o BatchMode=yes \
         -o StrictHostKeyChecking=accept-new \
         -o ConnectTimeout=10 \
+        -o ControlPath=none \
         "${target}" "$@"
 }
 

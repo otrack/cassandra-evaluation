@@ -150,6 +150,11 @@ export BENCH_SSH_USER=bench                    # optional
 `.deployment/` holds everything provisioning discovers (addresses, zones,
 interface names). It is generated, and gitignored for the same reason.
 
+Every Docker command on a remote node runs over SSH. Against distant regions,
+enabling SSH connection multiplexing (`ControlMaster`) in your own
+`~/.ssh/config` makes each one several times faster. See
+[infra/README.md](infra/README.md#optional-ssh-connection-multiplexing-gcp-aws).
+
 ### Experiments
 
 Every experiment is a `<name>.sh` script that runs the benchmark and a `<name>.py` script that turns
