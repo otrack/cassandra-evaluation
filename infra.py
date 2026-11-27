@@ -346,10 +346,15 @@ def all_clients():
         if not host or host in seen:
             continue
         seen.add(host)
-        dc = (node - 1) // nodes_per_dc()
+        npd = nodes_per_dc()
+        dc, k = (node - 1) // npd, (node - 1) % npd + 1
         locations = read_locations()
         if dc < len(locations):
-            name = locations[dc]["loc"] + "1"
+            # The node's own container name: "<loc>1" would resolve every
+            # node of a DC to its first one, so that with nodesperdc > 1
+            # only one daemon per DC was ever listed, and e.g. the
+            # Cassandra cleanup left nodes 2..n of every DC running.
+            name = "{}{}".format(locations[dc]["loc"], k)
             try:
                 clients.append(client_for(name))
             except Exception as exc:  # a machine may be unreachable (e.g. reclaimed)

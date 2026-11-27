@@ -195,7 +195,10 @@ traffic from outside itself, so the security group this provider manages
 opens `tcp:22` from `0.0.0.0/0` at creation time, before `infra_open_ports`
 (called later, from `infra_bootstrap`) ever runs. This is a conscious
 tradeoff for a benchmark harness running short-lived, disposable machines,
-not an oversight — see `docs/aws-deployment.md` §2.2.
+not an oversight — see `docs/aws-deployment.md` §2.2. Between the
+benchmark machines, `infra_open_ports` allows all traffic from each peer's
+public IP: one rule per peer. Per-port rules would exceed AWS's default 60
+rules per security group beyond 6 peers.
 
 **Nothing is written to `~/.ssh/config`.** EC2 has no metadata-driven key
 injection the way some other clouds' guest agents provide, so the operator's
@@ -247,6 +250,52 @@ needed for the diagnostic itself — but a brand-new account's *first* spot
 request may need `iam:CreateServiceLinkedRole` to create
 `AWSServiceRoleForEC2Spot`; see `docs/aws-deployment.md` §7 if `aws.spot=1`
 fails on that.
+
+### Optional: SSH connection multiplexing (`gcp`, `aws`)
+
+Every Docker operation on a node goes over SSH, and the Docker CLI spawns a
+fresh `ssh` for each connection it opens, often several per command. Each
+one pays the full handshake, about a dozen round trips. From a laptop in
+Europe to Singapore (0.24 s RTT) that is ~3 s per connection, ~5.5 s for a
+`docker version` and ~9 s for a `docker run`. Besides slowing every run down,
+it can lose a short-lived container: a `--rm` container that finishes before
+the readiness poll gets through (a fast YCSB load, say) is already gone when
+`start_container` looks for it, and the step fails with "Failed to inspect
+container".
+
+OpenSSH's connection multiplexing removes the per-call handshake: the first
+connection to a host becomes a master, and later ones run inside it. Docker
+uses the system `ssh`, so it is enough to enable it for the benchmark login
+in your own `~/.ssh/config`. The suite never writes that file for you, so
+this is an opt-in, per-operator setting:
+
+```
+# Reuse one SSH connection per benchmark node.
+Match user ubuntu
+    ControlMaster auto
+    ControlPath ~/.ssh/cm-%C
+    ControlPersist 10m
+```
+
+`ubuntu` is the `aws` login. For `gcp`, match the `$BENCH_SSH_USER` you use
+instead. Matching your everyday `$USER` would multiplex every host you reach,
+which is harmless, but broader than needed. `%C` hashes host, port and user,
+so each node gets its own master; `ControlPersist` keeps it open for 10
+minutes after the last command. Measured against Singapore, the first call
+still costs one handshake, then `docker version` drops from 5.6 s to 1.0 s and
+`docker run -d` from 9.2 s to 2.1 s.
+
+If a node is replaced at the same address, or the laptop changes network, a
+stale master can make the next command hang until it times out; close it with
+`ssh -O exit -l ubuntu <ip>`, or delete its `~/.ssh/cm-*` socket.
+
+The providers' own `ssh` calls (readiness poll, setup, `./deploy.sh ssh`) pass
+`-o ControlPath=none` and never share a connection. The readiness poll logs
+in while the boot script is still adding the login to the `docker` group, and
+a master opened then would hand every later session its old group list, so
+Docker would fail with "permission denied" on `/var/run/docker.sock`. Only
+the Docker contexts use the multiplexed connection, and they are created once
+Docker is usable.
 
 ## The contract
 

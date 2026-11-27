@@ -109,9 +109,10 @@ run_ycsb() {
         # One client loads every record, from the first DC: on a real
         # deployment each insert waits out the WAN (there is no emulated
         # latency to switch on after the load, as in simulation), so the load
-        # takes records / threads * insert latency.  ycsb.load_threads raises
-        # it for the systems that take it; the default stays at 100 as CRDB's
-        # parallel load was failing (FIXME).
+        # takes records / threads * insert latency and its rate grows with
+        # threads.  ycsb.load_threads raises it for the systems that take it;
+        # the default stays at 100 as CRDB's parallel load was failing above
+        # that (FIXME).
         ycsb_threads=$(config ycsb.load_threads)
         ycsb_threads=${ycsb_threads:-100}
     fi

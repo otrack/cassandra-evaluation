@@ -104,8 +104,13 @@ with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
 
     log "Generated dynamic config file in ${TIGA_DIR}/config-ycsb.yml for ${num_dcs} DCs x ${nodes_per_dc} nodes/DC (probe_lateness=${probe_lateness}, probe_lateness_trace_cap=${probe_trace_cap})"
 
-    # 2. Start replica containers
+    # 2. Start replica containers, all at once: a server prints "started on"
+    # only once it has connected to the other shards of its DC, so starting
+    # them one by one, each waiting for the previous one's readiness message,
+    # deadlocks as soon as there is more than one node per DC (Singapore1
+    # retrying Singapore2:10003, which is never started).
     local global_node_id=1
+    local -a pids=() names=()
     for i in $(seq 1 $num_dcs); do
         local city=$(get_location $i ${LOCATIONS_FILE})
         for k in $(seq 1 $nodes_per_dc); do
@@ -114,20 +119,31 @@ with open(f'{tiga_dir}/config-ycsb.yml', 'w') as f:
 
             local staged_config
             staged_config=$(infra_stage_file "$(node_index_of "${container_name}")" \
-                                             "${TIGA_DIR}/config-ycsb.yml" /tmp/config-ycsb.yml)
+                                             "${TIGA_DIR}/config-ycsb.yml" /tmp/config-ycsb.yml) || {
+                error "Failed to stage the Tiga config for ${container_name}"
+                return 2
+            }
 
             start_container ${image} ${container_name} "started on" ${LOGDIR}/${protocol}_node${global_node_id}.log \
                 --rm -d --network $(config "network_name") --cap-add=NET_ADMIN --cap-add=NET_RAW ${resource_limits} \
                 -v ${staged_config}:/app/config/config-ycsb.yml \
                 -e PROTOCOL=${protocol} \
                 -e SERVER_NAME=${server_name} \
-                -e CONFIG_PATH=/app/config/config-ycsb.yml || {
-                error "Failed to start tiga/calvin/detock server ${container_name}"
-                return 2
-            }
+                -e CONFIG_PATH=/app/config/config-ycsb.yml &
+            pids+=($!)
+            names+=("${container_name}")
             global_node_id=$((global_node_id + 1))
         done
     done
+
+    local idx failed=0
+    for idx in "${!pids[@]}"; do
+        if ! wait "${pids[$idx]}"; then
+            error "Failed to start tiga/calvin/detock server ${names[$idx]}"
+            failed=1
+        fi
+    done
+    [ "${failed}" -eq 0 ] || return 2
 }
 
 tiga_cleanup_cluster() {

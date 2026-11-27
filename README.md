@@ -150,6 +150,11 @@ export BENCH_SSH_USER=bench                    # optional
 `.deployment/` holds everything provisioning discovers (addresses, zones,
 interface names). It is generated, and gitignored for the same reason.
 
+Every Docker command on a remote node runs over SSH. Against distant regions,
+enabling SSH connection multiplexing (`ControlMaster`) in your own
+`~/.ssh/config` makes each one several times faster. See
+[infra/README.md](infra/README.md#optional-ssh-connection-multiplexing-gcp-aws).
+
 #### Custom builds
 
 To run a Cassandra build of your own, push it to a private ECR repository
