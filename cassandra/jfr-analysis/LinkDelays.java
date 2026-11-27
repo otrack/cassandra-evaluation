@@ -3,7 +3,7 @@ import java.util.*;
 
 // LinkDelays [--bucket ms] [--excess ms] [--from HH:MM:SS[.sss]] [--to ...] [--skip s] <jfr>... :
 // one-way message delay per directed node pair, from the DX message events of
-// -Daccord.debug_distributed_execution=N (see Dx.Messages for how sends and receives are paired).
+// -Daccord.debug.distributed.execution=N (see Dx.Messages for how sends and receives are paired).
 //   - per link: messages, min/p50/p90/p99/p999/max, and how many arrived more than --excess ms (default 50) later
 //     than the link's median. The median should equal the configured or physical one-way latency; if it doesn't,
 //     the hosts' clocks disagree.

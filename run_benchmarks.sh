@@ -106,7 +106,14 @@ run_ycsb() {
     fi
 
     if [ "$action" == "load" ]; then
-        ycsb_threads=100 # FIXME CRDB parallel load is failing
+        # One client loads every record, from the first DC: on a real
+        # deployment each insert waits out the WAN (there is no emulated
+        # latency to switch on after the load, as in simulation), so the load
+        # takes records / threads * insert latency.  ycsb.load_threads raises
+        # it for the systems that take it; the default stays at 100 as CRDB's
+        # parallel load was failing (FIXME).
+        ycsb_threads=$(config ycsb.load_threads)
+        ycsb_threads=${ycsb_threads:-100}
     fi
     
     shift 13
@@ -428,13 +435,16 @@ for line in sys.stdin:
 
 # The delay between launching the first YCSB client of a run phase and the
 # moment all of them start (ycsb.start_delay, YCSB_START_DELAY overrides it;
-# 0 = start each as soon as it is launched).  Unset: 90s on real machines,
-# where launching one client through its remote Docker context took ~10s, and
-# 15s in simulation.
+# 0 = start each as soon as it is launched).  Unset: 45s on real machines,
+# where launching one client through its remote Docker context takes ~10s --
+# the clients are launched concurrently, and a client only starts its JVM once
+# the delay is over, so the delay covers one launch rather than the sum of them
+# (it was 90s when they were launched one after another); run_benchmark says
+# so if the launches outlast it -- and 15s in simulation.
 ycsb_start_delay() {
     local v="${YCSB_START_DELAY:-$(config ycsb.start_delay)}"
     if [ -z "${v}" ]; then
-        if infra_is_real; then v=90; else v=15; fi
+        if infra_is_real; then v=45; else v=15; fi
     fi
     echo "${v}"
 }
@@ -660,10 +670,20 @@ run_benchmark() {
     local ephemeral_ratio_sum=0
     local ratio_count=0
 
+    # All DCs at once: on a real deployment each one is a round trip to
+    # another region (the script makes one docker exec per node).
+    local fp_dir
+    fp_dir=$(mktemp -d)
+    local -a fp_pids=()
     for i in $(seq 1 1 ${num_dcs}); do
         location=$(get_location $i ${LOCATIONS_FILE})
-        container_name="${location}1"
-        fp_output=$("${fast_path_script}" "${container_name}" 2>/dev/null) || true
+        "${fast_path_script}" "${location}1" > "${fp_dir}/${i}" 2>/dev/null &
+        fp_pids+=($!)
+    done
+    wait "${fp_pids[@]}" 2>/dev/null
+
+    for i in $(seq 1 1 ${num_dcs}); do
+        fp_output=$(cat "${fp_dir}/${i}" 2>/dev/null) || true
 
         fp_fast=$(echo "$fp_output" | grep "^Fast ratio:" | awk '{print $3}')
         fp_medium=$(echo "$fp_output" | grep "^Medium ratio:" | awk '{print $3}')
@@ -681,6 +701,7 @@ run_benchmark() {
         ephemeral_ratio_sum=$(awk "BEGIN {printf \"%.4f\", ${ephemeral_ratio_sum} + ${fp_ephemeral}}")
         ratio_count=$((ratio_count + 1))
     done
+    rm -rf "${fp_dir}"
 
     if [ $ratio_count -gt 0 ]; then
         {

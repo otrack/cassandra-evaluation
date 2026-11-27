@@ -9,34 +9,39 @@ JMX_HOST="localhost:9010"
 JMXTERM_JAR="/tmp/jmxterm-1.0.4-uber.jar"
 JMXTERM_URL="https://github.com/jiaqi/jmxterm/releases/download/v1.0.4/jmxterm-1.0.4-uber.jar"
 
-# Download jmxterm to the container if not already present
-dexec "$CONTAINER_ID" bash -c "test -f $JMXTERM_JAR || curl -sL -o $JMXTERM_JAR $JMXTERM_URL"
+# Every counter is read in a single `docker exec`: on a real deployment each
+# exec is an SSH round trip to another region, and this used to make one per
+# counter (seven per node, one node after another).  Inside the container, one
+# jmxterm per bean, each preceded by a marker line, so that a bean this build
+# lacks (Ephemeral, say) leaves a gap rather than shifting the values of the
+# others.  The values are parsed here with awk: BSD grep (macOS) has no -P.
+BEANS="rw_fast:name=FastPaths,scope=rw rw_medium:name=MediumPaths,scope=rw rw_slow:name=SlowPaths,scope=rw \
+ro_fast:name=FastPaths,scope=ro ro_medium:name=MediumPaths,scope=ro ro_slow:name=SlowPaths,scope=ro \
+ro_ephemeral:name=Ephemeral,scope=ro"
 
-jmx_get() {
-  local bean_name="$1"
-  local attribute="$2"
-  dexec "$CONTAINER_ID" bash -c "
-cat > /tmp/jmx_cmds.txt << INNER
-domain org.apache.cassandra.metrics
-bean $bean_name
-get $attribute
-INNER
-java -jar $JMXTERM_JAR -l $JMX_HOST -i /tmp/jmx_cmds.txt -n
-" 2>/dev/null | grep "^$attribute" | grep -oP '\d+'
+counters=$(dexec "$CONTAINER_ID" sh -c "
+test -f $JMXTERM_JAR || curl -sL -o $JMXTERM_JAR $JMXTERM_URL
+for b in $BEANS; do
+  echo \"BEAN \${b%%:*}\"
+  printf 'domain org.apache.cassandra.metrics\nbean org.apache.cassandra.metrics:%s,type=AccordCoordinator\nget Count\n' \"\${b#*:}\" > /tmp/jmx_cmds.txt
+  java -jar $JMXTERM_JAR -l $JMX_HOST -i /tmp/jmx_cmds.txt -n 2>/dev/null
+done
+" 2>/dev/null) || true
+
+# The value of counter $1 (rw_fast, ...), 0 if it could not be read.
+count() {
+  awk -v k="$1" '$1 == "BEAN" { cur = $2; next }
+                 cur == k && $1 == "Count" { gsub(/[^0-9]/, "", $3); print $3 + 0; found = 1; exit }
+                 END { if (!found) print 0 }' <<< "${counters}"
 }
 
 for scope in rw ro; do
-  FAST=$(jmx_get "org.apache.cassandra.metrics:name=FastPaths,scope=$scope,type=AccordCoordinator" Count)
-  MEDIUM=$(jmx_get "org.apache.cassandra.metrics:name=MediumPaths,scope=$scope,type=AccordCoordinator" Count)
-  SLOW=$(jmx_get "org.apache.cassandra.metrics:name=SlowPaths,scope=$scope,type=AccordCoordinator" Count)
-
-  FAST=${FAST:-0}
-  MEDIUM=${MEDIUM:-0}
-  SLOW=${SLOW:-0}
+  FAST=$(count ${scope}_fast)
+  MEDIUM=$(count ${scope}_medium)
+  SLOW=$(count ${scope}_slow)
 
   if [ "$scope" = "ro" ]; then
-    EPHEMERAL=$(jmx_get "org.apache.cassandra.metrics:name=Ephemeral,scope=$scope,type=AccordCoordinator" Count)
-    EPHEMERAL=${EPHEMERAL:-0}
+    EPHEMERAL=$(count ro_ephemeral)
     SCOPE_TOTAL=$((FAST + MEDIUM + SLOW + EPHEMERAL))
     if [ "$SCOPE_TOTAL" -gt 0 ]; then
 	echo "Ephemeral ratio: $(awk "BEGIN {printf \"%.4f\", $EPHEMERAL/$SCOPE_TOTAL}")"

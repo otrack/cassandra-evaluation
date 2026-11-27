@@ -3,7 +3,7 @@
 # async-profiler captures on the Cassandra replicas.
 #
 # The replicas are started with async-profiler loaded (see
-# start_cassandra_data_centers.py), and with accord.debug_execution so that
+# start_cassandra_data_centers.py), and with accord.debug.execution so that
 # DebugExecution brackets each Accord task and executor critical section with
 # a one.profiler.Span.  In async-profiler 4.5, Span.start() returns 0 unless a
 # recording is running, and the resulting profiler.Span events exist only in
@@ -57,7 +57,23 @@ cassandra_profiler_enabled() {
 #   privileges either.
 cassandra_profiler_options() {
     local opts="${CASSANDRA_PROFILER_OPTIONS:-$(config cassandra.profiler.options)}"
-    echo "${opts:-event=ctimer,interval=1ms,wall=10ms,lock=1ms}"
+    opts="${opts:-event=ctimer,interval=1ms,wall=10ms,lock=1ms}"
+    # Allocation sampling (cassandra.profiler.alloc; CASSANDRA_PROFILER_ALLOC overrides it for one run): async-profiler
+    # records one jdk.ObjectAllocationInNewTLAB / jdk.ObjectAllocationOutsideTLAB event, with its stack, per <interval>
+    # bytes allocated on average, weighted by the bytes it stands for; jfr-analysis AllocProfile and CallTree --event
+    # alloc read them. Unless the options already ask for allocations themselves.
+    local alloc="${CASSANDRA_PROFILER_ALLOC:-$(config cassandra.profiler.alloc)}"
+    case "${alloc}" in
+        ""|0|off|false) ;;
+        *)
+            case "${alloc}" in 1|on|true) alloc=2m ;; esac
+            case ",${opts}," in
+                *",alloc"*) ;;
+                *) opts="${opts},alloc=${alloc}" ;;
+            esac
+            ;;
+    esac
+    echo "${opts}"
 }
 
 # Cassandra's JFR diagnostic events (connections with TCP_INFO, backpressure,
@@ -116,12 +132,12 @@ _cassandra_profiler_dx_summary() {
     if "${tools}" TxnLatency --top "${top}" "${captures[@]}" > "${latency}" 2>&1; then
         log "Distributed execution latency summary: ${latency}"
     else
-        error "TxnLatency failed (a JDK 17+ is needed on this machine); see ${latency}"
+        error "TxnLatency failed (it needs a JDK 17+ on this machine: install one, or set JFR_JAVA_HOME); see ${latency}"
     fi
     if "${tools}" TxnTrace --slowest "${top}" "${captures[@]}" > "${out}" 2>&1; then
         log "Distributed execution summary of the ${top} slowest traced transactions: ${out}"
     else
-        error "TxnTrace failed (a JDK 17+ is needed on this machine); see ${out}"
+        error "TxnTrace failed (it needs a JDK 17+ on this machine: install one, or set JFR_JAVA_HOME); see ${out}"
     fi
 }
 
@@ -260,7 +276,7 @@ cassandra_profiler_stop() {
                 debug "No GC log found on ${c}"
             fi
             # A Cassandra build without Span support fails as soon as a task
-            # runs with accord.debug_execution=true, not when the profiler
+            # runs with accord.debug.execution=true, not when the profiler
             # starts, so it would otherwise surface only as a broken run.
             if dlogs "${c}" 2>&1 | grep -q -m1 "one/profiler/Span"; then
                 error "${c} logged a failure involving one.profiler.Span: the async-profiler jar in the image lacks it"
@@ -272,4 +288,42 @@ cassandra_profiler_stop() {
     wait "${pids[@]}"
 
     _cassandra_profiler_dx_summary "${dest_dir}" "${tag}"
+    _cassandra_profiler_features_summary "${dest_dir}" "${tag}"
+    _cassandra_profiler_failures_summary "${dest_dir}" "${tag}"
+}
+
+# Summarise why client transactions failed and what recovery did, from the
+# cassandra.accord.TxnFailure/TxnBlocked/Coordination JFR events:
+# <run>_failures.txt (Failures, each node over its whole capture). Best effort.
+_cassandra_profiler_failures_summary() {
+    local dest_dir=$1 tag=$2
+    local captures=( "${dest_dir}/${tag}"_*.jfr )
+    [ -e "${captures[0]}" ] || return 0
+    local tools="${CASSANDRA_PROFILER_SCRIPT_DIR}/jfr-analysis/run.sh"
+    [ -x "${tools}" ] || return 0
+    local out="${dest_dir}/${tag}_failures.txt"
+    if "${tools}" Failures "${captures[@]}" > "${out}" 2>&1; then
+        log "Txn failures and recoveries: ${out}"
+    else
+        error "Failures failed (it needs a JDK 17+ on this machine: install one, or set JFR_JAVA_HOME); see ${out}"
+    fi
+}
+
+# Summarise whether the executor features (deadline-ordered PreAccept delivery,
+# continuation and micro-batching) engaged, from the counters on the
+# cassandra.accord.Executor/Store JFR events: <run>_features.txt (Features, each
+# node over its whole capture, per store too). Best effort, as the DX summary;
+# captures from builds without the counters just report "n/a".
+_cassandra_profiler_features_summary() {
+    local dest_dir=$1 tag=$2
+    local captures=( "${dest_dir}/${tag}"_*.jfr )
+    [ -e "${captures[0]}" ] || return 0
+    local tools="${CASSANDRA_PROFILER_SCRIPT_DIR}/jfr-analysis/run.sh"
+    [ -x "${tools}" ] || return 0
+    local out="${dest_dir}/${tag}_features.txt"
+    if "${tools}" Features --stores "${captures[@]}" > "${out}" 2>&1; then
+        log "Executor feature counters: ${out}"
+    else
+        error "Features failed (it needs a JDK 17+ on this machine: install one, or set JFR_JAVA_HOME); see ${out}"
+    fi
 }

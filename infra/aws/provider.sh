@@ -836,7 +836,7 @@ _aws_wait_all() {
 # ec2:DescribeInstances, already required for everything else this provider
 # does, so no extra IAM permission is needed.
 _aws_diagnose_unreachable() {
-    local idx=$1 az region name info state reason
+    local idx=$1 az region name info state reason detail
     az=$(_aws_az_of "${idx}") || return 1
     region=$(_aws_region_of "${az}")
     name=$(_aws_instance "${idx}")
@@ -845,22 +845,28 @@ _aws_diagnose_unreachable() {
     # rather than an arbitrary one, in case a prior deployment's terminated
     # instance still shares this node's Name tag (AWS keeps it visible for a
     # while after termination).
+    # StateTransitionReason only says who ended the instance ("Service
+    # initiated (<date>)" for anything AWS did); the spot detail is in
+    # StateReason ("Server.SpotInstanceTermination: Spot instance
+    # termination"), so both are read and matched together.
     info=$(aws ec2 describe-instances --region "${region}" \
         --filters "Name=tag:Name,Values=${name}" \
-        --query 'sort_by(Reservations[].Instances[], &LaunchTime)[-1].[State.Name,StateTransitionReason]' \
+        --query 'sort_by(Reservations[].Instances[], &LaunchTime)[-1].[State.Name,StateTransitionReason,StateReason.Message]' \
         --output text 2>/dev/null)
     if [ -z "${info}" ] || [ "${info}" = "None" ]; then
         return 1
     fi
     state=$(printf '%s' "${info}" | cut -f1)
-    reason=$(printf '%s' "${info}" | cut -f2-)
+    reason=$(printf '%s' "${info}" | cut -f2)
+    detail=$(printf '%s' "${info}" | cut -f3-)
+    [ -n "${detail}" ] && [ "${detail}" != "None" ] && reason="${reason}; ${detail}"
 
     case "${reason}" in
         *[Ss]pot*)
             error "aws: ${name} is unreachable because AWS reclaimed it (spot interruption)."
             error "     Instance state: ${state} -- ${reason}"
-            error "     Expected with aws.spot=1 when demand/price rose; re-provision to"
-            error "     replace it, or set aws.spot=0 in exp.config for guaranteed capacity."
+            error "     Expected with aws.spot=1 when demand/price rose; run './deploy.sh repair'"
+            error "     to replace it, or set aws.spot=0 in exp.config for guaranteed capacity."
             ;;
         *)
             [ "${state}" = "running" ] && return 1

@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 
 DIR=$(dirname "${BASH_SOURCE[0]}")
-LOGDIR="${DIR}/logs"
-RESULTSDIR="${DIR}/results/"
+# BENCH_LOGDIR / BENCH_RESULTSDIR keep the logs (and profiles) and the plots of
+# one campaign -- a build, say -- apart from another's, since every experiment
+# script clears its own earlier logs when it starts afresh.  Relative paths are
+# taken from the repository.  Like BENCH_SSH_*, they describe this machine's
+# runs rather than the experiment, so they come from the environment.
+_bench_dir() {
+    case "$1" in
+        /*) echo "$1" ;;
+        *)  echo "${DIR}/$1" ;;
+    esac
+}
+LOGDIR=$(_bench_dir "${BENCH_LOGDIR:-logs}")
+RESULTSDIR=$(_bench_dir "${BENCH_RESULTSDIR:-results}")/
 CONFIG_FILE="${DIR}/exp.config"
 
 config() {
@@ -665,17 +676,46 @@ compute_test_machine() {
     return 0
 }
 
+# The exp.config *_image keys protocols $@ run on, plus the YCSB client's;
+# nothing (meaning: every image) if any of them is not a known protocol.
+_image_keys_for_protocols() {
+    local p keys="ycsb_image"
+    for p in "$@"; do
+        case "${p}" in
+            accord) keys+=" accord_cassandra_image" ;;
+            cassandra-*|paxos|quorum|one) keys+=" normal_cassandra_image" ;;
+            cockroachdb*) keys+=" cockroachdb_image" ;;
+            swiftpaxos*) keys+=" swiftpaxos_image" ;;
+            tiga*|calvin|detock) keys+=" tiga_image" ;;
+            *) return 0 ;;
+        esac
+    done
+    echo "${keys}"
+}
+
+# pull_images [protocol...]
+#
+# Pulls onto every node the images the given protocols need -- by default those
+# of ${protocols}, the list every experiment script sets -- or, with neither,
+# every image of exp.config: on a fresh (or replaced) machine the images of
+# the other systems are several GB that an Accord-only run never uses.
 pull_images() {
-    log "Pulling all Docker images from ${CONFIG_FILE}..."
+    local wanted=""
+    # shellcheck disable=SC2086 -- a space-separated list, as the scripts keep it
+    [ $# -eq 0 ] && [ -n "${protocols:-}" ] && set -- ${protocols}
+    [ $# -gt 0 ] && wanted=$(_image_keys_for_protocols "$@")
+    log "Pulling $([ -n "${wanted}" ] && echo "the Docker images of $*" || echo "all Docker images") from ${CONFIG_FILE}..."
 
     local -a images=()
     local key value
     while IFS='=' read -r key value; do
         [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
         [[ "$key" =~ _image$ ]] || continue
+        [ -z "${wanted}" ] || [[ " ${wanted} " == *" ${key} "* ]] || continue
         images+=("$(echo "$value" | xargs)")
     done < "${CONFIG_FILE}"
 
+    ecr_login "${images[@]}" || exit 1
     # One local daemon: pull in sequence, as this has always done.
     if ! infra_is_real; then
         local image
@@ -723,15 +763,46 @@ pull_images() {
     log "All Docker images pulled successfully."
 }
 
+# ecr_login <image>...
+#
+# Logs this machine's Docker CLI in to every private ECR registry the images
+# name (<account>.dkr.ecr.<region>.amazonaws.com/...), and to nothing else.
+# The credentials stay here: the CLI hands them to whichever daemon it asks to
+# pull, so `docker --context <node> pull` works with no login, nor any IAM
+# role, on the nodes, and a node that is replaced later needs nothing either.
+# An ECR login lasts 12 hours, less than a long run_resilient.sh campaign, so
+# this runs before every pull rather than once.  Registry access is a property
+# of the image, not of the infra provider, hence here rather than infra/.
+ecr_login() {
+    local image host region
+    local -A seen=()
+    for image in "$@"; do
+        host=${image%%/*}
+        [[ "${host}" =~ ^[0-9]{12}\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com$ ]] || continue
+        region=${BASH_REMATCH[1]}
+        [ -n "${seen[${host}]:-}" ] && continue
+        seen[${host}]=1
+        if ! aws ecr get-login-password --region "${region}" \
+                | docker login --username AWS --password-stdin "${host}" >/dev/null 2>&1; then
+            error "Could not log in to ECR registry ${host}: are the aws CLI credentials valid, with ecr:GetAuthorizationToken (infra/aws/iam-policy.json)?"
+            return 1
+        fi
+        log "Logged in to ECR registry ${host}"
+    done
+}
+
 # push_local_image <local_image> [as <remote_tag>]
 #
 # Distributes a locally built image to every node's Docker daemon directly,
 # without a registry round-trip: `docker save` once to a local tarball, then
 # `docker load` it into each node's daemon over the same SSH-backed context
-# dpull/pull_images already use. Save/load preserve layer IDs, so any layers
-# the custom build shares with an image already pulled there (base OS, JDK,
-# etc.) are recognized and skipped -- only the build's own top layers
-# actually transfer.
+# dpull/pull_images already use. The tarball holds *every* layer of the image,
+# base OS and JDK included, and all of it crosses the wire to every node: a
+# daemon that already has a layer only skips storing it, not receiving it.
+# A registry (docker push once, then pull_images) moves only the layers that
+# changed, and also reaches a node that is replaced later (./deploy.sh
+# repair), which an image pushed here never does: pull_images then aborts on
+# that node, as the image is neither pullable nor present.
 #
 # The remote_tag is what exp.config's *_image keys should be pointed at
 # (see cmd_use_image in deploy.sh); it defaults to local_image itself.

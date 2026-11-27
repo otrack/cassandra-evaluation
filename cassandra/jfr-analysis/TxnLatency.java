@@ -3,7 +3,7 @@ import java.util.*;
 import java.util.regex.*;
 
 // TxnLatency [--slow-ms M] [--excess ms] [--top N] [--keys N] [--bucket ms] [--from ..] [--to ..] [--skip s] <jfr>... :
-// where the tail is, from the "C Client" spans of -Daccord.debug_distributed_execution=N (the coordinator's view of
+// where the tail is, from the "C Client" spans of -Daccord.debug.distributed.execution=N (the coordinator's view of
 // each traced transaction, from AccordService.coordinateAsync to its result). Transactions are selected by the start
 // of their Client span.
 //   - per coordinator and kind (KW key write, KE ephemeral read, ...): percentiles and the slow ones: at least --slow-ms,

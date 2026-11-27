@@ -78,9 +78,9 @@ def profiler_jvm_opts():
       Spans taken before profiling starts are simply 0 and are dropped.
     - async_profiler.unsafe_mode allows `nodetool profile execute`, the only
       entry point that accepts arbitrary async-profiler options.
-    - accord.debug_execution creates the DebugExecutor/DebugTask hooks that
+    - accord.debug.execution creates the DebugExecutor/DebugTask hooks that
       emit the executor critical-section, queued and per-task run spans.
-      accord.debug_execution_report additionally logs slow-task/slow-lock
+      accord.debug.execution.report additionally logs slow-task/slow-lock
       warnings and keeps latency histograms; it is off unless exp.config asks
       for it, because it reads the thread CPU clock around every task and
       lock hold, partly while the executor lock is held.  The spans do not
@@ -92,7 +92,7 @@ def profiler_jvm_opts():
       safepoint after 200 ms, with their OS thread id and CPU time: whether a
       long time-to-safepoint was a thread spinning in Java or one blocked in
       the kernel.  It only acts on safepoints that are already slow.
-    - accord.debug_distributed_execution[_keys] (see distributed_execution_opts)
+    - accord.debug.distributed.execution[.keys] (see distributed_execution_opts)
       add the per-transaction "DX" spans; they are recorded only while a
       capture runs, so they are only passed when profiling.
     - cassandra.jfr.diagnostic_events registers the JFR diagnostic events
@@ -104,8 +104,8 @@ def profiler_jvm_opts():
     report = str(config.get("accord.debug_execution_report", "false")).strip().lower()
     return (" -Dcassandra.async_profiler.enabled=true"
             " -Dcassandra.async_profiler.unsafe_mode=true"
-            " -Daccord.debug_execution=true"
-            f" -Daccord.debug_execution_report={report}"
+            " -Daccord.debug.execution=true"
+            f" -Daccord.debug.execution.report={report}"
             " -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints"
             " -XX:+SafepointTimeout -XX:SafepointTimeoutDelay=200"
             + (" -Dcassandra.jfr.diagnostic_events=true" if jfr_events_enabled() else "")
@@ -133,10 +133,56 @@ def distributed_execution_opts():
     keys = _sample_setting("CASSANDRA_DX_KEYS", "accord.debug_distributed_execution_keys")
     opts = ""
     if txns > 0:
-        opts += f" -Daccord.debug_distributed_execution={txns}"
+        opts += f" -Daccord.debug.distributed.execution={txns}"
     if keys > 0:
-        opts += f" -Daccord.debug_distributed_execution_keys={keys}"
+        opts += f" -Daccord.debug.distributed.execution.keys={keys}"
+    # every sync point too (its spans; its key events only on sampled keys); CASSANDRA_DX_SYNC_POINTS overrides
+    sync_points = str(os.environ.get("CASSANDRA_DX_SYNC_POINTS",
+                                     config.get("accord.debug_distributed_execution_sync_points", "0"))).strip().lower()
+    if sync_points in ("1", "true"):
+        opts += " -Daccord.debug.distributed.execution.sync_points=true"
     return opts
+
+def storage_jvm_opts():
+    """Where the node keeps the Accord journal: on the data volume
+    (/var/lib/cassandra, a Docker volume of the image) next to the data and the
+    commit log, rather than wherever the build's cassandra.yaml says -- the
+    benchmarking branch sets accord.journal_directory to /tmp, which in the
+    container is the overlay filesystem of its writable layer.  The path is the
+    one Cassandra itself defaults to (storagedirFor("accord_journal")) when
+    journal_directory is unset; like everything under the volume, it goes with
+    the container (auto_remove).  CASSANDRA_ACCORD_JOURNAL_DIR picks another
+    one; empty keeps the build's own setting."""
+    path = os.environ.get("CASSANDRA_ACCORD_JOURNAL_DIR", "/var/lib/cassandra/accord_journal")
+    if not path.strip():
+        return ""
+    return (" -Dcassandra.config.allow_system_properties=true"
+            f" -Dcassandra.settings.accord.journal_directory={path.strip()}")
+
+def startup_jvm_opts():
+    """Flags that shorten a fresh node's startup without changing how it runs
+    once up; CASSANDRA_STARTUP_OPTS replaces them (empty: none).  Measured on
+    AWS, a joining node otherwise spent ~8s of its ~42s waiting for gossip to
+    settle, and ~6s (the first node: ~30s) in TCM discovery:
+
+    - skip_wait_for_gossip_to_settle=0: with TCM, membership comes from the
+      metadata log, not gossip; the wait is the minimum 5s plus 3 one-second
+      polls on every node.
+    - discovery_timeout=5s: discovery runs discovery_rounds (5) rounds of
+      timeout/rounds each, and waits for every seed in each round, so seeds
+      that are not up yet cost a whole 6s round; the first node, with no CMS
+      to find, runs for the whole 30s before electing itself.  This is safe
+      only because create_cassandra_cluster starts that node alone: it can
+      discover nobody else, so there is no rival election to miss, and every
+      other node starts once the CMS exists and stops at the first round in
+      which a seed names it.
+    """
+    value = os.environ.get("CASSANDRA_STARTUP_OPTS")
+    if value is not None:
+        return (" " + value) if value.strip() else ""
+    return (" -Dcassandra.skip_wait_for_gossip_to_settle=0"
+            " -Dcassandra.config.allow_system_properties=true"
+            " -Dcassandra.settings.discovery_timeout=5s")
 
 def extra_jvm_opts():
     """Free-form JVM flags for the Cassandra nodes, e.g. the -D switches that
@@ -239,11 +285,11 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     # "Initial heap size set to a larger value than the maximum heap size".
     # profiler_jvm_opts() rides along in the same var for the same reason: it
     # must stay out of JVM_OPTS, or nodetool (used by cassandra/profiler.sh
-    # itself, via dexec) inherits -Daccord.debug_execution etc. too.
+    # itself, via dexec) inherits -Daccord.debug.execution etc. too.
     jvm_env = {
         "JVM_EXTRA_OPTS": " -Xms" + cassandra_xms + " -Xmx" + cassandra_xmx +
                           (" -XX:ActiveProcessorCount=" + vcpus if vcpus else "") +
-                          profiler_jvm_opts() + extra_jvm_opts(),
+                          storage_jvm_opts() + startup_jvm_opts() + profiler_jvm_opts() + extra_jvm_opts(),
     }
     if cassandra_direct:
         jvm_env["MAX_DIRECT_MEMORY_SIZE"] = cassandra_direct
@@ -252,90 +298,134 @@ def create_cassandra_cluster(num_dcs, nodes_per_dc, cassandra_image):
     log_pattern = r"Startup complete"
     seeds_str = ",".join([f"{locations[idx][2]}1" for idx in range(num_dcs)])
 
-    port_offset = 0
-    for i in range(1, num_dcs + 1):
+    def node_run_kwargs(i, k):
+        """The containers.run arguments of node k of DC i (both 1-based)."""
         _, _, dc_name = locations[i-1]
-        for k in range(1, nodes_per_dc + 1):
-            container_name = f"{dc_name}{k}"
-            is_first_node = (i == 1 and k == 1)
-            port_offset += 1
-            try:
-                run_kwargs = dict(
-                    image=cassandra_image,
-                    name=container_name,
-                    auto_remove=True,
-                    security_opt=[
-                        "seccomp=unconfined",
-                        "apparmor=unconfined",
-                        "label=disable",
-                    ],
-                    log_config=docker.types.LogConfig(
-                        type="json-file",
-                        config={
-                            "max-size": "10m",
-                            "max-file": "3"
-                        }),
-                    tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
-                    ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
-                    environment={
-                        **jvm_env,
-                        "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
-                        "CASSANDRA_SEEDS": "" if is_first_node else seeds_str,
-                        "CASSANDRA_CLUSTER_NAME": "TestCluster",
-                        "CASSANDRA_DC": dc_name,
-                        "CASSANDRA_RACK": f"RAC{k}",
-                        "CASSANDRA_EPHEMERAL_READ_ENABLED": ephemeral_read_enabled
-                    },
-                    cap_add=["NET_ADMIN"],
-                    detach=True
-                )
-                if fixed_tokens_enabled():
-                    # The image's entrypoint sets num_tokens but not
-                    # initial_token: append it to cassandra.yaml first (once,
-                    # should the container be restarted).
-                    run_kwargs['environment']['CASSANDRA_NUM_TOKENS'] = "1"
-                    run_kwargs['environment']['CASSANDRA_INITIAL_TOKEN'] = str(initial_token(k, nodes_per_dc, i - 1))
-                    run_kwargs['entrypoint'] = [
-                        "sh", "-c",
-                        'grep -q "^initial_token:" "$CASSANDRA_CONF/cassandra.yaml"'
-                        ' || echo "initial_token: $CASSANDRA_INITIAL_TOKEN" >> "$CASSANDRA_CONF/cassandra.yaml";'
-                        ' exec docker-entrypoint.sh "$@"',
-                        "sh"]
-                    run_kwargs['command'] = ["cassandra", "-f"]
-                if nano_cpus is not None:
-                    run_kwargs['nano_cpus'] = nano_cpus
-                if mem_limit is not None:
-                    run_kwargs['mem_limit'] = mem_limit
-                if is_real:
-                    # One machine per node already gives each container its
-                    # own network namespace; join the host's instead of a
-                    # bridge that only exists (if at all) on this one daemon.
-                    run_kwargs['network_mode'] = 'host'
-                    run_kwargs['extra_hosts'] = extra_hosts
-                    # Left unset, the image's entrypoint defaults
-                    # broadcast_address to listen_address, i.e. the address
-                    # Cassandra auto-detects from the host interface -- the
-                    # private IP. Peers gossip back to whatever a node
-                    # broadcasts, so an unset broadcast_address is why a
-                    # cross-region node never rejoins the ring even once the
-                    # security group and --add-host aliases correctly route
-                    # traffic *to* it: every peer is told to reply to a
-                    # private address it cannot reach.
-                    broadcast_ip, _ = infra.host_for(container_name)
-                    if broadcast_ip:
-                        run_kwargs['environment']['CASSANDRA_BROADCAST_ADDRESS'] = broadcast_ip
-                        run_kwargs['environment']['CASSANDRA_BROADCAST_RPC_ADDRESS'] = broadcast_ip
-                else:
-                    run_kwargs['network'] = network_name
-                container = infra.client_for(container_name).containers.run(**run_kwargs)
-                containers.append(container)
-                debug(f"Starting container '{container_name}' in DC '{dc_name}', rack 'RAC{k}'.")
-                if not wait_for_log(container, log_pattern):
-                    debug(f"Failed to start container '{container_name}' within timeout.")
-                    exit(-1)
-            except docker.errors.APIError as e:
-                print(f"ERROR: failed to start container '{container_name}': {e}", file=sys.stderr)
-                sys.exit(1)
+        container_name = f"{dc_name}{k}"
+        is_first_node = (i == 1 and k == 1)
+        run_kwargs = dict(
+            image=cassandra_image,
+            name=container_name,
+            auto_remove=True,
+            security_opt=[
+                "seccomp=unconfined",
+                "apparmor=unconfined",
+                "label=disable",
+            ],
+            log_config=docker.types.LogConfig(
+                type="json-file",
+                config={
+                    "max-size": "10m",
+                    "max-file": "3"
+                }),
+            tmpfs={"/tmp/tmpfs": "rw,nosuid,nodev,mode=1777"},
+            ulimits=[docker.types.Ulimit(name="memlock", soft=-1, hard=-1)],
+            environment={
+                **jvm_env,
+                "CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
+                "CASSANDRA_SEEDS": "" if is_first_node else seeds_str,
+                "CASSANDRA_CLUSTER_NAME": "TestCluster",
+                "CASSANDRA_DC": dc_name,
+                "CASSANDRA_RACK": f"RAC{k}",
+                "CASSANDRA_EPHEMERAL_READ_ENABLED": ephemeral_read_enabled
+            },
+            cap_add=["NET_ADMIN"],
+            detach=True
+        )
+        if fixed_tokens_enabled():
+            # The image's entrypoint sets num_tokens but not
+            # initial_token: append it to cassandra.yaml first (once,
+            # should the container be restarted).
+            run_kwargs['environment']['CASSANDRA_NUM_TOKENS'] = "1"
+            run_kwargs['environment']['CASSANDRA_INITIAL_TOKEN'] = str(initial_token(k, nodes_per_dc, i - 1))
+            run_kwargs['entrypoint'] = [
+                "sh", "-c",
+                'grep -q "^initial_token:" "$CASSANDRA_CONF/cassandra.yaml"'
+                ' || echo "initial_token: $CASSANDRA_INITIAL_TOKEN" >> "$CASSANDRA_CONF/cassandra.yaml";'
+                ' exec docker-entrypoint.sh "$@"',
+                "sh"]
+            run_kwargs['command'] = ["cassandra", "-f"]
+        if nano_cpus is not None:
+            run_kwargs['nano_cpus'] = nano_cpus
+        if mem_limit is not None:
+            run_kwargs['mem_limit'] = mem_limit
+        if is_real:
+            # One machine per node already gives each container its
+            # own network namespace; join the host's instead of a
+            # bridge that only exists (if at all) on this one daemon.
+            run_kwargs['network_mode'] = 'host'
+            run_kwargs['extra_hosts'] = extra_hosts
+            # Left unset, the image's entrypoint defaults
+            # broadcast_address to listen_address, i.e. the address
+            # Cassandra auto-detects from the host interface -- the
+            # private IP. Peers gossip back to whatever a node
+            # broadcasts, so an unset broadcast_address is why a
+            # cross-region node never rejoins the ring even once the
+            # security group and --add-host aliases correctly route
+            # traffic *to* it: every peer is told to reply to a
+            # private address it cannot reach.
+            broadcast_ip, _ = infra.host_for(container_name)
+            if broadcast_ip:
+                run_kwargs['environment']['CASSANDRA_BROADCAST_ADDRESS'] = broadcast_ip
+                run_kwargs['environment']['CASSANDRA_BROADCAST_RPC_ADDRESS'] = broadcast_ip
+        else:
+            run_kwargs['network'] = network_name
+        return run_kwargs
+
+    def start_node(i, k):
+        """Starts node k of DC i and waits until it has joined; raises on failure."""
+        _, _, dc_name = locations[i-1]
+        container_name = f"{dc_name}{k}"
+        try:
+            container = infra.client_for(container_name).containers.run(**node_run_kwargs(i, k))
+        except docker.errors.APIError as e:
+            raise RuntimeError(f"failed to start container '{container_name}': {e}")
+        debug(f"Starting container '{container_name}' in DC '{dc_name}', rack 'RAC{k}'.")
+        if not wait_for_log(container, log_pattern):
+            raise RuntimeError(f"container '{container_name}' did not start within the timeout")
+        return container
+
+    # The order nodes may start in.  The first node is its own only seed and
+    # creates the cluster metadata service (CMS), so it starts alone.  The
+    # other seeds -- the first node of every DC -- then start together: a seed
+    # does not bootstrap, so it joins with a single UnsafeJoin, which the CMS
+    # applies atomically and which holds no range lock; concurrent ones are
+    # serialised by the CMS log, whose commits a starting node retries
+    # indefinitely.  The other nodes (nodes_per_dc > 1) do bootstrap: their
+    # PrepareJoin locks the affected ranges until the join completes, and the
+    # CMS rejects an overlapping one -- which aborts that node's startup --
+    # so they still start one after another.  One after another, a 5-DC start
+    # on AWS took ~5 minutes (~42s per node, end to end); this should take
+    # about two node startups.  CASSANDRA_SEQUENTIAL_START=1 restores the
+    # one-by-one start.
+    sequential = os.environ.get("CASSANDRA_SEQUENTIAL_START", "") in ("1", "true")
+    seeds = [(i, 1) for i in range(2, num_dcs + 1)]
+    others = [(i, k) for i in range(1, num_dcs + 1) for k in range(2, nodes_per_dc + 1)]
+    started = {}
+    try:
+        started[(1, 1)] = start_node(1, 1)
+        if sequential or len(seeds) <= 1:
+            for node in seeds:
+                started[node] = start_node(*node)
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=len(seeds)) as pool:
+                futures = {node: pool.submit(start_node, *node) for node in seeds}
+                errors = []
+                for node, future in futures.items():
+                    try:
+                        started[node] = future.result()
+                    except Exception as e:
+                        errors.append(e)
+                if errors:
+                    raise errors[0]
+        for node in others:
+            started[node] = start_node(*node)
+    except RuntimeError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+    # In DC order, as before.
+    containers.extend(started[(i, k)] for i in range(1, num_dcs + 1) for k in range(1, nodes_per_dc + 1))
 
     debug(f"Started {len(containers)} Cassandra nodes across {num_dcs} DCs ({nodes_per_dc} nodes/DC).")
     if containers:

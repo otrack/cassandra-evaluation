@@ -6,7 +6,7 @@ import java.util.regex.*;
 
 // TxnTrace [--slowest N | --txn <substring> | --key <substring>] [--min-ms M] [--depth D]
 //          [--from HH:MM:SS[.sss]] [--to HH:MM:SS[.sss]] [--skip <seconds>] <jfr>... :
-// joins the "DX ..." spans emitted with -Daccord.debug_distributed_execution[_keys]=N across the recordings of all
+// joins the "DX ..." spans emitted with -Daccord.debug.distributed.execution[.keys]=N across the recordings of all
 // nodes.
 //   default / --slowest N : the N slowest coordinated transactions (by their "C Client" span): one timeline each,
 //                           relative to the start of the Client span, then their wait chains (below)
@@ -72,7 +72,7 @@ public class TxnTrace
 
         if (only == null && client.isEmpty())
         {
-            // key events only (accord.debug_distributed_execution_keys without transaction sampling): the longest
+            // key events only (accord.debug.distributed.execution.keys without transaction sampling): the longest
             // waits between a transaction becoming Stable on a replica and its key releasing it, with their chains
             record Wait(String txn, String replica, Ev stable, Ev released) {}
             List<Wait> waits = new ArrayList<>();
@@ -132,7 +132,7 @@ public class TxnTrace
                 Matcher m = UNBLOCK.matcher(ev.tag());
                 if (m.matches() && m.group(1).equals(txn)) replicas.add(ev.node() + " s" + m.group(3));
             }
-            if (replicas.isEmpty()) System.out.println("     (no Unblock events: enable -Daccord.debug_distributed_execution_keys, or the transaction never waited on a key)");
+            if (replicas.isEmpty()) System.out.println("     (no Unblock events: enable -Daccord.debug.distributed.execution.keys, or the transaction never waited on a key)");
             for (String replica : replicas)
                 chain(zero, txn, replica, Instant.MAX, depth, "     ");
         }

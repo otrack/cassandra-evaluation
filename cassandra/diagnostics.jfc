@@ -21,6 +21,13 @@
   <event name="cassandra.os.Pressure"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
   <event name="cassandra.os.Threads"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
   <event name="cassandra.accord.Executor"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
+  <event name="cassandra.accord.Store"><setting name="enabled">true</setting><setting name="period">100 ms</setting></event>
+  <event name="cassandra.accord.WaitingTask"><setting name="enabled">true</setting></event>
+  <!-- why client transactions fail, and recovery (AccordFailureDiagnostics) -->
+  <event name="cassandra.accord.TxnFailure"><setting name="enabled">true</setting></event>
+  <event name="cassandra.accord.TxnBlocked"><setting name="enabled">true</setting></event>
+  <event name="cassandra.accord.TxnBlockedWalk"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting></event>
+  <event name="cassandra.accord.Coordination"><setting name="enabled">true</setting><setting name="threshold">0 ms</setting></event>
 
   <!-- Cassandra events that are far too frequent for this purpose -->
   <event name="cassandra.accord.cache.Add"><setting name="enabled">false</setting></event>

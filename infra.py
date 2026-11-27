@@ -272,6 +272,47 @@ def net_device(name):
     return _state_of(name).get("net_device") or "eth0"
 
 
+_SSH_READ_PATCHED = False
+
+
+def _patch_docker_ssh_read():
+    """Make exec_run/attach work over use_ssh_client=True on macOS.
+
+    docker-py's SSHSocket is a never-connected AF_INET socket; the data
+    actually flows through the pipes of the `ssh ... docker system
+    dial-stdio` subprocess it spawns.  docker.utils.socket.read() poll()s
+    that placeholder socket before every read of a hijacked stream (the
+    output of exec_run, attach).  Linux reports a never-connected socket as
+    POLLHUP at once, so the read goes ahead and blocks on the pipe as it
+    should; macOS reports nothing, so the first exec_run hangs forever
+    (seen as a hang at "Waiting for all nodes to be UN").  Skipping the
+    poll for SSHSocket does on every platform what Linux already does.
+
+    The alternative, docker-py's paramiko transport, is not used: it only
+    trusts ~/.ssh/known_hosts and ignores the operator's ssh config, while
+    shelling out to ssh honours both.
+    """
+    global _SSH_READ_PATCHED
+    if _SSH_READ_PATCHED:
+        return
+    _SSH_READ_PATCHED = True
+    try:
+        import docker.utils.socket as dsocket
+        from docker.transport.sshconn import SSHSocket
+    except ImportError:
+        return
+    original_read = dsocket.read
+
+    def read(sock, n=4096):
+        if isinstance(sock, SSHSocket):
+            return sock.recv(n)
+        return original_read(sock, n)
+
+    # read_exactly/frames_iter look `read` up as a module global, so
+    # rebinding it here reaches every caller.
+    dsocket.read = read
+
+
 def client_for(name):
     """Docker client for the daemon owning *name*."""
     host, user = ssh_host_for(name)
@@ -280,10 +321,11 @@ def client_for(name):
 
     url = "ssh://{}@{}".format(user, host)
     if url not in _CLIENT_CACHE:
+        _patch_docker_ssh_read()
         try:
             _CLIENT_CACHE[url] = docker.DockerClient(base_url=url, use_ssh_client=True)
         except TypeError:
-            # docker-py < 4.4 has no use_ssh_client and shells out to paramiko.
+            # docker-py < 4.4 has no use_ssh_client and always uses paramiko.
             _CLIENT_CACHE[url] = docker.DockerClient(base_url=url)
     return _CLIENT_CACHE[url]
 

@@ -7,7 +7,7 @@ import java.util.regex.*;
 
 /**
  * Shared parsing of the "DX ..." spans emitted by Cassandra's DebugDistributedExecution
- * (-Daccord.debug_distributed_execution[_keys]=N), for TxnTrace, LinkDelays and TxnLatency.
+ * (-Daccord.debug.distributed.execution[.keys]=N), for TxnTrace, LinkDelays and TxnLatency.
  *
  * <ul>
  *   <li>{@link #scan}: streams every DX span of the given recordings, with the "DX " prefix removed and the node

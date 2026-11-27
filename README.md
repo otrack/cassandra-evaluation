@@ -118,7 +118,7 @@ that are defined in the file `exp.config`:
 | `accord.debug_execution_report` | While profiling, also log `DebugExecution`'s slow-task and slow-lock warnings and keep its latency histograms (default `false`). It reads the thread CPU clock around every task and lock hold, which cost ~4% of executor CPU in the conflict runs; the spans are recorded either way. |
 | `accord.debug_distributed_execution` | While profiling, emit a `DX` span for every step of one transaction in N (coordinator phases, messages, replica state changes, command store tasks), tagged with its TxnId so the captures of all nodes can be joined; `0` (default) is off, `1` traces everything. `CASSANDRA_DX` overrides it for a single run. Needs a Cassandra build with `DebugDistributedExecution`. |
 | `accord.debug_distributed_execution_keys` | While profiling, record every transaction's `CommandsForKey` interactions on one key in K, including which transaction released each waiter, so wait chains can be followed; `0` (default) is off. `CASSANDRA_DX_KEYS` overrides it for a single run. |
-| `accord.debug_distributed_execution_report` | After each profiled run with either setting above, write the timelines and wait chains of the N slowest traced transactions to `<run>_txntrace.txt` next to the captures (default `10`, `0` to skip; needs a JDK 17+ where the scripts run). `CASSANDRA_DX_REPORT` overrides it for a single run. |
+| `accord.debug_distributed_execution_report` | After each profiled run with either setting above, write the timelines and wait chains of the N slowest traced transactions to `<run>_txntrace.txt` next to the captures (default `10`, `0` to skip; needs a JDK 17+ where the scripts run: the newest installed is found if `JAVA_HOME` is older, or set `JFR_JAVA_HOME`). `CASSANDRA_DX_REPORT` overrides it for a single run. |
 
 ### Running on real machines
 
@@ -149,6 +149,25 @@ export BENCH_SSH_USER=bench                    # optional
 
 `.deployment/` holds everything provisioning discovers (addresses, zones,
 interface names). It is generated, and gitignored for the same reason.
+
+#### Custom builds
+
+To run a Cassandra build of your own, push it to a private ECR repository
+rather than distributing it with `./deploy.sh push-image`. A registry upload
+only sends the layers that changed, and a node replaced by `./deploy.sh repair`
+can pull the image too:
+
+``` bash
+# after `ant artifacts` in the checkout; builds for linux/amd64, tags <commit>[-dirty]-<tarball hash>
+tools/build_cassandra_image.sh ~/code/cassandra --use   # --use sets accord_cassandra_image
+tools/build_cassandra_image.sh --prune=10 --dry-run     # list what would go: all but the 10 newest, sparing exp.config's
+```
+
+`pull_images` logs this machine in to ECR before every pull. The nodes need no
+credentials, because the Docker CLI passes them along with each pull. The IAM
+permissions are in `infra/aws/iam-policy.json`. Set `BENCH_LOGDIR` /
+`BENCH_RESULTSDIR` (e.g. `logs/<tag>`) to keep each build's logs, profiles and
+plots apart.
 
 ### Experiments
 
@@ -218,7 +237,7 @@ CASSANDRA_PROFILER=1 CASSANDRA_PROFILER_OPTIONS='event=ctimer,interval=1ms,wall=
 ```
 
 The nodes are then started with `cassandra.async_profiler.enabled`,
-`cassandra.async_profiler.unsafe_mode` and `accord.debug_execution`, and every
+`cassandra.async_profiler.unsafe_mode` and `accord.debug.execution`, and every
 `run_benchmark` call profiles exactly its YCSB run phase (warm-up included, load
 excluded). Each capture lands in
 `logs/profiles/<experiment>/<run>_<node>.jfr`, next to but outside the

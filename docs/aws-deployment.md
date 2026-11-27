@@ -685,7 +685,8 @@ before `./deploy.sh` is ever invoked.
 2. **IAM user for CLI access, not root.**
    https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html —
    programmatic access (access key/secret), with either the managed
-   `AmazonEC2FullAccess` policy or this custom one
+   `AmazonEC2FullAccess` policy or this custom one (also checked in, with
+   the spot and quota statements below, as `infra/aws/iam-policy.json`)
    (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_create.html):
    ```json
    {
@@ -696,7 +697,8 @@ before `./deploy.sh` is ever invoked.
          "ec2:RunInstances", "ec2:TerminateInstances", "ec2:DescribeInstances",
          "ec2:DescribeAvailabilityZones", "ec2:DescribeVpcs", "ec2:DescribeSubnets",
          "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:DescribeSecurityGroups",
-         "ec2:AuthorizeSecurityGroupIngress", "ec2:CreateTags", "ec2:DescribeImages",
+         "ec2:AuthorizeSecurityGroupIngress", "ec2:RevokeSecurityGroupIngress",
+         "ec2:CreateTags", "ec2:DescribeImages",
          "ssm:GetParameters", "sts:GetCallerIdentity"
        ],
        "Resource": "*"
