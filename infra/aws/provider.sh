@@ -140,7 +140,10 @@ _aws_ssh_target() {
 }
 
 # ssh to a node with everything stated explicitly, so that no entry in
-# ~/.ssh/config is needed for the suite to work.
+# ~/.ssh/config is needed for the suite to work.  ControlPath=none opts out of
+# any connection multiplexing the operator enabled (infra/README.md): the
+# readiness poll logs in before the boot script adds the login to the docker
+# group, and sessions sharing that first connection would keep its old groups.
 _aws_ssh() {
     local idx=$1; shift
     local target
@@ -153,6 +156,7 @@ _aws_ssh() {
         -o BatchMode=yes \
         -o StrictHostKeyChecking=accept-new \
         -o ConnectTimeout=10 \
+        -o ControlPath=none \
         "${target}" "$@"
 }
 
@@ -494,6 +498,19 @@ infra_rewrite_docker_args() {
     # --add-host conflicts with `--network container:`, and a container sharing
     # another's namespace already inherits its hosts file.
     if [ ${host_net} -eq 1 ]; then
+        # A node's own name resolves to its *private* IP, ahead of the
+        # public one host_aliases gives every name (/etc/hosts: first match
+        # wins). An EC2 public IP is NATed at the edge and is on no local
+        # interface, so a server that binds to its own name (Tiga:
+        # serverAddr=Frankfurt1:10000) fails with "bind(): Cannot assign
+        # requested address" and never listens. Peers keep dialing the
+        # public IP, which EC2 translates to this private one.
+        local self_idx self_ip
+        self_idx=$(node_index_of "${cname}" 2>/dev/null)
+        if [ "${self_idx:-0}" -gt 0 ] 2>/dev/null; then
+            self_ip=$(state_get "${self_idx}" host)
+            [ -n "${self_ip}" ] && out+=("--add-host" "${cname}:${self_ip}")
+        fi
         out+=($(host_aliases))
     fi
 
@@ -527,62 +544,59 @@ infra_open_ports() {
             fi
 
             # One read call to see what's already open, then at most one
-            # write call for whatever's missing -- AWS rejects the *entire*
-            # --ip-permissions call if even one of its rules already exists,
-            # which would otherwise silently drop a genuinely new peer (e.g.
-            # one that just replaced a reclaimed node) rather than adding it
-            # alongside the unchanged ones. python3 (already required) does
-            # the diff in one shot rather than one CLI call per port -- text
-            # output renders a port and its CIDRs as separate rows with no
-            # reliable way to pair them back up.
+            # revoke and one authorize call for the difference -- AWS rejects
+            # the *entire* --ip-permissions call if even one of its rules
+            # already exists, which would otherwise silently drop a genuinely
+            # new peer (e.g. one that just replaced a reclaimed node).
             #
-            # Also revoke CIDRs that are no longer peers (e.g. a reclaimed
-            # spot instance's old IP): a reclaim-and-replace cycle otherwise
-            # leaves the old rule in place forever, and each cycle adds a
-            # full new set of per-port rules on top -- a handful of cycles
-            # is enough to hit AWS's default 60-rules-per-group quota, after
-            # which *every* future authorize call fails outright (for every
-            # region, since they all run the same diff) and every
-            # subsequently replaced node is left unreachable with no
-            # visible error.
+            # One all-traffic rule per peer IP, not one rule per protocol port
+            # per peer: AWS allows 60 inbound rules per security group by
+            # default, and 9 ports x N peers crossed it at N=6 (10 nodes:
+            # RulesPerSecurityGroupLimitExceeded in every region). N rules
+            # fit any deployment this suite runs. Peers are only the
+            # deployment's own machines, and in-region members already talk on
+            # any port through the self-referencing rule, so this widens
+            # nothing beyond the benchmark machines -- and it covers whatever
+            # extra ports a protocol uses (ICMP for the swiftpaxos master's
+            # liveness pings, multi-shard Tiga/Janus ports) without listing
+            # them. The ports passed in are kept for the contract
+            # (infra/README.md) but no longer needed here.
+            #
+            # Stale rules are revoked: CIDRs that are no longer peers (e.g. a
+            # reclaimed spot instance's old IP), and the per-port tcp/icmp
+            # /32 rules of the previous scheme, so that an existing group
+            # migrates instead of staying at the quota. tcp:22 from 0.0.0.0/0
+            # (opened at creation, see _aws_security_group_id) is kept.
             existing=$(aws ec2 describe-security-groups --region "${region}" --group-ids "${sg}" \
                 --query 'SecurityGroups[0].IpPermissions' --output json 2>/dev/null)
             local add_str revoke_str
             { read -r add_str; read -r revoke_str; } < <(python3 -c '
 import json, sys
 existing = json.loads(sys.argv[1] or "[]")
-ports, peers = sys.argv[2].split(), set(sys.argv[3].split())
-have_tcp = {(perm.get("FromPort"), r.get("CidrIp"))
-        for perm in existing if perm.get("IpProtocol") == "tcp"
-        for r in perm.get("IpRanges", [])}
-have_icmp = {r.get("CidrIp")
-        for perm in existing if perm.get("IpProtocol") == "icmp"
-        for r in perm.get("IpRanges", [])}
+peers = {ip + "/32" for ip in sys.argv[2].split()}
+have_all = {r.get("CidrIp") for perm in existing if perm.get("IpProtocol") == "-1"
+            for r in perm.get("IpRanges", [])}
 add_blocks, revoke_blocks = [], []
-for p in ports:
-    have_ips = {ip for (fp, ip) in have_tcp if fp == int(p)}
-    missing = [ip for ip in peers if ip + "/32" not in have_ips]
-    if missing:
-        ranges = ",".join("{CidrIp=%s/32}" % ip for ip in missing)
-        add_blocks.append("IpProtocol=tcp,FromPort=%s,ToPort=%s,IpRanges=[%s]" % (p, p, ranges))
-    stale = [ip[:-3] for ip in have_ips if ip[:-3] not in peers]
-    if stale:
-        ranges = ",".join("{CidrIp=%s/32}" % ip for ip in stale)
-        revoke_blocks.append("IpProtocol=tcp,FromPort=%s,ToPort=%s,IpRanges=[%s]" % (p, p, ranges))
-# swiftpaxos master pings every replica it registers as a liveness check
-# (see swiftpaxos/cluster.sh) -- allow ICMP between peers too, not just the
-# TCP protocol ports. -1/-1 means all ICMP types/codes.
-missing_icmp = [ip for ip in peers if ip + "/32" not in have_icmp]
-if missing_icmp:
-    ranges = ",".join("{CidrIp=%s/32}" % ip for ip in missing_icmp)
-    add_blocks.append("IpProtocol=icmp,FromPort=-1,ToPort=-1,IpRanges=[%s]" % ranges)
-stale_icmp = [ip[:-3] for ip in have_icmp if ip[:-3] not in peers]
-if stale_icmp:
-    ranges = ",".join("{CidrIp=%s/32}" % ip for ip in stale_icmp)
-    revoke_blocks.append("IpProtocol=icmp,FromPort=-1,ToPort=-1,IpRanges=[%s]" % ranges)
+missing = sorted(peers - have_all)
+if missing:
+    add_blocks.append("IpProtocol=-1,IpRanges=[%s]" % ",".join("{CidrIp=%s}" % c for c in missing))
+stale = sorted(c for c in have_all if c not in peers)
+if stale:
+    revoke_blocks.append("IpProtocol=-1,IpRanges=[%s]" % ",".join("{CidrIp=%s}" % c for c in stale))
+# Legacy per-port rules: every /32 tcp or icmp range (the world-open tcp:22
+# is a /0 and stays).
+for perm in existing:
+    proto = perm.get("IpProtocol")
+    if proto not in ("tcp", "icmp"):
+        continue
+    legacy = [r["CidrIp"] for r in perm.get("IpRanges", []) if r.get("CidrIp", "").endswith("/32")]
+    if legacy:
+        revoke_blocks.append("IpProtocol=%s,FromPort=%s,ToPort=%s,IpRanges=[%s]" % (
+            proto, perm.get("FromPort"), perm.get("ToPort"),
+            ",".join("{CidrIp=%s}" % c for c in legacy)))
 print(" ".join(add_blocks))
 print(" ".join(revoke_blocks))
-' "${existing}" "$*" "${peer_ips}")
+' "${existing}" "${peer_ips}")
 
             # Revoke stale rules before adding new ones -- a group already
             # sitting at AWS's rule quota (see above) has no room for the

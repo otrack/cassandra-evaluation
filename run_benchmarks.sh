@@ -106,7 +106,11 @@ run_ycsb() {
     fi
 
     if [ "$action" == "load" ]; then
-        ycsb_threads=100 # FIXME CRDB parallel load is failing
+        # The load runs as one client in the first DC, bound by round trips
+        # to the other DCs on real machines, so its rate grows with threads.
+        # FIXME CRDB parallel load used to fail above 100 threads.
+        ycsb_threads=$(config ycsb.load_threads)
+        ycsb_threads=${ycsb_threads:-100}
     fi
     
     shift 13
