@@ -195,7 +195,10 @@ traffic from outside itself, so the security group this provider manages
 opens `tcp:22` from `0.0.0.0/0` at creation time, before `infra_open_ports`
 (called later, from `infra_bootstrap`) ever runs. This is a conscious
 tradeoff for a benchmark harness running short-lived, disposable machines,
-not an oversight — see `docs/aws-deployment.md` §2.2.
+not an oversight — see `docs/aws-deployment.md` §2.2. Between the
+benchmark machines, `infra_open_ports` allows all traffic from each peer's
+public IP: one rule per peer. Per-port rules would exceed AWS's default 60
+rules per security group beyond 6 peers.
 
 **Nothing is written to `~/.ssh/config`.** EC2 has no metadata-driven key
 injection the way some other clouds' guest agents provide, so the operator's

@@ -87,10 +87,16 @@ explicitly deleted it (§7, step 7 covers that edge case for the operator).
 
 The security group this provider manages opens `tcp:22` from `0.0.0.0/0` at
 creation (Finding above), plus a self-referencing rule letting members talk
-to each other on any port. `infra_open_ports` later adds the benchmark
-protocol ports (Cassandra 9042 + 7000, CockroachDB 26257 + 8080, SwiftPaxos
-7087 and its per-server range, Tiga 10000 — the exact list `infra_bootstrap`
-passes, `utils.sh:206`), scoped the same way. SSH open to the world is a
+to each other on any port. Peers in other regions reach each other over
+public IPs, which that rule doesn't match, so `infra_open_ports` later adds
+one all-traffic rule per peer's public IP (`/32`). It does not add one rule
+per protocol port per peer: AWS allows 60 inbound rules per security group by
+default, and the 9 protocol ports `infra_bootstrap` passes, times N peers,
+go over it beyond 6 peers; the 15-node deployment failed with
+`RulesPerSecurityGroupLimitExceeded`. N rules
+fit any deployment this suite runs. The access stays limited to the
+deployment's own machines, and also covers ICMP and any extra ports a
+protocol uses. SSH open to the world is a
 conscious tradeoff, not an oversight: restricting it to the operator's
 current IP would break the moment that IP changes (a laptop moving networks,
 a team member on a different connection), and this is a benchmark harness
