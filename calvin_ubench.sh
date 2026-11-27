@@ -41,7 +41,7 @@ source ${DIR}/run_benchmarks.sh
 usage() {
     echo "Usage: $0 [--dry-run] [--test] [--no-pull] [--phase=PHASE] [--protocols=LIST] [--nodesperdc=N]"
     echo "          [--ci=LIST] [--clients=LIST] [--max-clients=N] [--records=N] [--scale=LIST] [--mp=LIST]"
-    echo "          [--scale-clients=N] [--check-invariant[=true|false]] [--ramp] [--ramp-step=S] [--ramp-skip=S] [--ramp-delay=S] [--pareto]"
+    echo "          [--scale-clients=N] [--check-invariant[=true|false]] [--ramp] [--ramp-step=S] [--ramp-skip=S] [--ramp-delay=S] [--pareto] [--latency=pN]"
     echo "  --dry-run          Skip the experiment run; only parse existing data."
     echo "  --test             Small and short runs (20000 records per partition, 10s, 2 to 10"
     echo "                     clients/site, 1 and 2 nodes/DC), with containers right-sized to fit"
@@ -62,6 +62,7 @@ usage() {
     echo "  --ramp-delay=S     Seconds between the end of the warm-up and the start of the first stage, which all the"
     echo "                     clients start together (default: 30); it must cover their set-up."
     echo "  --pareto           Plot only the Pareto frontier of each curve, not every point (default: every point)."
+    echo "  --latency=pN       Latency percentile of the saturation plot (default: p50, e.g. p99)."
     echo "  --ramp-skip=S      Seconds at the start of each stage left out of its results (default: 5)."
     echo "  --scale=LIST       Nodes per DC of the scale phase (comma-separated, default: 1,2,4)."
     echo "  --mp=LIST          Proportions of multipartition transactions of the scale phase"
@@ -92,6 +93,7 @@ ramp_step=30
 ramp_skip=5
 ramp_delay=30
 pareto=0
+latency=p50
 check_invariant=$(config calvin.checkinvariant)
 for arg in "$@"; do
     case "$arg" in
@@ -145,6 +147,9 @@ for arg in "$@"; do
             ;;
         --pareto|-pareto)
             pareto=1
+            ;;
+        --latency=*)
+            latency="${arg#*=}"
             ;;
         --ramp-delay=*)
             ramp_delay="${arg#*=}"
@@ -541,7 +546,11 @@ ${DIR}/parse_ycsb_to_csv.sh \
     > ${RESULTSDIR}/calvin_ubench_scale.csv
 
 debug "Plotting..."
-python3 ${DIR}/calvin_ubench.py $([ "${pareto}" -eq 1 ] && echo --pareto) ${RESULTSDIR}/calvin_ubench.csv ${RESULTSDIR}/calvin_ubench.tex \
+# The number of records loaded (YCSB's recordcount, over all the partitions),
+# for the caption, when every saturation run used the same one
+record_counts=$(grep -ohs -m1 'recordcount=[0-9]*' ${SATURATION_LOGDIR}/*.dat | sort -u)
+[ "$(echo "${record_counts}" | grep -c .)" -eq 1 ] && records_arg="--records=${record_counts#*=}"
+python3 ${DIR}/calvin_ubench.py $([ "${pareto}" -eq 1 ] && echo --pareto) --latency=${latency} ${records_arg} ${RESULTSDIR}/calvin_ubench.csv ${RESULTSDIR}/calvin_ubench.tex \
     ${RESULTSDIR}/calvin_ubench_scale.csv ${RESULTSDIR}/calvin_ubench_scale.tex
 
 for job in calvin_ubench calvin_ubench_scale; do
